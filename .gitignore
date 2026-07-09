@@ -1,0 +1,23 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+*.iws
+out/
+
+# Kotlin
+.kotlin/
+
+# Android
+local.properties
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Flies
+icons/
