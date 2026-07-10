@@ -104,7 +104,11 @@ internal object OsmdHtml {
                 window.__resetCursor=function(){
                     var osmd=window.__osmd;
                     if(!osmd||!osmd.cursor)return;
-                    try{osmd.cursor.reset();osmd.cursor.show();}catch(e){}
+                    try{
+                        osmd.cursor.reset();osmd.cursor.show();
+                        var el=osmd.cursor.cursorElement;
+                        if(el&&el.scrollIntoView)el.scrollIntoView({block:"center"});
+                    }catch(e){}
                     window.__cursorIdx=0;
                 };
 
@@ -120,6 +124,7 @@ internal object OsmdHtml {
                                 var xml=rawXml.replace(/<!DOCTYPE[^>]*>/i,'');
                                 setStatus("创建OSMD");
                                 var osmd=new opensheetmusicdisplay.OpenSheetMusicDisplay('osmd',{
+                                    autoResize:false,
                                     drawCursors:true,
                                     drawTitle:false,
                                     drawPartNames:false

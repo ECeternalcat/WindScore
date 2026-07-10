@@ -881,11 +881,11 @@ private fun MainStage(
     val frameH = if (isCompact) WindScoreSpacing.sm else WindScoreSpacing.xs
     val frameV = if (isCompact) WindScoreSpacing.sm else WindScoreSpacing.xs
     val innerPadding = if (isCompact) WindScoreSpacing.lg else WindScoreSpacing.sm
-    val tick = if (isPlaying) playTick else session.currentTick
+    val tick = if (isPlaying || playTick > 0) playTick else session.currentTick
     val showRoll = viewMode == ViewMode.ROLL
     val showSheetKb = viewMode == ViewMode.SHEET_KEYBOARD
     val showSheetFull = viewMode == ViewMode.SHEET_FULL
-    val sheetFraction = if (showSheetKb) 0.72f else 1f
+    val sheetVisible = showSheetKb || showSheetFull
 
     Box(
         modifier = modifier
@@ -911,9 +911,9 @@ private fun MainStage(
                 pulseIntensityProvider = { session.pulseIntensity },
                 bpmProvider = { session.score.tempo.takeIf { it > 0 } ?: 120 },
             )
-            // 五线谱 — 始终挂载（SwingPanel 需移出屏幕而非 alpha=0）
-            val sheetVisible = showSheetKb || showSheetFull
+            // 五线谱 — 始终挂载（autoResize:false 时改变尺寸不触发重渲染）
             if (rawXml != null) {
+                val sheetFraction = if (showSheetKb) 0.72f else 1f
                 ScoreSheetView(
                     rawXml = rawXml,
                     currentTickProvider = { tick },
