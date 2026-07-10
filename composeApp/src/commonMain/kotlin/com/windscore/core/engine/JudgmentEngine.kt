@@ -24,6 +24,9 @@ import com.windscore.core.model.TrackType
  *
  * [step] / [onNoteOn] 返回“本次因游标落到新组而应自动托管的 NoteEntity 列表”，供上层发声。
  *
+ * 为避免连续纯托管段“burst”推进，[step] 处理完一个纯托管组后会主动返回，
+ * 由上层 [ScoreSession] 按真实节奏定时调用 [advanceHosted] 继续推进。
+ *
  * 纯 Kotlin，不依赖 Compose / 协程，便于单元测试。
  */
 class JudgmentEngine(
@@ -42,7 +45,6 @@ class JudgmentEngine(
 
     private var groupIndex = 0
     private val activeKeys = mutableSetOf<Int>()
-    private val freshKeys = mutableSetOf<Int>()
     /** 上次已“到达”（已托管）的组号，避免重复发声。 */
     private var lastArrivedGroupIndex = -1
 
@@ -64,6 +66,42 @@ class JudgmentEngine(
 
     val progress: Int get() = groupIndex
     val groupCount: Int get() = groups.size
+
+    // —— A/B 循环练习（Phase 3 文档 6.1）——
+    private var loopStartTick: Long = 0L
+    private var loopEndTick: Long = totalTicks
+    private var loopEnabled: Boolean = false
+
+    /** 当前循环起点 tick；未设置循环时返回 0。 */
+    val currentLoopStart: Long get() = if (loopEnabled) loopStartTick else 0L
+
+    /** 当前循环终点 tick；未设置循环时返回 [totalTicks]。 */
+    val currentLoopEnd: Long get() = if (loopEnabled) loopEndTick else totalTicks
+
+    /** 是否已启用 A/B 循环。 */
+    val isLoopActive: Boolean get() = loopEnabled
+
+    /**
+     * 设置 A/B 循环范围，并将游标重置到循环起点。
+     * 起点/终点会被规范到 [0, totalTicks] 内，且终点必须大于起点。
+     */
+    fun setLoop(startTick: Long, endTick: Long) {
+        val start = startTick.coerceIn(0L, totalTicks)
+        val end = endTick.coerceIn(start, totalTicks)
+        if (end > start) {
+            loopStartTick = start
+            loopEndTick = end
+            loopEnabled = true
+        } else {
+            loopEnabled = false
+        }
+        reset()
+    }
+
+    /** 清除 A/B 循环。 */
+    fun clearLoop() {
+        loopEnabled = false
+    }
 
     /** 准度得分百分比（0..100）。 */
     fun scorePercent(): Int =
@@ -98,14 +136,16 @@ class JudgmentEngine(
         PracticeMode.LEFT_ONLY -> track == TrackType.LEFT_HAND
     }
 
-    /** 初始/重置后调用：游标落到第一组，返回应自动托管的音。 */
+    /** 初始/重置后调用：游标落到第一组（或循环起点），返回应自动托管的音。 */
     fun arrive(): List<NoteEntity> = step()
 
     /** 用户按下某音高。返回本次新到达组应自动托管的音。 */
     fun onNoteOn(pitch: Int): List<NoteEntity> {
         activeKeys.add(pitch)
-        freshKeys.add(pitch)
         recordPress(pitch)
+        // 当前为纯托管组时，用户按键不推进，由上层按真实节奏调度 advanceHosted
+        val group = groups.getOrNull(groupIndex) ?: return emptyList()
+        if (group.none { isActiveTrack(it.track) }) return emptyList()
         return step()
     }
 
@@ -115,15 +155,24 @@ class JudgmentEngine(
     }
 
     fun reset(): List<NoteEntity> {
-        groupIndex = 0
-        lastArrivedGroupIndex = -1
         activeKeys.clear()
-        freshKeys.clear()
         groups.flatten().forEach { it.isHit = false }
         for (i in groupWrongCounts.indices) groupWrongCounts[i] = 0
         currentGroupDirty = false
         cleanHitCount = 0
         wrongPressCount = 0
+        groupIndex = if (loopEnabled) findGroupIndexAtOrAfter(loopStartTick) else 0
+        lastArrivedGroupIndex = groupIndex - 1
+        return step()
+    }
+
+    /**
+     * 显式推进一个纯托管组。若当前组不是纯托管（含练习音），返回空列表且不推进。
+     * 由 [ScoreSession] 按真实节奏定时调用，避免连续托管段 burst。
+     */
+    fun advanceHosted(): List<NoteEntity> {
+        val group = groups.getOrNull(groupIndex) ?: return emptyList()
+        if (group.any { isActiveTrack(it.track) }) return emptyList()
         return step()
     }
 
@@ -143,6 +192,12 @@ class JudgmentEngine(
     /**
      * 推进判定。游标每落到一个新组，标记并收集其托管音；当练习轨道音高满足则推进到下一组。
      * 返回本次“到达”应托管的音。
+     *
+     * 注意：处理完一个纯托管组后会返回，不把连续托管段一次 burst 推进完；
+     * 上层通过 [advanceHosted] 按真实节奏继续调度。
+     *
+     * A/B 循环：当推进后的下一组起始 tick >= 循环终点时，自动回卷到循环起点，
+     * 并将循环范围内的音符重置为未命中，以便长辈反复练习。
      */
     private fun step(): List<NoteEntity> {
         val hostedPlayed = mutableListOf<NoteEntity>()
@@ -158,8 +213,9 @@ class JudgmentEngine(
             val required = group
                 .filter { isActiveTrack(it.track) }
                 .mapTo(mutableSetOf()) { it.pitch }
-            // 命中条件：练习轨道音高全部新按下且仍按住；多余/错音无视（坑 3.2）
-            val satisfied = required.all { it in activeKeys && it in freshKeys }
+            // 命中条件（文档 2.3.3 / 3.2）：练习轨道音高全部“按在手里”即过；
+            // 一个音只需按一次，无论多长/是否与前一音相邻。多余/错音不影响 containsAll，无视。
+            val satisfied = required.all { it in activeKeys }
             if (satisfied) {
                 // 准度：该组弹奏期间若未错按，则计入“干净命中”
                 if (!currentGroupDirty) {
@@ -167,12 +223,53 @@ class JudgmentEngine(
                 }
                 group.forEach { it.isHit = true }
                 groupIndex++
-                freshKeys.clear()
                 currentGroupDirty = false
+                // A/B 循环边界检测：下一组起点已越过循环终点，回卷
+                if (loopEnabled && groupIndex < groups.size && currentTick >= loopEndTick) {
+                    jumpToLoopStart()
+                    continue // 继续循环处理新位置
+                }
+                // 纯托管组不连续 burst；返回给上层按节奏调度
+                if (required.isEmpty()) break
             } else {
                 break
             }
         }
         return hostedPlayed
+    }
+
+    /** 回卷到循环起点，并重置循环范围内音符的命中状态与干净命中计数。 */
+    private fun jumpToLoopStart() {
+        val targetIndex = findGroupIndexAtOrAfter(loopStartTick)
+        if (targetIndex < 0) return // 无效循环，保持当前位置
+        groupIndex = targetIndex
+        lastArrivedGroupIndex = groupIndex - 1
+        currentGroupDirty = false
+        // 清按键池：循环回卷后要求长辈重新按下，避免因为一直按着导致无限自循环
+        activeKeys.clear()
+        // 重置循环段内音符为未命中，让长辈重新练习
+        groups.flatten().forEach { note ->
+            if (note.startTick in loopStartTick until loopEndTick) {
+                note.isHit = false
+            }
+        }
+        recomputeCleanHitCount()
+    }
+
+    /** 找到第一个起始 tick >= [tick] 的组索引；没有则返回 -1。 */
+    private fun findGroupIndexAtOrAfter(tick: Long): Int =
+        groups.indexOfFirst { it.first().startTick >= tick }
+
+    /** 根据当前各组命中与错按状态，重新计算干净命中数（循环回卷后防止分数虚高）。 */
+    private fun recomputeCleanHitCount() {
+        cleanHitCount = 0
+        for ((i, group) in groups.withIndex()) {
+            val active = group.filter { isActiveTrack(it.track) }
+            if (active.isEmpty()) continue
+            if (groupWrongCounts[i] > 0) continue
+            if (active.all { it.isHit }) {
+                cleanHitCount += active.size
+            }
+        }
     }
 }

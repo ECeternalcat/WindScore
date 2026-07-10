@@ -9,23 +9,31 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.sp
 import com.windscore.core.model.NoteEntity
 import com.windscore.core.model.Score
 import com.windscore.core.model.TrackType
 
-// 冷色系（左手）
-private val LEFT_HIT = Color(0xFF2E8BFF)
-private val LEFT_UNHIT = Color(0xFF3A6FB0)
-// 暖色系（右手）
-private val RIGHT_HIT = Color(0xFFFF8C00)
-private val RIGHT_UNHIT = Color(0xFFC97A2E)
+import com.windscore.ui.theme.WindScoreColors
 
-private val BG_TOP = Color(0xFF1B1D22)
-private val BG_BOTTOM = Color(0xFF0F1115)
-private val HIT_LINE = Color(0xFFE6E6E6)
-private val WHITE_KEY = Color(0xFFEAEAEA)
-private val BLACK_KEY = Color(0xFF2A2D33)
-private val GRID = Color(0x22FFFFFF)
+// 左手：薄荷绿（冷 pastel）
+private val LEFT_HIT = WindScoreColors.blockMint
+private val LEFT_UNHIT = Color(0xFF9DC9A4)
+// 右手：珊瑚橙（暖 pastel）
+private val RIGHT_HIT = WindScoreColors.blockCoral
+private val RIGHT_UNHIT = Color(0xFFD49A7E)
+
+private val BG_TOP = WindScoreColors.canvas
+private val BG_BOTTOM = WindScoreColors.surfaceSoft
+private val HIT_LINE = WindScoreColors.ink
+private val WHITE_KEY = WindScoreColors.canvas
+private val BLACK_KEY = WindScoreColors.inverseCanvas
+private val GRID = WindScoreColors.hairline.copy(alpha = 0.5f)
 
 private val BLACK_KEY_OFFSETS = setOf(1, 3, 6, 8, 10)
 
@@ -50,6 +58,8 @@ fun PianoRoll(
     lookaheadBeats: Float = 4f,
     hostedTrack: TrackType? = null,
     heldPitchesProvider: () -> Set<Int> = { emptySet() },
+    pulseIntensityProvider: () -> Float = { 0.15f },
+    bpmProvider: () -> Int = { 120 },
 ) {
     if (score.notes.isEmpty()) {
         Box(modifier.fillMaxSize())
@@ -60,6 +70,7 @@ fun PianoRoll(
     val pitchMax = score.notes.maxOf { it.pitch }
     val pitchLow = (pitchMin - 2).coerceIn(21, 108)
     val pitchHigh = (pitchMax + 2).coerceIn(21, 108)
+    val textMeasurer = rememberTextMeasurer()
 
     Canvas(modifier.fillMaxSize()) {
         val w = size.width
@@ -75,23 +86,38 @@ fun PianoRoll(
         val windowTicks = (lookaheadBeats * score.divisions).coerceAtLeast(1f)
         val ppt = rollHeight / windowTicks // pixels per tick
 
-        drawBackground(h)
+        drawBackground(h, pulseIntensityProvider(), bpmProvider())
         drawBeatGrid(score, tick, ppt, hitLineY, w)
-        drawNotes(score.notes, tick, ppt, hitLineY, pitchLow, keyWidth, h, hostedTrack)
+        drawNotes(score.notes, tick, ppt, hitLineY, pitchLow, keyWidth, h, hostedTrack, textMeasurer)
         drawHitLine(hitLineY, w)
         drawHeldFeedback(held, pitchLow, keyWidth, hitLineY, keyboardHeight)
         drawKeyboard(pitchLow, pitchHigh, keyWidth, hitLineY, keyboardHeight, w, held)
     }
 }
 
-private fun DrawScope.drawBackground(h: Float) {
+private fun DrawScope.drawBackground(h: Float, pulseIntensity: Float, bpm: Int) {
     drawRect(BG_TOP, Offset.Zero, Size(size.width, h))
-    // 顶部到底部的轻微渐变（用半透明叠加近似）
+    // 顶部到底部的轻微渐变（用 surface-soft 叠加近似）
     drawRect(
-        color = BG_BOTTOM.copy(alpha = 0.6f),
+        color = BG_BOTTOM.copy(alpha = 0.5f),
         topLeft = Offset(0f, h * 0.4f),
         size = Size(size.width, h * 0.6f),
     )
+    // Phase 3：动态节拍脉冲——按 BPM 闪烁的水平光带，卡住时变暗
+    if (bpm > 0) {
+        val beatMs = 60_000.0 / bpm
+        val phase = (System.currentTimeMillis() % beatMs.toLong()) / beatMs
+        val sine = kotlin.math.sin(phase * kotlin.math.PI).coerceIn(0.0, 1.0)
+        val bandAlpha = (sine * pulseIntensity * 0.18f).toFloat()
+        if (bandAlpha > 0.01f) {
+            val bandH = h * 0.08f
+            drawRect(
+                color = WindScoreColors.blockLilac.copy(alpha = bandAlpha),
+                topLeft = Offset(0f, h * 0.35f),
+                size = Size(size.width, bandH),
+            )
+        }
+    }
 }
 
 private fun DrawScope.drawBeatGrid(
@@ -120,7 +146,7 @@ private fun DrawScope.drawBeatGrid(
 
 private fun DrawScope.drawHitLine(hitLineY: Float, w: Float) {
     drawLine(
-        color = HIT_LINE.copy(alpha = 0.8f),
+        color = HIT_LINE.copy(alpha = 0.85f),
         start = Offset(0f, hitLineY),
         end = Offset(w, hitLineY),
         strokeWidth = 2f,
@@ -136,6 +162,7 @@ private fun DrawScope.drawNotes(
     keyWidth: Float,
     canvasH: Float,
     hostedTrack: TrackType?,
+    textMeasurer: TextMeasurer,
 ) {
     val h = canvasH
     val gap = (keyWidth * 0.12f).coerceAtLeast(1f)
@@ -171,6 +198,23 @@ private fun DrawScope.drawNotes(
             size = Size(noteW, (clampedBottom - clampedTop).coerceAtLeast(2f)),
             cornerRadius = radius,
         )
+
+        // Phase 3：绘制指法数字，极大字号、高对比度，帮助长辈安排手指
+        note.fingering?.let { fingering ->
+            val noteHeight = clampedBottom - clampedTop
+            if (noteHeight > keyWidth * 0.35f) {
+                val fontSize = (keyWidth * 0.55f).coerceIn(10f, 36f).sp
+                val textStyle = TextStyle(
+                    color = Color.White,
+                    fontSize = fontSize,
+                    fontWeight = FontWeight.Bold,
+                )
+                val layout = textMeasurer.measure(fingering, textStyle)
+                val textX = x + (noteW - layout.size.width) / 2f
+                val textY = clampedTop + (noteHeight - layout.size.height) / 2f
+                drawText(layout, topLeft = Offset(textX, textY))
+            }
+        }
     }
 }
 
@@ -185,26 +229,35 @@ private fun DrawScope.drawKeyboard(
 ) {
     if (keyboardHeight <= 0f) return
     val top = hitLineY
-    drawRect(Color(0xFF15171B), Offset(0f, top), Size(w, keyboardHeight))
+    drawRect(WindScoreColors.surfaceSoft, Offset(0f, top), Size(w, keyboardHeight))
     for (pitch in pitchLow..pitchHigh) {
         val x = (pitch - pitchLow) * keyWidth
         val isBlack = pitch % 12 in BLACK_KEY_OFFSETS
         val isHeld = pitch in held
         if (isBlack) {
             drawRect(
-                color = if (isHeld) Color(0xFF6EC0FF) else BLACK_KEY,
+                color = if (isHeld) WindScoreColors.blockLilac else BLACK_KEY,
                 topLeft = Offset(x + keyWidth * 0.2f, top),
                 size = Size(keyWidth * 0.6f, keyboardHeight),
             )
         } else {
             drawRect(
-                color = if (isHeld) Color(0xFFBFE8FF) else WHITE_KEY,
+                color = if (isHeld) WindScoreColors.blockLilac.copy(alpha = 0.5f) else WHITE_KEY,
                 topLeft = Offset(x + keyWidth * 0.05f, top),
                 size = Size(keyWidth * 0.9f, keyboardHeight),
             )
         }
+        // 白键之间细线
+        if (!isBlack) {
+            drawLine(
+                color = WindScoreColors.hairline,
+                start = Offset(x, top),
+                end = Offset(x, top + keyboardHeight),
+                strokeWidth = 0.8f,
+            )
+        }
     }
-    drawLine(color = Color.Black, start = Offset(0f, top), end = Offset(w, top), strokeWidth = 1f)
+    drawLine(color = WindScoreColors.hairline, start = Offset(0f, top), end = Offset(w, top), strokeWidth = 1f)
 }
 
 /**
@@ -227,7 +280,7 @@ private fun DrawScope.drawHeldFeedback(
         val w = keyWidth * 0.8f
         // 从判定线向上的发光块
         drawRoundRect(
-            color = Color(0xFF7FD0FF).copy(alpha = 0.65f),
+            color = WindScoreColors.accentMagenta.copy(alpha = 0.35f),
             topLeft = Offset(x, hitLineY - blockH),
             size = Size(w, blockH),
             cornerRadius = androidx.compose.ui.geometry.CornerRadius(keyWidth * 0.18f, keyWidth * 0.18f),

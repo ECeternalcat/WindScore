@@ -47,8 +47,14 @@ class IntegrationTest {
         // 每组先按一个错音（72，多半不在需求里），再按对的 —— 模拟长辈卡壳
         var groups = 0
         while (!engine.isFinished && groups < 100000) {
-            engine.onNoteOn(72) // 故意错按
             val required = engine.pendingPitches()
+            if (required.isEmpty()) {
+                // 纯托管组显式推进
+                engine.advanceHosted()
+                groups++
+                continue
+            }
+            engine.onNoteOn(72) // 故意错按
             required.forEach { engine.onNoteOn(it) }
             required.forEach { engine.onNoteOff(it) }
             groups++
@@ -65,7 +71,8 @@ class IntegrationTest {
         while (!engine.isFinished && steps < 100000) {
             val required = engine.pendingPitches()
             if (required.isEmpty()) {
-                // 纯托管组已由引擎自动推进；防御性保险
+                // 纯托管组需显式推进（避免 burst，由上层按节奏调度）
+                engine.advanceHosted()
                 steps++
                 continue
             }

@@ -1,7 +1,6 @@
 package com.windscore.ui
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,9 +8,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -26,6 +23,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.windscore.core.engine.ScoreSession
+import com.windscore.ui.components.PillButton
+import com.windscore.ui.components.PillButtonStyle
+import com.windscore.ui.theme.WindScoreColors
+import com.windscore.ui.theme.WindScoreRounded
+import com.windscore.ui.theme.WindScoreSpacing
 
 private val CLEAN = Color(0xFF3DBB6C)   // 干净（冷绿）
 private val STUCK = Color(0xFFE0A33A)   // 卡壳（暖琥珀，避免红色）
@@ -34,6 +36,7 @@ private val STUCK = Color(0xFFE0A33A)   // 卡壳（暖琥珀，避免红色）
  * 结算页（文档 4.3）：
  * - 仅在一曲结束后出现；过程绝不打叉/飘红/扣分。
  * - 显示准度分数 + 温和的“卡壳热力图”（按组聚合的错按次数）。
+ * - UI 适配 DESIGN.md：白底卡片 + pastel 色块背景 + pill 按钮。
  */
 @Composable
 fun ResultScreen(
@@ -48,35 +51,48 @@ fun ResultScreen(
     val heatmap = session.groupWrongCounts()
 
     Surface(
-        modifier = modifier.padding(16.dp),
-        color = Color(0xFF1F2229).copy(alpha = 0.96f),
-        shape = RoundedCornerShape(16.dp),
+        modifier = modifier.padding(WindScoreSpacing.lg),
+        color = WindScoreColors.blockCream,
+        shape = RoundedCornerShape(WindScoreRounded.lg),
     ) {
         Column(
-            modifier = Modifier.padding(20.dp),
+            modifier = Modifier.padding(WindScoreSpacing.xxl),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text("演奏完成", style = MaterialTheme.typography.titleLarge, color = Color.White)
-            Spacer(Modifier.height(8.dp))
+            Text(
+                "演奏完成",
+                style = MaterialTheme.typography.headlineLarge,
+                color = WindScoreColors.ink,
+            )
+            Spacer(Modifier.height(WindScoreSpacing.md))
             Text(
                 "$percent%",
-                fontSize = 56.sp,
-                fontWeight = FontWeight.Bold,
+                fontSize = 64.sp,
+                fontWeight = FontWeight.W300,
                 color = if (percent >= 80) CLEAN else STUCK,
+                letterSpacing = (-0.96).sp,
             )
             Text(
                 "干净命中 $clean / $total   ·   错按 $wrong 次",
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFFC8CCD3),
+                color = WindScoreColors.ink.copy(alpha = 0.7f),
             )
-            Spacer(Modifier.height(16.dp))
-            Text("卡壳热力图", style = MaterialTheme.typography.titleSmall, color = Color(0xFFC8CCD3))
-            Text("（颜色越暖表示该处越需要多练）", fontSize = 11.sp, color = Color(0xFF8A8F99))
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(WindScoreSpacing.xl))
+            Text(
+                "卡壳热力图",
+                style = MaterialTheme.typography.titleMedium,
+                color = WindScoreColors.ink,
+            )
+            Text(
+                "颜色越暖表示该处越需要多练",
+                style = MaterialTheme.typography.bodySmall,
+                color = WindScoreColors.ink.copy(alpha = 0.5f),
+            )
+            Spacer(Modifier.height(WindScoreSpacing.sm))
             Heatmap(heatmap, Modifier.fillMaxWidth().height(40.dp))
-            Spacer(Modifier.height(20.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Button(onClick = onReset) { Text("再来一次") }
+            Spacer(Modifier.height(WindScoreSpacing.xl))
+            Row(horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.sm)) {
+                PillButton(style = PillButtonStyle.PRIMARY, onClick = onReset) { Text("再来一次") }
             }
         }
     }

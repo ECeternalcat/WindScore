@@ -102,4 +102,42 @@ class MusicXmlParserTest {
         assertEquals(1, score.notes.size)
         assertEquals(67, score.notes[0].pitch, "G4 = MIDI 67")
     }
+
+    /**
+     * Phase 3：解析指法标记 <notations><technical><fingering>。
+     */
+    @Test
+    fun fingeringIsExtractedFromTechnicalNotation() {
+        val xml = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <score-partwise version="3.1">
+              <part id="P1">
+                <measure number="1">
+                  <attributes><divisions>4</divisions></attributes>
+                  <note>
+                    <pitch><step>C</step><octave>4</octave></pitch>
+                    <duration>4</duration>
+                    <type>quarter</type>
+                    <staff>1</staff>
+                    <notations>
+                      <technical>
+                        <fingering>3</fingering>
+                      </technical>
+                    </notations>
+                  </note>
+                  <note>
+                    <pitch><step>E</step><octave>4</octave></pitch>
+                    <duration>4</duration>
+                    <type>quarter</type>
+                    <staff>1</staff>
+                  </note>
+                </measure>
+              </part>
+            </score-partwise>
+        """.trimIndent().toByteArray()
+        val score = MusicXmlParser.parseXml(xml)
+        assertEquals(2, score.notes.size)
+        assertEquals("3", score.notes[0].fingering, "C4 应标 3 指")
+        assertEquals(null, score.notes[1].fingering, "E4 无指法")
+    }
 }

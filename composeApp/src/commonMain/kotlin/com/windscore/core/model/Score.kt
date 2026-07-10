@@ -10,6 +10,8 @@ data class Score(
     val totalTicks: Long,
     /** 原始 MusicXML 文本（供 OSMD 看谱模式渲染；解析降维不需要）。 */
     val rawXml: String? = null,
+    /** 乐谱标题，用于乐谱库列表显示。 */
+    val title: String = "未命名乐谱",
 ) {
     companion object {
         val EMPTY = Score(notes = emptyList(), divisions = 1, tempo = 0, totalTicks = 0L)

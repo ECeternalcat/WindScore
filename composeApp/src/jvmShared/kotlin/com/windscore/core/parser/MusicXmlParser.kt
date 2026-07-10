@@ -59,6 +59,7 @@ object MusicXmlParser {
 
         var divisions = 4
         var tempo = 0
+        val title = readTitle(doc)
 
         data class RawNote(
             val pitch: Int,
@@ -67,6 +68,7 @@ object MusicXmlParser {
             val durationTick: Long,
             val tieStart: Boolean,
             val tieStop: Boolean,
+            val fingering: String?,
         )
 
         val rawNotes = mutableListOf<RawNote>()
@@ -95,6 +97,7 @@ object MusicXmlParser {
                                 val pitch = readPitch(node)
                                 val staff = readStaff(node)
                                 val (tieStart, tieStop) = readTies(node)
+                                val fingering = readFingering(node)
 
                                 val startTick = if (isChord) lastStartTick else tickCursor
                                 if (!isChord) {
@@ -103,7 +106,7 @@ object MusicXmlParser {
 
                                 if (pitch != null) {
                                     rawNotes.add(
-                                        RawNote(pitch, staff, startTick, duration, tieStart, tieStop)
+                                        RawNote(pitch, staff, startTick, duration, tieStart, tieStop, fingering)
                                     )
                                 }
                                 // 和弦音符与休止符都不改变“主”时间推进规则：
@@ -170,6 +173,7 @@ object MusicXmlParser {
                     track = track,
                     startTick = raw.startTick,
                     durationTick = raw.durationTick,
+                    fingering = raw.fingering,
                 )
                 merged.add(entity)
                 if (raw.tieStart) {
@@ -187,7 +191,22 @@ object MusicXmlParser {
             tempo = tempo,
             totalTicks = maxTick,
             rawXml = xmlBytes.toString(Charsets.UTF_8),
+            title = title,
         )
+    }
+
+    private fun readTitle(doc: org.w3c.dom.Document): String {
+        val root = doc.documentElement
+        // 优先 <work><work-title>
+        textOf(root, "work-title")?.let { return it.trim() }
+        // 其次 <identification><movement-title>
+        textOf(root, "movement-title")?.let { return it.trim() }
+        // 兼容部分导出器放在 <credit><credit-words>
+        val credits = root.getElementsByTagName("credit-words")
+        if (credits.length > 0) {
+            return (credits.item(0) as Element).textContent.trim()
+        }
+        return "未命名乐谱"
     }
 
     private fun readPitch(note: Element): Int? {
@@ -206,6 +225,25 @@ object MusicXmlParser {
 
     private fun readStaff(note: Element): Int =
         textOf(note, "staff")?.trim()?.toIntOrNull() ?: 1
+
+    /**
+     * 读取指法标记。MusicXML 标准位置为 <notations><technical><fingering>，
+     * 部分导出器也可能直接放在 <notations><fingering>，这里同时兼容。
+     */
+    private fun readFingering(note: Element): String? {
+        val notations = note.getElementsByTagName("notations")
+        for (ni in 0 until notations.length) {
+            val n = notations.item(ni) as? Element ?: continue
+            // 优先 technical/fingering
+            textOf(n, "fingering")?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+            val technical = n.getElementsByTagName("technical")
+            for (ti in 0 until technical.length) {
+                val t = technical.item(ti) as? Element ?: continue
+                textOf(t, "fingering")?.trim()?.takeIf { it.isNotEmpty() }?.let { return it }
+            }
+        }
+        return null
+    }
 
     private fun readTies(note: Element): Pair<Boolean, Boolean> {
         val ties = note.getElementsByTagName("tie")

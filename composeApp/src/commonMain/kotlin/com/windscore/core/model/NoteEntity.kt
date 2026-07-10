@@ -11,4 +11,6 @@ data class NoteEntity(
     val startTick: Long,
     var durationTick: Long,
     var isHit: Boolean = false,
+    /** 指法提示（Phase 3），无指法时为 null。 */
+    val fingering: String? = null,
 )

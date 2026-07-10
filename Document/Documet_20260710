@@ -1,0 +1,112 @@
+钢琴伴学软件 (Senior Piano Companion) - 核心技术设计文档
+
+1. 架构选型与系统分层
+
+本项目采用 Kotlin Multiplatform (KMP) + Compose Multiplatform 为核心技术栈。
+系统分为三层，严格遵循单向数据流 (UDF) 与状态单一数据源 (Single Source of Truth)：
+
+展示层 (UI Layer): 纯 Compose 实现。严格管理三大核心视图模式，基于“全局预加载与实例保活”策略实现零延迟切换。UI 仅作状态呈现，绝不持有进度状态。
+
+核心业务逻辑 (Core State Machine): 纯 Kotlin Common 代码。持有全局唯一的 currentTick，负责乐谱解析、时间轴推演、判定逻辑。
+
+硬件抽象层 (Hardware I/O): 通过 expect/actual 机制实现跨平台的 MIDI 键盘信号接入与系统自带软音源发声。
+
+2. 乐谱预处理与 UI 预加载策略 (极其重要)
+
+2.1 状态机降维解析
+
+绝对不让 Compose 层直接处理复杂的 MusicXML。加载瞬间，底层状态机利用纯 Kotlin XML 库提取出按时间绝对排序的事件列表：
+
+data class NoteEntity(
+    val id: Int,             
+    val pitch: Int,          // 物理按键位置 (21-108)
+    val track: TrackType,    // LEFT_HAND, RIGHT_HAND
+    val startTick: Long,     // 绝对时间
+    val durationTick: Long,  
+    var isHit: Boolean = false
+)
+
+
+2.2 全局预加载与 WebView 保活 (Keep-Alive)
+
+为了确保三大模式之间的切换是毫秒级（0 延迟），且进度绝对同步，必须打破 Compose 常规的组件挂载逻辑。
+
+致命错误：使用 if (mode == 2) { WebView() }，这会导致模式切换时反复销毁和重建 WebView 及 OSMD 实例，每次引发 3-10 秒卡顿，且丢失状态。
+
+正确解法：在选定曲目的 Loading 阶段，同时在 UI 树中挂载 Canvas（卷帘）和 WebView（五线谱）。利用 Box 组件将它们堆叠。
+
+模式切换机制：通过改变 Modifier.alpha(0f / 1f) 或 Modifier.zIndex() 来控制显示谁。由于底层共用同一个 currentTick，WebView 即使看不见，也在默默接收后台状态机的 osmd.cursor.next() 信号，保持游标进度同步。切出来瞬间就是当前进度，无需任何“状态传递”。
+
+3. 核心机制重构：引擎与视觉的正交解耦
+
+为了实现“全模式支持播放，自由切换练习”，必须打破之前的强绑定，将系统拆分为 “2 种引擎驱动流” 和 “3 种视觉表现流”。它们可以任意组合。
+
+3.1 引擎驱动流 (Engine State)
+
+控制底层唯一真理 currentTick 是如何向前推进的。
+
+A. 阻塞陪练流 (Practice Engine)：
+
+机制：时间轴的推进不依赖系统时钟，依赖 MIDI 输入。
+
+逻辑：检查物理按键池 Active Key Pool 是否完全匹配当前高亮 NoteEntity。匹配则瞬间推移 currentTick 到下一个时间点；不匹配则时间轴死锁，静默等待。
+
+容错：达到所需音符子集时，开启 ~100ms 宽容窗口，允许补齐按键。
+
+B. 自动播放流 (Playback Engine)：
+
+机制：完全无视用户的 MIDI 输入，状态机由内部 BPM Timer 驱动。
+
+逻辑：按照谱面 BPM 匀速推进 currentTick。到达音符时，主动调用 KMP 底层 SoftSynth（Android mididriver / Windows MidiSystem）发声提供示范。
+
+3.2 视觉表现流 (Visual Modes)
+
+仅负责读取当前的 currentTick 并呈现画面。
+
+模式一：纯钢琴卷帘模式 (沉浸视界)
+
+UI：纯 Canvas，瀑布流色块。
+
+机制：基于 currentTick 裁剪视口，只绘制屏幕内的 NoteEntity。
+
+防坑：严禁在 onDraw 作用域内 new Paint/Path/Color 对象，防止 GC 掉帧。合并 MusicXML 中的 Tie（同音连线）。
+
+模式二：识谱辅助模式 (五线谱 + 静态键盘)
+
+UI：上方 WebView 无感滚动五线谱 (Weight 0.75)，下方 Canvas 静态 88 键 (Weight 0.25)。
+
+机制：上方根据 currentTick 调用 osmd.cursor.next() 并利用浏览器 ScrollIntoView 追焦。下方根据 currentTick 高亮目标琴键外框，真实按下时填充实心高亮。
+
+防坑：WebView 必须通过 CSS 隐藏所有原生滚动条（::-webkit-scrollbar { width: 0; }），并开启 overflow-y: auto。锁定固定的 osmd.zoom。
+
+模式三：纯享看谱模式 (传统视界)
+
+UI：纯 WebView 全屏五线谱。
+
+防坑：必须在 KMP 内部拉起 Ktor Local Server 让 JS fetch 乐谱 XML，规避 JS Bridge 传大文本导致的 10 秒假死。
+
+3.3 终极工作流：点位寻址与定点特训 (Click-to-Practice)
+
+基于上述的正交解耦，完美支撑你提出的核心用户体验流：
+
+寻址 (模式三 + 播放引擎)：长辈在全屏五线谱下听示范播放。觉得某一段难，直接点击五线谱的某个小节。
+
+碰撞劫持：JS 层触发空间碰撞反查 osmd.GraphicSheet.GetNearestNote()，通过 JS Bridge 调用 Kotlin 的 seekTo(realValue)。
+
+全局重置：Kotlin 收到指令，瞬间重置 currentTick，清空 Active Key Pool。此时后台的卷帘 Canvas 和 WebView 光标瞬间同步到了目标位置。
+
+切模特训 (切换为模式一/二 + 陪练引擎)：长辈点击“开始练琴”。UI 切换 Alpha 值露出卷帘/辅助键盘，引擎从 Timer 驱动切换为 MIDI 阻塞驱动。长辈直接从刚刚点击的难点开始“打地鼠”练习。
+
+4. 辅助与高阶功能 (第三阶段及以后)
+
+4.1 指法标记 (Fingering) 极简提取
+
+逻辑：在 MusicXML 中深挖 <technical><fingering> 标签。
+
+展现：在纯钢琴卷帘模式下，直接将巨大的 1~5 数字印在下落色块上；在识谱辅助模式下，在静态键盘高亮的方块上方悬浮显示指法数字。
+
+4.2 智能分段循环 (A/B Repeat)
+
+针对极易受挫的长辈，允许在 UI 框选特定小节（设定 loopStartTick 和 loopEndTick）。
+
+当 currentTick 触达边界时，状态机硬重置到起点，配套 WebView 的 osmd.cursor.iterator.seek() 瞬间拉回视角，专注死磕肌肉记忆。

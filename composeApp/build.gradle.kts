@@ -1,6 +1,21 @@
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
+/** 根据构建宿主 OS 选择 JavaFX 原生库分类器，避免硬编码 :win。 */
+val javafxClassifier: String by lazy {
+    val os = System.getProperty("os.name").lowercase()
+    val arch = System.getProperty("os.arch").lowercase()
+    when {
+        os.contains("win") -> "win"
+        os.contains("mac") -> if (arch == "aarch64") "mac-aarch64" else "mac"
+        os.contains("linux") -> "linux"
+        else -> {
+            println("[WARN] 无法识别 OS '$os'/'$arch'，默认使用 JavaFX :win 分类器")
+            "win"
+        }
+    }
+}
+
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
     alias(libs.plugins.android.application)
@@ -23,6 +38,7 @@ kotlin {
                 implementation(compose.runtime)
                 implementation(compose.foundation)
                 implementation(compose.material3)
+                implementation(compose.components.resources)
                 implementation(libs.kotlinx.coroutines.core)
             }
         }
@@ -47,13 +63,14 @@ kotlin {
             dependsOn(jvmShared)
             dependencies {
                 implementation(compose.desktop.currentOs)
-                // 看谱模式：JavaFX WebView（仅 Desktop）。:win 分类器带 Windows 原生库
-                implementation("org.openjfx:javafx-base:21.0.5:win")
-                implementation("org.openjfx:javafx-graphics:21.0.5:win")
-                implementation("org.openjfx:javafx-controls:21.0.5:win")
-                implementation("org.openjfx:javafx-swing:21.0.5:win")
-                implementation("org.openjfx:javafx-media:21.0.5:win")
-                implementation("org.openjfx:javafx-web:21.0.5:win")
+                // 看谱模式：JavaFX WebView（仅 Desktop），按构建宿主自动选择原生分类器
+                val jfx = javafxClassifier
+                implementation("org.openjfx:javafx-base:21.0.5:$jfx")
+                implementation("org.openjfx:javafx-graphics:21.0.5:$jfx")
+                implementation("org.openjfx:javafx-controls:21.0.5:$jfx")
+                implementation("org.openjfx:javafx-swing:21.0.5:$jfx")
+                implementation("org.openjfx:javafx-media:21.0.5:$jfx")
+                implementation("org.openjfx:javafx-web:21.0.5:$jfx")
             }
         }
     }

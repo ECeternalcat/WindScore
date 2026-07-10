@@ -68,21 +68,30 @@ class JudgmentEngineTest {
     }
 
     @Test
-    fun repeatedNoteRequiresFreshPress() {
-        // 震音：同一个音 C 连续出现（不同 tick）
+    fun heldKeySatisfiesRepeatedOrLongNotes() {
+        // 文档 2.3.3 / 3.2：只要“按在手里”就算过。一个音只需按一次，无论多长
+        // 或与前一音相邻重复——长按不应被要求按第二下。
         val s = score(note(0, 60, 0), note(1, 60, 4), note(2, 60, 8))
         val engine = JudgmentEngine(s)
 
+        // 按下一次 60，一直按住：三组同音应全部自动推进（无需第二下）
         engine.onNoteOn(60)
-        assertEquals(4L, engine.currentTick, "第一组命中")
-        // 一直按住不放：不应把第二、三组也跳过
-        assertEquals(4L, engine.currentTick)
-        engine.onNoteOn(99) // 干扰，不变
-        assertEquals(4L, engine.currentTick, "长按不应自动推进重复音")
-        // 松开再按（新一次击键）才推进
-        engine.onNoteOff(60)
+        assertTrue(engine.isFinished, "按住一个音应推进全部相邻同音，无需第二下")
+        assertTrue(s.notes.all { it.isHit }, "三个音都应命中")
+    }
+
+    @Test
+    fun differentPitchStillRequiresItsOwnPress() {
+        // 不同音高的旋律：C 后接 E，按住 C 不应跳过 E
+        val s = score(note(0, 60, 0), note(1, 64, 4), note(2, 67, 8))
+        val engine = JudgmentEngine(s)
         engine.onNoteOn(60)
-        assertEquals(8L, engine.currentTick, "重新击键才推进")
+        assertEquals(4L, engine.currentTick, "C 命中推进到 E")
+        assertEquals(4L, engine.currentTick, "按住 C 不能跳过 E（不同音高）")
+        engine.onNoteOn(64)
+        assertEquals(8L, engine.currentTick)
+        engine.onNoteOn(67)
+        assertTrue(engine.isFinished)
     }
 
     @Test
@@ -147,6 +156,97 @@ class JudgmentEngineTest {
         assertEquals(listOf(48), hosted.map { it.pitch }, "纯托管组到达即发声")
         assertEquals(4L, engine.currentTick, "无练习音的组立即推进到下一组")
         assertEquals(setOf(60), engine.pendingPitches())
+    }
+
+    @Test
+    fun consecutiveHostedGroupsDoNotBurst() {
+        // 组0,1,2 均为纯托管左手；组3 为右手练习组
+        val s = score(
+            note(0, 48, 0, track = TrackType.LEFT_HAND),
+            note(1, 50, 4, track = TrackType.LEFT_HAND),
+            note(2, 52, 8, track = TrackType.LEFT_HAND),
+            note(3, 60, 12, track = TrackType.RIGHT_HAND),
+        )
+        val engine = JudgmentEngine(s, PracticeMode.RIGHT_ONLY)
+        val firstHosted = engine.arrive()
+        assertEquals(listOf(48), firstHosted.map { it.pitch }, "arrive 只处理第一个托管组")
+        assertEquals(4L, engine.currentTick, "推进到组1 后停止，不 burst 到练习组")
+
+        // 用户按键不应让托管段 burst 推进
+        engine.onNoteOn(99)
+        assertEquals(4L, engine.currentTick, "用户按键不推进纯托管段")
+
+        // 上层按节奏显式推进
+        val second = engine.advanceHosted()
+        assertEquals(listOf(50), second.map { it.pitch })
+        assertEquals(8L, engine.currentTick)
+
+        val third = engine.advanceHosted()
+        assertEquals(listOf(52), third.map { it.pitch })
+        assertEquals(12L, engine.currentTick)
+        assertEquals(setOf(60), engine.pendingPitches())
+    }
+
+    // ---- Phase 3：A/B 循环练习 ----
+
+    @Test
+    fun abLoopJumpsBackAtEnd() {
+        val s = score(
+            note(0, 60, 0),
+            note(1, 62, 4),
+            note(2, 64, 8),
+            note(3, 65, 12),
+            note(4, 67, 16),
+        )
+        val engine = JudgmentEngine(s)
+        engine.arrive()
+        engine.setLoop(4L, 12L) // 只在 tick 4~12 之间循环
+
+        // 推进到 tick=12 边界时应回卷到 tick=4
+        engine.onNoteOn(62) // tick 4
+        assertEquals(8L, engine.currentTick)
+        engine.onNoteOn(64) // tick 8
+        assertEquals(4L, engine.currentTick, "越过循环终点后应回卷到循环起点")
+
+        // 循环段内音符应重置为未命中，可再次练习
+        assertFalse(s.notes[1].isHit, "回卷后循环段内音符应重置")
+        assertFalse(s.notes[2].isHit, "回卷后循环段内音符应重置")
+    }
+
+    @Test
+    fun abLoopDoesNotInflateCleanHitCount() {
+        val s = score(
+            note(0, 60, 0),
+            note(1, 62, 4),
+            note(2, 64, 8),
+        )
+        val engine = JudgmentEngine(s)
+        engine.arrive()
+        engine.setLoop(0L, 8L)
+
+        engine.onNoteOn(60)
+        assertEquals(1, engine.cleanHitCount())
+        engine.onNoteOn(62)
+        assertEquals(0L, engine.currentTick, "越过循环终点 8 后回卷到循环起点 0")
+        // 回卷后 cleanHitCount 应重新计算，不累计超过总音符数
+        assertEquals(0, engine.cleanHitCount(), "回卷后循环段内干净命中应重置")
+    }
+
+    @Test
+    fun clearLoopRestoresFullPlaythrough() {
+        val s = score(
+            note(0, 60, 0),
+            note(1, 62, 4),
+            note(2, 64, 8),
+        )
+        val engine = JudgmentEngine(s)
+        engine.arrive()
+        engine.setLoop(0L, 4L)
+        engine.onNoteOn(60)
+        assertEquals(0L, engine.currentTick, "在循环内")
+        engine.clearLoop()
+        engine.onNoteOn(60)
+        assertEquals(4L, engine.currentTick, "清除循环后可继续向前")
     }
 
     // ---- Phase 2 Step 3a：准度计分 ----
