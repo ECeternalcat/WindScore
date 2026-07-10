@@ -85,9 +85,19 @@ internal object OsmdHtml {
                     }
                     window.__cursorIdx=target;
                     try{osmd.cursor.show();}catch(e){}
+                    // 只在光标接近视口边缘时才滚动（50px 阈值，消除微抖）
                     try{
                         var el=osmd.cursor.cursorElement;
-                        if(el&&el.scrollIntoView)el.scrollIntoView({block:"center"});
+                        if(el){
+                            var ct=document.getElementById('osmd');
+                            var cr=ct.getBoundingClientRect();
+                            var er=el.getBoundingClientRect();
+                            var cursorTop=er.top-cr.top;
+                            var cursorBot=er.bottom-cr.top;
+                            if(cursorTop<50||cursorBot>cr.height-50){
+                                el.scrollIntoView({block:"center"});
+                            }
+                        }
                     }catch(e){}
                 };
 

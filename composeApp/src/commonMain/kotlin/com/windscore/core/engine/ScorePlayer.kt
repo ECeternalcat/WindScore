@@ -36,6 +36,9 @@ class ScorePlayer(
     private val _finished = MutableStateFlow(false)
     val finished: StateFlow<Boolean> = _finished
 
+    private val _playingPitches = MutableStateFlow<Set<Int>>(emptySet())
+    val playingPitches: StateFlow<Set<Int>> = _playingPitches
+
     private data class Event(val tick: Long, val on: Boolean, val pitch: Int)
 
     private val events: List<Event> = buildList {
@@ -73,6 +76,7 @@ class ScorePlayer(
                         eventIndex++
                     }
                     _tick.value = tickLong.coerceAtMost(score.totalTicks)
+                    _playingPitches.value = active.keys.toSet()
                 }
                 if (localTick >= score.totalTicks) {
                     _tick.value = score.totalTicks
@@ -90,6 +94,7 @@ class ScorePlayer(
         _playing.value = false
         job?.cancel()
         silenceAll()
+        _playingPitches.value = emptySet()
     }
 
     fun stop() {

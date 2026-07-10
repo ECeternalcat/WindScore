@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -94,8 +95,10 @@ fun App(
     val player = remember(currentScore) { currentScore?.let { ScorePlayer(it, synth, scope) } }
     val noTickFlow = remember { kotlinx.coroutines.flow.MutableStateFlow(0L) }
     val noPlayFlow = remember { kotlinx.coroutines.flow.MutableStateFlow(false) }
+    val noPitchesFlow = remember { kotlinx.coroutines.flow.MutableStateFlow<Set<Int>>(emptySet()) }
     val playTick by (player?.tick ?: noTickFlow).collectAsState()
     val isPlaying by (player?.playing ?: noPlayFlow).collectAsState()
+    val playingPitches by (player?.playingPitches ?: noPitchesFlow).collectAsState()
 
     LaunchedEffect(running) {
         if (running) {
@@ -176,6 +179,7 @@ fun App(
                     player = player,
                     playTick = playTick,
                     isPlaying = isPlaying,
+                    playingPitches = playingPitches,
                     renderMs = renderMs,
                     onBack = { closeScore() },
                     onToggleMidi = {
@@ -524,6 +528,7 @@ private fun PlayerScreen(
     player: ScorePlayer?,
     playTick: Long,
     isPlaying: Boolean,
+    playingPitches: Set<Int>,
     renderMs: Double?,
     onBack: () -> Unit,
     onToggleMidi: () -> Unit,
@@ -570,6 +575,7 @@ private fun PlayerScreen(
                 viewMode = viewMode,
                 playTick = playTick,
                 isPlaying = isPlaying,
+                playingPitches = playingPitches,
                 renderMs = renderMs,
                 isCompact = isCompact,
                 onRenderTime = onRenderTime,
@@ -583,6 +589,7 @@ private fun PlayerScreen(
                         viewMode = viewMode,
                         playTick = playTick,
                         isPlaying = isPlaying,
+                        playingPitches = playingPitches,
                         renderMs = renderMs,
                         isCompact = isCompact,
                         onRenderTime = onRenderTime,
@@ -865,6 +872,7 @@ private fun MainStage(
     viewMode: ViewMode,
     playTick: Long,
     isPlaying: Boolean,
+    playingPitches: Set<Int>,
     renderMs: Double?,
     isCompact: Boolean,
     onRenderTime: (Double) -> Unit,
@@ -889,23 +897,28 @@ private fun MainStage(
         Box(Modifier.fillMaxSize().padding(innerPadding)) {
             // Keep-Alive: 所有视图始终挂载，通过 alpha 控制可见性
             val rawXml = session.score.rawXml
+            // 活跃音高：播放时用 ScorePlayer 的发音，练习时用 session
+            val activePitches = if (isPlaying) playingPitches else session.heldPitches
+            val targetPitches = if (isPlaying) playingPitches else session.pendingPitches
+
             // 卷帘 — 始终挂载
             PianoRoll(
                 score = session.score,
                 currentTickProvider = { tick },
                 modifier = Modifier.fillMaxSize().alpha(if (showRoll) 1f else 0f),
                 hostedTrack = session.hostedTrack,
-                heldPitchesProvider = { session.heldPitches },
+                heldPitchesProvider = { activePitches },
                 pulseIntensityProvider = { session.pulseIntensity },
                 bpmProvider = { session.score.tempo.takeIf { it > 0 } ?: 120 },
             )
-            // 五线谱 — 始终挂载（后台保活，光标持续同步）
+            // 五线谱 — 始终挂载（SwingPanel 需移出屏幕而非 alpha=0）
+            val sheetVisible = showSheetKb || showSheetFull
             if (rawXml != null) {
                 ScoreSheetView(
                     rawXml = rawXml,
                     currentTickProvider = { tick },
                     modifier = Modifier.fillMaxWidth().fillMaxHeight(sheetFraction)
-                        .alpha(if (showSheetKb || showSheetFull) 1f else 0f),
+                        .then(if (sheetVisible) Modifier else Modifier.offset(x = 99999.dp)),
                     divisions = session.score.divisions,
                     onRenderTime = onRenderTime,
                 )
@@ -917,8 +930,8 @@ private fun MainStage(
                     .alpha(if (showSheetKb) 1f else 0f),
                 pitchLow = session.score.notes.minOf { it.pitch }.coerceIn(21, 108),
                 pitchHigh = session.score.notes.maxOf { it.pitch }.coerceIn(21, 108),
-                pendingPitchesProvider = { session.pendingPitches },
-                heldPitchesProvider = { session.heldPitches },
+                pendingPitchesProvider = { targetPitches },
+                heldPitchesProvider = { activePitches },
             )
             // 结算页
             if (session.finished) {
