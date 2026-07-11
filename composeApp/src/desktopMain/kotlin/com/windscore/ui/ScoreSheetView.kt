@@ -43,10 +43,15 @@ actual fun ScoreSheetView(
     divisions: Int,
     pages: Int,
     onRenderTime: (Double) -> Unit,
+    onSeek: (Long) -> Unit,
+    onStepForward: () -> Unit,
+    onStepBackward: () -> Unit,
 ) {
     var state by remember { mutableStateOf<LoadState>(LoadState.Loading) }
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
     val tickProvider by rememberUpdatedState(currentTickProvider)
+    val onStepFwd by rememberUpdatedState(onStepForward)
+    val onStepBack by rememberUpdatedState(onStepBackward)
     val renderDone = remember { AtomicBoolean(false) }
 
     val serverInfo = remember {
@@ -92,12 +97,16 @@ actual fun ScoreSheetView(
             try {
                 try { Platform.startup {} } catch (_: IllegalStateException) {}
                 val panel = JFXPanel()
+                panel.border = javax.swing.BorderFactory.createEmptyBorder()
+                panel.isFocusable = false
                 Platform.runLater {
                     runCatching {
                         val webView = WebView()
                         webView.isContextMenuEnabled = false
                         webView.engine.isJavaScriptEnabled = true
-                        panel.scene = Scene(StackPane(webView), FxColor.WHITE)
+                        val root = StackPane(webView)
+                        root.style = "-fx-focus-color: transparent; -fx-faint-focus-color: transparent; -fx-background-insets: 0;"
+                        panel.scene = Scene(root, FxColor.WHITE)
                         webViewRef = webView
                         state = LoadState.Ok
                     }.onFailure {
@@ -150,22 +159,36 @@ actual fun ScoreSheetView(
         renderDone.set(success)
         if (!success) return@LaunchedEffect
 
-        // Cursor sync starts after render is done
+        // Cursor sync: always poll tickAndSeek (handles cursor sync + command drain)
         var lastTick = Long.MIN_VALUE
         while (true) {
             val tick = tickProvider()
-            if (tick != lastTick) {
-                if (tick < lastTick) {
-                    Platform.runLater {
-                        runCatching { wv.engine.executeScript("window.__resetCursor&&window.__resetCursor();") }
-                    }
-                    lastTick = Long.MIN_VALUE
-                }
-                lastTick = tick
+            if (tick < lastTick) {
                 Platform.runLater {
-                    runCatching { wv.engine.executeScript("window.moveToTick&&window.moveToTick($tick);") }
+                    runCatching { wv.engine.executeScript("window.__resetCursor&&window.__resetCursor();") }
+                }
+                lastTick = Long.MIN_VALUE
+            }
+            // tickAndSeek advances cursor AND drains pending seek/step commands as a string
+            val cmdBox = arrayOf("")
+            val latch = java.util.concurrent.CountDownLatch(1)
+            Platform.runLater {
+                runCatching {
+                    val result = wv.engine.executeScript("window.tickAndSeek && window.tickAndSeek($tick);")
+                    cmdBox[0] = result?.toString() ?: ""
+                }
+                latch.countDown()
+            }
+            latch.await(2, java.util.concurrent.TimeUnit.SECONDS)
+            val cmd = cmdBox[0]
+            when {
+                cmd.startsWith("seek:") -> cmd.removePrefix("seek:").toLongOrNull()?.let { onSeek(it) }
+                cmd.startsWith("step:") -> when (cmd.removePrefix("step:").trim()) {
+                    "1" -> onStepFwd()
+                    "-1" -> onStepBack()
                 }
             }
+            lastTick = tick
             delay(33)
         }
     }

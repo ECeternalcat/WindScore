@@ -103,6 +103,49 @@ class JudgmentEngine(
         loopEnabled = false
     }
 
+    /**
+     * 微观步进（文档 3.3 盲操微调）：游标前进到下一个组的起始 tick。
+     * 等价于相对 seek —— 当前组标记为已过，落在下一组。
+     */
+    fun stepForward() {
+        if (groupIndex >= groups.size) return
+        val nextIdx = groupIndex + 1
+        val targetTick = if (nextIdx < groups.size) groups[nextIdx].first().startTick else totalTicks
+        seekTo(targetTick)
+    }
+
+    /**
+     * 微观步进（文档 3.3 盲操微调）：游标后退到上一个组的起始 tick。
+     * 落到的组重置为未命中，便于长辈重新练习。
+     */
+    fun stepBackward() {
+        if (groupIndex <= 0) return
+        seekTo(groups[groupIndex - 1].first().startTick)
+    }
+
+    /**
+     * 定点跳转（文档 3.3 Click-to-Practice）。
+     * 将游标跳到 >= [targetTick] 的第一个组，之前的组标记为已命中。
+     */
+    fun seekTo(targetTick: Long) {
+        activeKeys.clear()
+        groups.flatten().forEach { it.isHit = false }
+        for (i in groupWrongCounts.indices) groupWrongCounts[i] = 0
+        currentGroupDirty = false
+        wrongPressCount = 0
+
+        val targetIdx = findGroupIndexAtOrAfter(targetTick).let { if (it < 0) groups.size else it }
+        // 标记目标之前的组为已命中
+        for (i in 0 until targetIdx) {
+            groups[i].forEach { it.isHit = true }
+        }
+        cleanHitCount = (0 until targetIdx).sumOf { i ->
+            groups[i].count { isActiveTrack(it.track) }
+        }
+        groupIndex = targetIdx.coerceIn(0, groups.size)
+        lastArrivedGroupIndex = groupIndex - 1
+    }
+
     /** 准度得分百分比（0..100）。 */
     fun scorePercent(): Int =
         if (totalActiveNotes == 0) 100 else (cleanHitCount * 100 / totalActiveNotes).coerceIn(0, 100)

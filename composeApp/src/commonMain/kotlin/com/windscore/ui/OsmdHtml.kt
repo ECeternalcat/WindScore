@@ -19,7 +19,8 @@ internal object OsmdHtml {
             <meta charset="utf-8"/>
             <style>
                 html,body{margin:0;padding:0;height:100%;background:#fff;overflow:hidden;}
-                #osmd{width:100%;height:100%;overflow-y:auto;overflow-x:hidden;}
+                *:focus{outline:none;}
+                #osmd{width:100%;height:100%;overflow-y:auto;overflow-x:hidden;touch-action:pan-y;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;}
                 #osmd::-webkit-scrollbar{width:0;}
                 #osmd{scrollbar-width:none;-ms-overflow-style:none;}
                 #err{position:fixed;top:0;left:0;right:0;color:#b00;padding:12px;display:none;background:#fff;z-index:99;font-size:13px;}
@@ -43,6 +44,8 @@ internal object OsmdHtml {
                 window.__cursorTimes=[];
                 window.__cursorIdx=0;
                 window.__divisions=$divisions;
+                window.__pendingSeek=0;
+                window.__pendingStep=0;
 
                 function setStatus(s){window.__status=s;try{document.getElementById('hud').textContent=s;}catch(e){}}
                 function fail(msg){var e=document.getElementById('err');e.style.display='block';e.textContent=''+msg+' ['+window.__status+']';document.getElementById('loading').style.display='none';}
@@ -67,11 +70,25 @@ internal object OsmdHtml {
                     try{osmd.cursor.reset();osmd.cursor.show();}catch(e){}
                 }
 
-                window.moveToTick=function(targetTick){
+                // 合并“命令下发 + 光标推进”，一次 executeScript 完成。
+                // 返回字符串命令供 Kotlin 解析：
+                //   ""            无待处理命令
+                //   "seek:<tick>" 宏观小节吸附
+                //   "step:1"      微观前进一个音符
+                //   "step:-1"     微观后退一个音符
+                window.tickAndSeek=function(targetTick){
+                    var cmd="";
+                    if(window.__pendingSeek>0){
+                        cmd="seek:"+window.__pendingSeek;
+                        window.__pendingSeek=0;
+                    }else if(window.__pendingStep!==0){
+                        cmd="step:"+window.__pendingStep;
+                        window.__pendingStep=0;
+                    }
                     var osmd=window.__osmd;
-                    if(!osmd||!osmd.cursor)return;
+                    if(!osmd||!osmd.cursor)return cmd;
                     var times=window.__cursorTimes;
-                    if(!times||times.length===0)return;
+                    if(!times||times.length===0)return cmd;
                     var divisions=window.__divisions||4;
                     var posWhole=targetTick/(4.0*divisions);
                     var target=window.__cursorIdx;
@@ -79,26 +96,27 @@ internal object OsmdHtml {
                         if((times[j]||0)>posWhole)break;
                         target=j;
                     }
-                    if(target===window.__cursorIdx)return;
-                    for(var k=window.__cursorIdx+1;k<=target;k++){
-                        try{osmd.cursor.next();}catch(e){}
-                    }
-                    window.__cursorIdx=target;
-                    try{osmd.cursor.show();}catch(e){}
-                    // 只在光标接近视口边缘时才滚动（50px 阈值，消除微抖）
-                    try{
-                        var el=osmd.cursor.cursorElement;
-                        if(el){
-                            var ct=document.getElementById('osmd');
-                            var cr=ct.getBoundingClientRect();
-                            var er=el.getBoundingClientRect();
-                            var cursorTop=er.top-cr.top;
-                            var cursorBot=er.bottom-cr.top;
-                            if(cursorTop<50||cursorBot>cr.height-50){
-                                el.scrollIntoView({block:"center"});
-                            }
+                    if(target!==window.__cursorIdx){
+                        for(var k=window.__cursorIdx+1;k<=target;k++){
+                            try{osmd.cursor.next();}catch(e){}
                         }
-                    }catch(e){}
+                        window.__cursorIdx=target;
+                        try{osmd.cursor.show();}catch(e){}
+                        try{
+                            var el=osmd.cursor.cursorElement;
+                            if(el){
+                                var ct=document.getElementById('osmd');
+                                var cr=ct.getBoundingClientRect();
+                                var er=el.getBoundingClientRect();
+                                var cursorTop=er.top-cr.top;
+                                var cursorBot=er.bottom-cr.top;
+                                if(cursorTop<50||cursorBot>cr.height-50){
+                                    el.scrollIntoView({block:"center"});
+                                }
+                            }
+                        }catch(e){}
+                    }
+                    return cmd;
                 };
 
                 window.__resetCursor=function(){
@@ -111,6 +129,113 @@ internal object OsmdHtml {
                     }catch(e){}
                     window.__cursorIdx=0;
                 };
+
+                // —— 宏观定位 + 微观盲操（文档 3.3）——
+                var isScrubbing=false;
+                var scrubAnchorX=0;
+                var SCRUB_THRESHOLD=40;
+                var lastTouchTime=0;
+
+                // 宏观小节吸附：遍历 musicPages→MusicSystems，按 Y 最近找系统行，
+                // 再按 X 最近找小节，命中则取 parentSourceMeasure.AbsoluteTimestamp 转 tick。
+                function macroSnapAt(clientX,clientY){
+                    var osmd=window.__osmd;
+                    if(!osmd||!osmd.GraphicSheet)return false;
+                    var pages=osmd.GraphicSheet.musicPages;
+                    if(!pages||pages.length===0)return false;
+                    // 汇集所有页面的 MusicSystem（兼容大小写）
+                    var systems=[];
+                    for(var pi=0;pi<pages.length;pi++){
+                        var ms=pages[pi].MusicSystems||pages[pi].musicSystems;
+                        if(ms){for(var si=0;si<ms.length;si++)systems.push(ms[si]);}
+                    }
+                    if(systems.length===0)return false;
+                    var ct=document.getElementById('osmd');
+                    var rect=ct.getBoundingClientRect();
+                    var zoom=osmd.Zoom||osmd.zoom||1.0;
+                    var unitX=(clientX-rect.left)/(10.0*zoom);
+                    var unitY=(clientY-rect.top+ct.scrollTop)/(10.0*zoom);
+                    // 最近系统行匹配（Y 到边界框距离最小，消除相邻行容差重叠）
+                    var sys=null;
+                    var bestDist=1e9;
+                    for(var i=0;i<systems.length;i++){
+                        var sb=systems[i].PositionAndShape;
+                        if(!sb)continue;
+                        var sy=sb.AbsolutePosition?sb.AbsolutePosition.y:0;
+                        var sh=sb.Size?sb.Size.height:0;
+                        var d=unitY<sy?(sy-unitY):(unitY>sy+sh?(unitY-sy-sh):0);
+                        if(d<bestDist){bestDist=d;sys=systems[i];}
+                    }
+                    if(!sys||!sys.StaffLines||sys.StaffLines.length===0)return false;
+                    var measures=sys.StaffLines[0].Measures;
+                    if(!measures)return false;
+                    // 最近小节匹配（X 到边界框距离最小）
+                    var hitIdx=-1;
+                    bestDist=1e9;
+                    for(var j=0;j<measures.length;j++){
+                        var mb=measures[j].PositionAndShape;
+                        if(!mb)continue;
+                        var mx=mb.AbsolutePosition?mb.AbsolutePosition.x:0;
+                        var mw=mb.Size?mb.Size.width:0;
+                        var dx=unitX<mx?(mx-unitX):(unitX>mx+mw?(unitX-mx-mw):0);
+                        if(dx<bestDist){bestDist=dx;hitIdx=j;}
+                    }
+                    if(hitIdx<0)return false;
+                    var psm=measures[hitIdx].parentSourceMeasure;
+                    if(psm&&psm.AbsoluteTimestamp){
+                        var real=fracReal(psm.AbsoluteTimestamp);
+                        if(real!=null){
+                            var divisions=window.__divisions||4;
+                            window.__pendingSeek=Math.round(real*4*divisions);
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+
+                function startScrub(clientX,clientY){
+                    if(macroSnapAt(clientX,clientY)){
+                        isScrubbing=true;
+                        scrubAnchorX=clientX;
+                    }
+                }
+                function moveScrub(clientX){
+                    if(!isScrubbing)return;
+                    var dx=clientX-scrubAnchorX;
+                    if(dx>SCRUB_THRESHOLD){window.__pendingStep=1;scrubAnchorX=clientX;}
+                    else if(dx<-SCRUB_THRESHOLD){window.__pendingStep=-1;scrubAnchorX=clientX;}
+                }
+                function endScrub(){isScrubbing=false;}
+
+                function initInteraction(){
+                    var el=document.getElementById('osmd');
+                    if(!el||el.__interactionBound)return;
+                    el.__interactionBound=true;
+                    // 鼠标事件（桌面 JavaFX WebView 仅发 MouseEvents）
+                    el.addEventListener('mousedown',function(e){
+                        if(Date.now()-lastTouchTime<800)return;
+                        startScrub(e.clientX,e.clientY);
+                        if(isScrubbing)try{e.preventDefault();}catch(_){}
+                    });
+                    window.addEventListener('mousemove',function(e){moveScrub(e.clientX);});
+                    window.addEventListener('mouseup',endScrub);
+                    // 触摸事件（移动端）；scrubbing 时 touchmove preventDefault 锁定竖向滚动
+                    el.addEventListener('touchstart',function(e){
+                        var t=e.touches[0];
+                        if(!t)return;
+                        lastTouchTime=Date.now();
+                        startScrub(t.clientX,t.clientY);
+                        if(isScrubbing)try{e.preventDefault();}catch(_){}
+                    },{passive:false});
+                    window.addEventListener('touchmove',function(e){
+                        if(!isScrubbing)return;
+                        var t=e.touches[0];
+                        if(t)moveScrub(t.clientX);
+                        try{e.preventDefault();}catch(_){}
+                    },{passive:false});
+                    window.addEventListener('touchend',endScrub);
+                    window.addEventListener('touchcancel',endScrub);
+                }
 
                 window.onload=function(){
                     try{
@@ -145,6 +270,7 @@ internal object OsmdHtml {
                                     try{osmd.cursor.show();}catch(e){}
                                     buildCursorTimes();
                                     setStatus("就绪 "+window.__renderTime.toFixed(0)+"ms");
+                                    initInteraction();
                                 }).catch(function(ex){fail(ex&&(ex.message||ex)||ex);});
                             })
                             .catch(function(ex){fail('XML获取失败: '+(ex&&ex.message||ex));});

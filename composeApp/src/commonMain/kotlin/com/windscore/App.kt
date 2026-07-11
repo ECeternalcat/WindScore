@@ -181,6 +181,15 @@ fun App(
                     isPlaying = isPlaying,
                     playingPitches = playingPitches,
                     renderMs = renderMs,
+                    onSeek = { tick ->
+                        if (isPlaying || playTick > 0) player?.seekTo(tick) else s.seekTo(tick)
+                    },
+                    onStepForward = {
+                        if (isPlaying || playTick > 0) player?.stepForward() else s.stepForward()
+                    },
+                    onStepBackward = {
+                        if (isPlaying || playTick > 0) player?.stepBackward() else s.stepBackward()
+                    },
                     onBack = { closeScore() },
                     onToggleMidi = {
                         running = !running
@@ -201,7 +210,13 @@ fun App(
                         s.clearLoop()
                         pendingLoopStart = null
                     },
-                    onTogglePlay = { player?.toggle() },
+                    onTogglePlay = {
+                        if (!isPlaying) {
+                            val cursorTick = if (playTick > 0) playTick else s.currentTick
+                            player?.seekTo(cursorTick)
+                        }
+                        player?.toggle()
+                    },
                     onStopPlay = { player?.stop() },
                     onRenderTime = { renderMs = it },
                 )
@@ -530,6 +545,9 @@ private fun PlayerScreen(
     isPlaying: Boolean,
     playingPitches: Set<Int>,
     renderMs: Double?,
+    onSeek: (Long) -> Unit,
+    onStepForward: () -> Unit,
+    onStepBackward: () -> Unit,
     onBack: () -> Unit,
     onToggleMidi: () -> Unit,
     onReset: () -> Unit,
@@ -576,6 +594,9 @@ private fun PlayerScreen(
                 playTick = playTick,
                 isPlaying = isPlaying,
                 playingPitches = playingPitches,
+                onSeek = onSeek,
+                onStepForward = onStepForward,
+                onStepBackward = onStepBackward,
                 renderMs = renderMs,
                 isCompact = isCompact,
                 onRenderTime = onRenderTime,
@@ -590,6 +611,9 @@ private fun PlayerScreen(
                         playTick = playTick,
                         isPlaying = isPlaying,
                         playingPitches = playingPitches,
+                        onSeek = onSeek,
+                        onStepForward = onStepForward,
+                        onStepBackward = onStepBackward,
                         renderMs = renderMs,
                         isCompact = isCompact,
                         onRenderTime = onRenderTime,
@@ -844,20 +868,12 @@ private fun StatusLine(session: ScoreSession, viewMode: ViewMode = ViewMode.ROLL
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (viewMode != ViewMode.ROLL && !sheetReady) {
-            Text(
-                "正在加载乐谱渲染…",
-                style = MaterialTheme.typography.bodySmall,
-                color = WindScoreColors.accentMagenta,
-            )
-        } else {
-            val pending = session.pendingPitches.joinToString { pitchName(it) }
-            Text(
-                if (session.finished) "演奏完成 · 准度 ${session.scorePercent()}%" else "该弹: $pending",
-                style = MaterialTheme.typography.bodySmall,
-                color = if (session.finished) WindScoreColors.semanticSuccess else WindScoreColors.ink,
-            )
-        }
+        val pending = session.pendingPitches.joinToString { pitchName(it) }
+        Text(
+            if (session.finished) "演奏完成 · 准度 ${session.scorePercent()}%" else "该弹: $pending",
+            style = MaterialTheme.typography.bodySmall,
+            color = if (session.finished) WindScoreColors.semanticSuccess else WindScoreColors.ink,
+        )
         Text(
             "进度 ${session.progress}/${session.groupCount} · tick ${session.currentTick}/${session.score.totalTicks}",
             style = MaterialTheme.typography.bodySmall,
@@ -873,6 +889,9 @@ private fun MainStage(
     playTick: Long,
     isPlaying: Boolean,
     playingPitches: Set<Int>,
+    onSeek: (Long) -> Unit,
+    onStepForward: () -> Unit,
+    onStepBackward: () -> Unit,
     renderMs: Double?,
     isCompact: Boolean,
     onRenderTime: (Double) -> Unit,
@@ -921,6 +940,9 @@ private fun MainStage(
                         .then(if (sheetVisible) Modifier else Modifier.offset(x = 99999.dp)),
                     divisions = session.score.divisions,
                     onRenderTime = onRenderTime,
+                    onSeek = onSeek,
+                    onStepForward = onStepForward,
+                    onStepBackward = onStepBackward,
                 )
             }
             // 静态键盘 — 模式二下半部分

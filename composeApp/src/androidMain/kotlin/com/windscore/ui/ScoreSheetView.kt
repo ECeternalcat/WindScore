@@ -29,10 +29,16 @@ actual fun ScoreSheetView(
     divisions: Int,
     pages: Int,
     onRenderTime: (Double) -> Unit,
+    onSeek: (Long) -> Unit,
+    onStepForward: () -> Unit,
+    onStepBackward: () -> Unit,
 ) {
     val context = LocalContext.current
     var lastSyncedTick by remember { mutableLongStateOf(Long.MIN_VALUE) }
     val tickProvider by rememberUpdatedState(currentTickProvider)
+    val onStepFwd by rememberUpdatedState(onStepForward)
+    val onStepBack by rememberUpdatedState(onStepBackward)
+    val seekHandler by rememberUpdatedState(onSeek)
     val osmdJsBase64 = remember {
         loadOsmdJsBase64(context)
             .also { if (it.isEmpty()) println("[OSMD] JS not found") }
@@ -88,14 +94,21 @@ actual fun ScoreSheetView(
     LaunchedEffect(rawXml) {
         while (true) {
             val tick = tickProvider()
-            if (tick != lastSyncedTick) {
-                if (tick < lastSyncedTick) {
-                    webView.evaluateJavascript("window.__resetCursor && window.__resetCursor();", null)
-                    lastSyncedTick = Long.MIN_VALUE
-                }
-                lastSyncedTick = tick
-                webView.evaluateJavascript("window.moveToTick && window.moveToTick($tick);", null)
+            if (tick < lastSyncedTick) {
+                webView.evaluateJavascript("window.__resetCursor && window.__resetCursor();", null)
+                lastSyncedTick = Long.MIN_VALUE
             }
+            webView.evaluateJavascript("window.tickAndSeek && window.tickAndSeek($tick);") { result ->
+                val cmd = result?.removeSurrounding("\"") ?: ""
+                when {
+                    cmd.startsWith("seek:") -> cmd.removePrefix("seek:").toLongOrNull()?.let { seekHandler(it) }
+                    cmd.startsWith("step:") -> when (cmd.removePrefix("step:").trim()) {
+                        "1" -> onStepFwd()
+                        "-1" -> onStepBack()
+                    }
+                }
+            }
+            lastSyncedTick = tick
             delay(33)
         }
     }

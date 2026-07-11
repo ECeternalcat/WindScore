@@ -131,6 +131,24 @@ class ScoreSession(
         sync()
     }
 
+    /** 定点跳转（文档 3.3）。 */
+    fun seekTo(tick: Long) {
+        engine.seekTo(tick)
+        sync()
+    }
+
+    /** 微观步进：前进一个音符组（文档 3.3 盲操微调）。 */
+    fun stepForward() {
+        engine.stepForward()
+        sync()
+    }
+
+    /** 微观步进：后退一个音符组（文档 3.3 盲操微调）。 */
+    fun stepBackward() {
+        engine.stepBackward()
+        sync()
+    }
+
     /** 设置 A/B 循环范围；调用后当前进度会调整到循环起点附近。 */
     fun setLoop(startTick: Long, endTick: Long) {
         engine.setLoop(startTick, endTick)

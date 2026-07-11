@@ -4,9 +4,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 
 /**
- * 传统看谱模式（文档 4.4�E�：用 WebView 加载 OSMD 渲染五线谱并自动翻页、E *
- * - Android�E�AndroidView + WebView�E�Desktop�E�JavaFX WebView�E�EwingPanel 嵌�E�E�、E * - [currentTickProvider] 提供播放/绁E��游栁Etick�E�换算�E whole-note 位置后驱动 OSMD 光栁E *   �E�基亁EOSMD 自身时间戳自校凁E��精确跟随当前音符�E�，并节流�E动滚动到见E��中央、E * - [onRenderTime] 回谁Eload+render 耗时�E�渲染性能测试）、E *
- * 严禁用 Compose 手�E五线谱排版——直接复用 OSMD 皁E��让与翻页算法、E */
+ * 传统看谱模式（文档 4.4）：WebView 加载 OSMD 渲染五线谱，滚动 + 光标追焦。
+ *
+ * 交互（文档 3.3）：
+ * - 点击小节 → 宏观吸附到小节开头（[onSeek]）。
+ * - 按住后左右滑动 → 按音符步进微观盲操（[onStepForward] / [onStepBackward]）。
+ */
 @Composable
 expect fun ScoreSheetView(
     rawXml: String,
@@ -15,4 +18,7 @@ expect fun ScoreSheetView(
     divisions: Int = 4,
     pages: Int = 1,
     onRenderTime: (Double) -> Unit = {},
+    onSeek: (Long) -> Unit = {},
+    onStepForward: () -> Unit = {},
+    onStepBackward: () -> Unit = {},
 )
