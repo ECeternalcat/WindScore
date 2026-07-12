@@ -9,6 +9,8 @@ import com.windscore.core.model.Score
 import com.windscore.core.model.TrackType
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -25,6 +27,7 @@ class ScoreSession(
     practiceMode: PracticeMode = PracticeMode.BOTH,
 ) {
     private val engine = JudgmentEngine(score, practiceMode)
+    private val sessionScope = CoroutineScope(scope.coroutineContext + SupervisorJob())
 
     private val msPerTick: Double = run {
         val tempo = score.tempo.takeIf { it > 0 } ?: 120
@@ -91,15 +94,18 @@ class ScoreSession(
     }
 
     init {
-        synth.start()
         playHosted(engine.arrive())
         sync()
         startPulseDecay()
     }
 
+    fun close() {
+        sessionScope.cancel()
+    }
+
     /** 启动脉冲强度衰减协程： progress 推进时点亮，卡顿时逐渐变暗。 */
     private fun startPulseDecay() {
-        scope.launch {
+        sessionScope.launch {
             while (true) {
                 delay(PULSE_DECAY_MS)
                 if (!finished) {
@@ -191,7 +197,7 @@ class ScoreSession(
         val delayMs = if (lastHostedTick < 0) 0L else {
             ((engine.currentTick - lastHostedTick) * msPerTick).toLong().coerceAtLeast(0)
         }
-        hostedJob = scope.launch {
+        hostedJob = sessionScope.launch {
             if (delayMs > 0) delay(delayMs)
             val notes = engine.advanceHosted()
             if (notes.isNotEmpty()) {
@@ -208,7 +214,7 @@ class ScoreSession(
         for (n in notes) {
             synth.noteOn(n.pitch, HOSTED_VELOCITY)
             val durMs = (n.durationTick * msPerTick).toLong().coerceIn(MIN_TONE_MS, MAX_TONE_MS)
-            scope.launch {
+            sessionScope.launch {
                 delay(durMs)
                 synth.noteOff(n.pitch)
             }

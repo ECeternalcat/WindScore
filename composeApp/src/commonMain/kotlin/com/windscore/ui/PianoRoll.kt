@@ -37,6 +37,8 @@ private val GRID = WindScoreColors.hairline.copy(alpha = 0.5f)
 
 private val BLACK_KEY_OFFSETS = setOf(1, 3, 6, 8, 10)
 
+private val clockStart = kotlin.time.TimeSource.Monotonic.markNow()
+
 /**
  * 钢琴卷帘（Piano Roll）。纯 Compose Canvas 绘制，避免用 Column/Row 堆叠导致的重组风暴。
  *
@@ -106,7 +108,8 @@ private fun DrawScope.drawBackground(h: Float, pulseIntensity: Float, bpm: Int) 
     // Phase 3：动态节拍脉冲——按 BPM 闪烁的水平光带，卡住时变暗
     if (bpm > 0) {
         val beatMs = 60_000.0 / bpm
-        val phase = (System.currentTimeMillis() % beatMs.toLong()) / beatMs
+        val currentMs = clockStart.elapsedNow().inWholeMilliseconds
+        val phase = (currentMs % beatMs.toLong()) / beatMs
         val sine = kotlin.math.sin(phase * kotlin.math.PI).coerceIn(0.0, 1.0)
         val bandAlpha = (sine * pulseIntensity * 0.18f).toFloat()
         if (bandAlpha > 0.01f) {

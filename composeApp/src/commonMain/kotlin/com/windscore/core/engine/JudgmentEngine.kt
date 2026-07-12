@@ -129,15 +129,15 @@ class JudgmentEngine(
      */
     fun seekTo(targetTick: Long) {
         activeKeys.clear()
-        groups.flatten().forEach { it.isHit = false }
         for (i in groupWrongCounts.indices) groupWrongCounts[i] = 0
         currentGroupDirty = false
         wrongPressCount = 0
 
         val targetIdx = findGroupIndexAtOrAfter(targetTick).let { if (it < 0) groups.size else it }
-        // 标记目标之前的组为已命中
-        for (i in 0 until targetIdx) {
-            groups[i].forEach { it.isHit = true }
+        // 标记目标之前的组为已命中，之后的为未命中（单次遍历，无额外分配）
+        for (i in groups.indices) {
+            val isBefore = i < targetIdx
+            groups[i].forEach { it.isHit = isBefore }
         }
         cleanHitCount = (0 until targetIdx).sumOf { i ->
             groups[i].count { isActiveTrack(it.track) }
@@ -199,7 +199,7 @@ class JudgmentEngine(
 
     fun reset(): List<NoteEntity> {
         activeKeys.clear()
-        groups.flatten().forEach { it.isHit = false }
+        groups.forEach { g -> g.forEach { it.isHit = false } }
         for (i in groupWrongCounts.indices) groupWrongCounts[i] = 0
         currentGroupDirty = false
         cleanHitCount = 0
@@ -291,9 +291,11 @@ class JudgmentEngine(
         // 清按键池：循环回卷后要求长辈重新按下，避免因为一直按着导致无限自循环
         activeKeys.clear()
         // 重置循环段内音符为未命中，让长辈重新练习
-        groups.flatten().forEach { note ->
-            if (note.startTick in loopStartTick until loopEndTick) {
-                note.isHit = false
+        groups.forEach { g ->
+            g.forEach { note ->
+                if (note.startTick in loopStartTick until loopEndTick) {
+                    note.isHit = false
+                }
             }
         }
         recomputeCleanHitCount()

@@ -80,17 +80,28 @@ class AndroidMidiManager(context: Context) : MidiManager {
             println("[MIDI] 打开设备失败")
             return@OnDeviceOpenedListener
         }
-        val port = device.openOutputPort(0)
-        if (port == null) {
+        val ports = device.info.ports
+        var openedAny = false
+        for (portInfo in ports) {
+            if (portInfo.type == MidiDeviceInfo.PortInfo.TYPE_OUTPUT) {
+                val port = device.openOutputPort(portInfo.portNumber)
+                if (port != null) {
+                    port.connect(receiver)
+                    synchronized(openedDevices) {
+                        outputPorts.add(port)
+                    }
+                    openedAny = true
+                }
+            }
+        }
+        if (openedAny) {
+            synchronized(openedDevices) {
+                openedDevices.add(device)
+            }
+            println("[MIDI] 已连接: ${device.info.properties}")
+        } else {
             println("[MIDI] 无可用输出端口: ${device.info.properties}")
-            return@OnDeviceOpenedListener
         }
-        port.connect(receiver)
-        synchronized(openedDevices) {
-            openedDevices.add(device)
-            outputPorts.add(port)
-        }
-        println("[MIDI] 已连接: ${device.info.properties}")
     }
 
     override fun start() {

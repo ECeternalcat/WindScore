@@ -62,12 +62,14 @@ class ScorePlayer(
         _playing.value = true
         _finished.value = false
         job = scope.launch(Dispatchers.Default) {
-            var lastMs = System.currentTimeMillis()
+            val clock = kotlin.time.TimeSource.Monotonic
+            val startMark = clock.markNow()
+            var lastMs = startMark.elapsedNow().inWholeMilliseconds
             localTick = _tick.value.toDouble()
             try {
                 while (isActive && _playing.value && localTick < score.totalTicks) {
                     delay(LOOP_MS)
-                    val now = System.currentTimeMillis()
+                    val now = startMark.elapsedNow().inWholeMilliseconds
                     val dt = (now - lastMs) / 1000.0
                     lastMs = now
                     localTick += tps * dt

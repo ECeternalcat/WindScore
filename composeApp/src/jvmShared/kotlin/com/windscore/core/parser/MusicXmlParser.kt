@@ -8,6 +8,7 @@ import org.w3c.dom.Node
 import java.io.ByteArrayInputStream
 import java.util.zip.ZipInputStream
 import javax.xml.parsers.DocumentBuilderFactory
+import kotlin.math.roundToInt
 
 /**
  * MusicXML (.mxl) 降维解析器。
@@ -135,7 +136,9 @@ object MusicXmlParser {
                                 val sound = node.getElementsByTagName("sound")
                                 if (sound.length > 0) {
                                     val t = (sound.item(0) as Element).getAttribute("tempo")
-                                    if (t.isNotEmpty()) tempo = t.toInt()
+                                    if (t.isNotEmpty()) {
+                                        tempo = t.toDoubleOrNull()?.roundToInt() ?: 120
+                                    }
                                 }
                             }
                         }
@@ -146,9 +149,18 @@ object MusicXmlParser {
         }
 
         // —— Tie 合并 ——
-        val merged = mutableListOf<NoteEntity>()
-        // openTies: (pitch, staff) -> 当前正在延音的 NoteEntity
-        val openTies = mutableMapOf<Pair<Int, Int>, NoteEntity>()
+        class MutableNote(
+            val id: Int,
+            val pitch: Int,
+            val track: TrackType,
+            val startTick: Long,
+            var durationTick: Long,
+            val fingering: String?,
+        )
+
+        val merged = mutableListOf<MutableNote>()
+        // openTies: (pitch, staff) -> 当前正在延音的 MutableNote
+        val openTies = mutableMapOf<Pair<Int, Int>, MutableNote>()
         var nextId = 0
 
         for (raw in rawNotes) {
@@ -162,12 +174,11 @@ object MusicXmlParser {
                     if (!raw.tieStart) {
                         openTies.remove(key)
                     }
-                    // 若同时 tieStart，则同一条 open 继续延音到下一个 stop
                 }
             }
             if (!consumed) {
                 val track = if (raw.staff == 2) TrackType.LEFT_HAND else TrackType.RIGHT_HAND
-                val entity = NoteEntity(
+                val entity = MutableNote(
                     id = nextId++,
                     pitch = raw.pitch,
                     track = track,
@@ -182,11 +193,19 @@ object MusicXmlParser {
             }
         }
 
-        // 按 startTick 升序、再按 pitch 排序，保证渲染与判定顺序稳定
-        merged.sortWith(compareBy({ it.startTick }, { it.pitch }))
+        val finalNotes = merged.map { m ->
+            NoteEntity(
+                id = m.id,
+                pitch = m.pitch,
+                track = m.track,
+                startTick = m.startTick,
+                durationTick = m.durationTick,
+                fingering = m.fingering,
+            )
+        }.sortedWith(compareBy({ it.startTick }, { it.pitch }))
 
         return Score(
-            notes = merged,
+            notes = finalNotes,
             divisions = divisions,
             tempo = tempo,
             totalTicks = maxTick,
@@ -269,6 +288,9 @@ object MusicXmlParser {
         if (container != null) {
             val factory = DocumentBuilderFactory.newInstance().apply {
                 isValidating = false
+                setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
+                setFeature("http://xml.org/sax/features/external-general-entities", false)
+                setFeature("http://xml.org/sax/features/external-parameter-entities", false)
             }
             runCatching {
                 val doc = factory.newDocumentBuilder().parse(ByteArrayInputStream(container))

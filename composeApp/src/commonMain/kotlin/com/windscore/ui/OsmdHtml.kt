@@ -83,8 +83,9 @@ internal object OsmdHtml {
                     var osmdEl=document.getElementById('osmd');
                     var svg=document.querySelector('#osmd svg');
                     if(!svg||!osmdEl){window.__snapshotChunksReady=1;window.__snapshotChunkCount=1;window.__snapshotError='no svg';return;}
-                    var w=osmdEl.scrollWidth||Math.ceil(svg.getBoundingClientRect().width);
-                    var h=osmdEl.scrollHeight||Math.ceil(svg.getBoundingClientRect().height);
+                    var rect=svg.getBoundingClientRect();
+                    var w=Math.ceil(rect.width)||osmdEl.scrollWidth;
+                    var h=Math.ceil(rect.height)||osmdEl.scrollHeight;
                     var CHUNK=4000;
                     var numChunks=Math.ceil(h/CHUNK);
                     window.__snapshotChunks=new Array(numChunks);
@@ -350,6 +351,19 @@ internal object OsmdHtml {
                                         osmd.Zoom=fitZoom;
                                         osmd.updateGraphic();
                                         osmd.render();
+
+                                        // 两步渲染可能导致微小的系统换行偏移，在此使用 transform 强力缩放对齐
+                                        var svg2=document.querySelector('#osmd svg');
+                                        if(svg2){
+                                            var svgW2=svg2.getBoundingClientRect().width;
+                                            if(!svgW2||svgW2<10) svgW2=parseFloat(svg2.getAttribute('width'))||0;
+                                            if(svgW2>10 && Math.abs(svgW2 - cW) / cW > 0.03){
+                                                var scale=cW/svgW2;
+                                                var osmdEl=document.getElementById('osmd');
+                                                osmdEl.style.transform='scale('+scale+')';
+                                                osmdEl.style.transformOrigin='top left';
+                                            }
+                                        }
                                     }
                                     window.__renderTime=Date.now()-t0;
                                     document.getElementById('loading').style.display='none';

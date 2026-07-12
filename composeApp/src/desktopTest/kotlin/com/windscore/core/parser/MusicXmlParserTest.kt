@@ -140,4 +140,29 @@ class MusicXmlParserTest {
         assertEquals("3", score.notes[0].fingering, "C4 应标 3 指")
         assertEquals(null, score.notes[1].fingering, "E4 无指法")
     }
+
+    @Test
+    fun parseHandlesDecimalBpm() {
+        val xml = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <score-partwise version="3.1">
+              <part id="P1">
+                <measure number="1">
+                  <direction>
+                    <sound tempo="120.5"/>
+                  </direction>
+                  <attributes><divisions>4</divisions></attributes>
+                  <note>
+                    <pitch><step>G</step><octave>4</octave></pitch>
+                    <duration>4</duration>
+                    <type>quarter</type>
+                    <staff>1</staff>
+                  </note>
+                </measure>
+              </part>
+            </score-partwise>
+        """.trimIndent().toByteArray()
+        val score = MusicXmlParser.parse(xml)
+        assertEquals(121, score.tempo, "BPM 120.5 应被四舍五入为 121")
+    }
 }

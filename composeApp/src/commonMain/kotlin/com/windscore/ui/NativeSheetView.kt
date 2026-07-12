@@ -20,6 +20,9 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.layout.onSizeChanged
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -35,6 +38,7 @@ fun NativeSheetView(
     modifier: Modifier = Modifier,
 ) {
     var scrollY by remember { mutableFloatStateOf(0f) }
+    var canvasSize by remember { mutableStateOf(IntSize.Zero) }
 
     val chunks = snapshot.chunks
     val srcW = snapshot.chunkWidth
@@ -42,10 +46,29 @@ fun NativeSheetView(
     val totalH = snapshot.totalHeight
     val steps = snapshot.cursorSteps
 
+    val tick = currentTickProvider()
+    val step = remember(tick, steps) { findCursorStep(tick, steps) }
+
+    // 在副作用中安全更新 scrollY 状态，避免在 Canvas draw 闭包内修改引起重绘循环
+    LaunchedEffect(step, canvasSize) {
+        if (canvasSize.width > 0 && canvasSize.height > 0 && step != null) {
+            val viewW = canvasSize.width.toFloat()
+            val viewH = canvasSize.height.toFloat()
+            val scale = viewW / srcW.toFloat()
+            val viewHInSrc = viewH / scale
+            val cursorRawY = step.y - scrollY
+            if (cursorRawY < viewHInSrc * 0.15f || cursorRawY > viewHInSrc * 0.5f) {
+                scrollY = (step.y - viewHInSrc * 0.2f)
+                    .coerceIn(0f, (totalH - viewHInSrc).coerceAtLeast(0f))
+            }
+        }
+    }
+
     Canvas(
         modifier
             .fillMaxSize()
             .clip(RectangleShape)
+            .onSizeChanged { canvasSize = it }
             // 鼠标滚轮：竖向滚动（平台 expect/actual）
             .scrollWheelHandler { dy ->
                 scrollY = (scrollY + dy * 50f)
@@ -85,18 +108,6 @@ fun NativeSheetView(
         val viewW = size.width
         val viewH = size.height
         val scale = viewW / srcW.toFloat()
-        val viewHInSrc = viewH / scale
-
-        // 光标自动追焦：光标进入视口顶部 20% 或底部 65% 时触发滚动
-        val tick = currentTickProvider()
-        val step = findCursorStep(tick, steps)
-        if (step != null) {
-            val cursorRawY = step.y - scrollY
-            if (cursorRawY < viewHInSrc * 0.15f || cursorRawY > viewHInSrc * 0.5f) {
-                scrollY = (step.y - viewHInSrc * 0.2f)
-                    .coerceIn(0f, (totalH - viewHInSrc).coerceAtLeast(0f))
-            }
-        }
 
         // 分块绘制
         chunks.forEachIndexed { i, chunk ->
