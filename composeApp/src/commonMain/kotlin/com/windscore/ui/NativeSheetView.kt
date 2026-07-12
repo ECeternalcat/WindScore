@@ -71,8 +71,12 @@ fun NativeSheetView(
             .onSizeChanged { canvasSize = it }
             // 鼠标滚轮：竖向滚动（平台 expect/actual）
             .scrollWheelHandler { dy ->
+                val viewHInSrc = if (canvasSize.width > 0) {
+                    val scale = canvasSize.width.toFloat() / srcW
+                    canvasSize.height.toFloat() / scale
+                } else 0f
                 scrollY = (scrollY + dy * 50f)
-                    .coerceIn(0f, totalH.toFloat())
+                    .coerceIn(0f, (totalH - viewHInSrc).coerceAtLeast(0f))
             }
             // 点击：吸附到最近音符
             .pointerInput(snapshot) {
@@ -94,8 +98,9 @@ fun NativeSheetView(
                     onDrag = { change, dragAmount ->
                         if (abs(dragAmount.y) >= abs(dragAmount.x)) {
                             val scale = size.width.toFloat() / srcW
+                            val viewHInSrc = size.height / scale
                             scrollY = (scrollY - dragAmount.y / scale)
-                                .coerceIn(0f, (totalH - size.height / scale).coerceAtLeast(0f))
+                                .coerceIn(0f, (totalH - viewHInSrc).coerceAtLeast(0f))
                         } else {
                             val dx = change.position.x - anchorX
                             if (dx > 40f) { onStepForward(); anchorX = change.position.x }
