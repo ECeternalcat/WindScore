@@ -83,9 +83,14 @@ internal object OsmdHtml {
                     var osmdEl=document.getElementById('osmd');
                     var svg=document.querySelector('#osmd svg');
                     if(!svg||!osmdEl){window.__snapshotChunksReady=1;window.__snapshotChunkCount=1;window.__snapshotError='no svg';return;}
+                    var scale=1.0;
+                    if(osmdEl.style.transform && osmdEl.style.transform.indexOf('scale')!==-1){
+                        var match=osmdEl.style.transform.match(/scale\(([^)]+)\)/);
+                        if(match && match[1]) scale=parseFloat(match[1])||1.0;
+                    }
                     var rect=svg.getBoundingClientRect();
-                    var w=Math.ceil(rect.width)||osmdEl.scrollWidth;
-                    var h=Math.ceil(rect.height)||osmdEl.scrollHeight;
+                    var w=Math.ceil(rect.width/scale)||osmdEl.scrollWidth;
+                    var h=Math.ceil(rect.height/scale)||osmdEl.scrollHeight;
                     var CHUNK=4000;
                     var numChunks=Math.ceil(h/CHUNK);
                     window.__snapshotChunks=new Array(numChunks);

@@ -16,10 +16,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -189,7 +191,6 @@ private fun PlayerToolbar(
                     painter = painterResource(Res.drawable.arrow_left_thin),
                     contentDescription = "返回",
                     modifier = Modifier.size(20.dp),
-                    tint = WindScoreColors.ink,
                 )
             }
             Spacer(Modifier.width(WindScoreSpacing.sm))
@@ -207,7 +208,6 @@ private fun PlayerToolbar(
                     painter = painterResource(Res.drawable.arrows_counter_clockwise_thin),
                     contentDescription = "重置",
                     modifier = Modifier.size(20.dp),
-                    tint = WindScoreColors.ink,
                 )
             }
             PillButton(style = if (running) PillButtonStyle.SECONDARY else PillButtonStyle.PRIMARY, onClick = onToggleMidi) {
@@ -274,7 +274,6 @@ private fun PlayerControlBar(
                         painter = painterResource(Res.drawable.piano_keys_thin),
                         contentDescription = "卷帘",
                         modifier = Modifier.size(20.dp),
-                        tint = WindScoreColors.ink,
                     )
                 }
                 if (scoreHasSheet) {
@@ -286,7 +285,6 @@ private fun PlayerControlBar(
                             painter = painterResource(Res.drawable.book_open_text_thin),
                             contentDescription = "识谱",
                             modifier = Modifier.size(20.dp),
-                            tint = WindScoreColors.ink,
                         )
                     }
                     CircularIconButton(
@@ -297,7 +295,6 @@ private fun PlayerControlBar(
                             painter = painterResource(Res.drawable.music_notes_thin),
                             contentDescription = "看谱",
                             modifier = Modifier.size(20.dp),
-                            tint = WindScoreColors.ink,
                         )
                     }
                 }
@@ -318,7 +315,6 @@ private fun PlayerControlBar(
                         painter = painterResource(if (isPlaying) Res.drawable.pause_thin else Res.drawable.play_thin),
                         contentDescription = if (isPlaying) "暂停" else "播放",
                         modifier = Modifier.size(20.dp),
-                        tint = if (sheetReady) WindScoreColors.ink else WindScoreColors.ink.copy(alpha = 0.4f),
                     )
                 }
                 CircularIconButton(onClick = onStopPlay, enabled = sheetReady) {
@@ -326,7 +322,6 @@ private fun PlayerControlBar(
                         painter = painterResource(Res.drawable.stop_thin),
                         contentDescription = "停止",
                         modifier = Modifier.size(20.dp),
-                        tint = if (sheetReady) WindScoreColors.ink else WindScoreColors.ink.copy(alpha = 0.4f),
                     )
                 }
                 Text(
@@ -345,7 +340,6 @@ private fun PlayerControlBar(
                         painter = painterResource(Res.drawable.repeat_thin),
                         contentDescription = "设起点",
                         modifier = Modifier.size(20.dp),
-                        tint = if (session.isLoopActive) WindScoreColors.ink.copy(alpha = 0.4f) else WindScoreColors.ink,
                     )
                 }
                 if (pendingLoopStart != null && !session.isLoopActive) {
@@ -360,7 +354,6 @@ private fun PlayerControlBar(
                         painter = painterResource(Res.drawable.repeat_thin),
                         contentDescription = "设终点",
                         modifier = Modifier.size(20.dp),
-                        tint = if (session.isLoopActive || pendingLoopStart == null) WindScoreColors.ink.copy(alpha = 0.4f) else WindScoreColors.ink,
                     )
                 }
                 CircularIconButton(onClick = onClearLoop, enabled = session.isLoopActive) {
@@ -368,7 +361,6 @@ private fun PlayerControlBar(
                         painter = painterResource(Res.drawable.x_thin),
                         contentDescription = "清除循环",
                         modifier = Modifier.size(20.dp),
-                        tint = if (session.isLoopActive) WindScoreColors.ink else WindScoreColors.ink.copy(alpha = 0.4f),
                     )
                 }
                 if (session.isLoopActive) {
@@ -470,19 +462,33 @@ private fun MainStage(
                     onSnapshot = { snap -> sheetSnapshot = snap },
                 )
 
-                // 快照就绪前：显示加载指示器
+                // 快照就绪前：显示加载指示器（带圆盘进度动画和微调文本）
                 if (sheetSnapshot == null && sheetVisible) {
                     Box(
-                        modifier = Modifier.fillMaxWidth().fillMaxHeight(sheetFraction),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .fillMaxHeight(sheetFraction)
+                            .clip(RoundedCornerShape(WindScoreRounded.lg))
+                            .background(Color.White),
                         contentAlignment = Alignment.Center,
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("正在加载乐谱…", style = MaterialTheme.typography.bodyMedium, color = WindScoreColors.ink)
+                            CircularProgressIndicator(
+                                color = WindScoreColors.accentMagenta,
+                                strokeWidth = 3.dp,
+                                modifier = Modifier.size(36.dp),
+                            )
+                            Spacer(Modifier.height(WindScoreSpacing.md))
+                            Text(
+                                "正在加载乐谱…",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = WindScoreColors.ink,
+                            )
                         }
                     }
                 }
 
-                // 快照就绪后：显示 NativeSheetView（纯 Compose Canvas）
+                // 快照就绪后：显示 NativeSheetView（纯 Compose Canvas，带圆角和白底隔离）
                 if (sheetSnapshot != null && sheetVisible) {
                     NativeSheetView(
                         snapshot = sheetSnapshot!!,
@@ -490,7 +496,11 @@ private fun MainStage(
                         onSeek = onSeek,
                         onStepForward = onStepForward,
                         onStepBackward = onStepBackward,
-                        modifier = Modifier.fillMaxWidth().fillMaxHeight(sheetFraction),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .fillMaxHeight(sheetFraction)
+                            .clip(RoundedCornerShape(WindScoreRounded.lg))
+                            .background(Color.White),
                     )
                 }
             }
@@ -550,14 +560,14 @@ private fun ControlSidebar(
             Text("视图", style = MaterialTheme.typography.labelSmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
             Row(horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)) {
                 CircularIconButton(onClick = { onViewChange(ViewMode.ROLL) }, selected = viewMode == ViewMode.ROLL) {
-                    Icon(painterResource(Res.drawable.piano_keys_thin), "卷帘", Modifier.size(20.dp), WindScoreColors.ink)
+                    Icon(painterResource(Res.drawable.piano_keys_thin), "卷帘", Modifier.size(20.dp))
                 }
                 if (scoreHasSheet) {
                     CircularIconButton(onClick = { onViewChange(ViewMode.SHEET_KEYBOARD) }, selected = viewMode == ViewMode.SHEET_KEYBOARD) {
-                        Icon(painterResource(Res.drawable.book_open_text_thin), "识谱", Modifier.size(20.dp), WindScoreColors.ink)
+                        Icon(painterResource(Res.drawable.book_open_text_thin), "识谱", Modifier.size(20.dp))
                     }
                     CircularIconButton(onClick = { onViewChange(ViewMode.SHEET_FULL) }, selected = viewMode == ViewMode.SHEET_FULL) {
-                        Icon(painterResource(Res.drawable.music_notes_thin), "看谱", Modifier.size(20.dp), WindScoreColors.ink)
+                        Icon(painterResource(Res.drawable.music_notes_thin), "看谱", Modifier.size(20.dp))
                     }
                 }
             }
@@ -569,13 +579,11 @@ private fun ControlSidebar(
                     Icon(
                         painterResource(if (isPlaying) Res.drawable.pause_thin else Res.drawable.play_thin),
                         if (isPlaying) "暂停" else "播放", Modifier.size(20.dp),
-                        if (sheetReady) WindScoreColors.ink else WindScoreColors.ink.copy(alpha = 0.4f),
                     )
                 }
                 CircularIconButton(onClick = onStopPlay, enabled = sheetReady) {
                     Icon(
                         painterResource(Res.drawable.stop_thin), "停止", Modifier.size(20.dp),
-                        if (sheetReady) WindScoreColors.ink else WindScoreColors.ink.copy(alpha = 0.4f),
                     )
                 }
                 Text(
@@ -587,16 +595,13 @@ private fun ControlSidebar(
             Text("循环", style = MaterialTheme.typography.labelSmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
             Row(horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xxs)) {
                 CircularIconButton(onClick = onLoopStart, enabled = !session.isLoopActive) {
-                    Icon(painterResource(Res.drawable.repeat_thin), "起点", Modifier.size(20.dp),
-                        if (session.isLoopActive) WindScoreColors.ink.copy(alpha = 0.4f) else WindScoreColors.ink)
+                    Icon(painterResource(Res.drawable.repeat_thin), "起点", Modifier.size(20.dp))
                 }
                 CircularIconButton(onClick = onLoopEnd, enabled = !session.isLoopActive && pendingLoopStart != null) {
-                    Icon(painterResource(Res.drawable.repeat_thin), "终点", Modifier.size(20.dp),
-                        if (session.isLoopActive || pendingLoopStart == null) WindScoreColors.ink.copy(alpha = 0.4f) else WindScoreColors.ink)
+                    Icon(painterResource(Res.drawable.repeat_thin), "终点", Modifier.size(20.dp))
                 }
                 CircularIconButton(onClick = onClearLoop, enabled = session.isLoopActive) {
-                    Icon(painterResource(Res.drawable.x_thin), "清除", Modifier.size(20.dp),
-                        if (session.isLoopActive) WindScoreColors.ink else WindScoreColors.ink.copy(alpha = 0.4f))
+                    Icon(painterResource(Res.drawable.x_thin), "清除", Modifier.size(20.dp))
                 }
             }
             if (session.isLoopActive) {
