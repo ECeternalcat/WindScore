@@ -4,11 +4,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 
 /**
- * 传统看谱模式（文档 4.4）：WebView 加载 OSMD 渲染五线谱，滚动 + 光标追焦。
- *
- * 交互（文档 3.3）：
- * - 点击小节 → 宏观吸附到小节开头（[onSeek]）。
- * - 按住后左右滑动 → 按音符步进微观盲操（[onStepForward] / [onStepBackward]）。
+ * 看谱模式（文档 4.4）：WebView 加载 OSMD 渲染五线谱。
+ * 桌面端渲染完成后截图，后续由 NativeSheetView 接管显示。
  */
 @Composable
 expect fun ScoreSheetView(
@@ -21,4 +18,5 @@ expect fun ScoreSheetView(
     onSeek: (Long) -> Unit = {},
     onStepForward: () -> Unit = {},
     onStepBackward: () -> Unit = {},
+    onSnapshot: ((SheetSnapshot) -> Unit)? = null,
 )

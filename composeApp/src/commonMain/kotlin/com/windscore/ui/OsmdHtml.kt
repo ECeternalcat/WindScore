@@ -20,9 +20,7 @@ internal object OsmdHtml {
             <style>
                 html,body{margin:0;padding:0;height:100%;background:#fff;overflow:hidden;}
                 *:focus{outline:none;}
-                #osmd{width:100%;height:100%;overflow-y:auto;overflow-x:hidden;touch-action:pan-y;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;}
-                #osmd::-webkit-scrollbar{width:0;}
-                #osmd{scrollbar-width:none;-ms-overflow-style:none;}
+                #osmd{width:100%;height:100%;overflow:hidden;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;}
                 #err{position:fixed;top:0;left:0;right:0;color:#b00;padding:12px;display:none;background:#fff;z-index:99;font-size:13px;}
                 #hud{position:fixed;top:4px;right:8px;font-size:11px;color:#555;background:rgba(255,255,255,0.8);z-index:98;pointer-events:none;}
                 #loading{position:fixed;top:0;left:0;width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(255,255,255,0.92);z-index:97;}
@@ -54,21 +52,72 @@ internal object OsmdHtml {
                 function buildCursorTimes(){
                     var osmd=window.__osmd;
                     window.__cursorTimes=[];
+                    window.__cursorPos=[];
                     window.__cursorIdx=0;
                     if(!osmd||!osmd.cursor)return;
                     try{
                         osmd.cursor.reset();osmd.cursor.show();
                         var it=osmd.cursor.iterator;
                         var safety=300000;
+                        var ctEl=document.getElementById('osmd');
                         while(safety-->0){
                             var t=fracReal(it.currentTimeStamp);
                             window.__cursorTimes.push(t!=null?t:0);
+                            var el=osmd.cursor.cursorElement;
+                            if(el&&ctEl){
+                                var r=el.getBoundingClientRect();
+                                var cr=ctEl.getBoundingClientRect();
+                                window.__cursorPos.push(r.left-cr.left,r.top-cr.top,r.height);
+                            }else{
+                                window.__cursorPos.push(0,0,0);
+                            }
                             if(it.EndReached)break;
                             osmd.cursor.next();
                         }
                     }catch(e){}
                     try{osmd.cursor.reset();osmd.cursor.show();}catch(e){}
                 }
+
+                // 分块截图：每块克隆 SVG 并设 viewBox 只渲染该区域，避免超大 Image 加载失败
+                window.captureSnapshot=function(){
+                    var osmdEl=document.getElementById('osmd');
+                    var svg=document.querySelector('#osmd svg');
+                    if(!svg||!osmdEl){window.__snapshotChunksReady=1;window.__snapshotChunkCount=1;window.__snapshotError='no svg';return;}
+                    var w=osmdEl.scrollWidth||Math.ceil(svg.getBoundingClientRect().width);
+                    var h=osmdEl.scrollHeight||Math.ceil(svg.getBoundingClientRect().height);
+                    var CHUNK=4000;
+                    var numChunks=Math.ceil(h/CHUNK);
+                    window.__snapshotChunks=new Array(numChunks);
+                    window.__snapshotChunkWidth=w;
+                    window.__snapshotTotalHeight=h;
+                    window.__snapshotChunkCount=numChunks;
+                    window.__snapshotChunksReady=0;
+                    for(var i=0;i<numChunks;i++){
+                        var cy=i*CHUNK;
+                        var ch=Math.min(CHUNK,h-cy);
+                        var svgClone=svg.cloneNode(true);
+                        svgClone.setAttribute('width',w);
+                        svgClone.setAttribute('height',ch);
+                        svgClone.setAttribute('viewBox','0 '+cy+' '+w+' '+ch);
+                        var svgData=new XMLSerializer().serializeToString(svgClone);
+                        var canvas=document.createElement('canvas');
+                        canvas.width=w;canvas.height=ch;
+                        var ctx=canvas.getContext('2d');
+                        ctx.fillStyle='#fff';
+                        ctx.fillRect(0,0,w,ch);
+                        (function(idx,context,canvasEl,dataUrl){
+                            var img=new Image();
+                            img.onload=function(){
+                                context.drawImage(img,0,0);
+                                try{window.__snapshotChunks[idx]=canvasEl.toDataURL('image/png');}catch(e){window.__snapshotError='chunk'+idx+':'+e.message;}
+                                window.__snapshotChunksReady++;
+                            };
+                            img.onerror=function(){window.__snapshotError='img load error chunk'+idx;window.__snapshotChunksReady++;};
+                            var blob=new Blob([dataUrl],{type:'image/svg+xml;charset=utf-8'});
+                            img.src=URL.createObjectURL(blob);
+                        })(i,ctx,canvas,svgData);
+                    }
+                };
 
                 // 合并“命令下发 + 光标推进”，一次 executeScript 完成。
                 // 返回字符串命令供 Kotlin 解析：
@@ -235,6 +284,28 @@ internal object OsmdHtml {
                     },{passive:false});
                     window.addEventListener('touchend',endScrub);
                     window.addEventListener('touchcancel',endScrub);
+
+                    // JS 手动滚动（overflow:hidden 下 scrollTop 仍可编程设置）
+                    el.addEventListener('wheel',function(e){
+                        el.scrollTop+=e.deltaY;
+                        try{e.preventDefault();}catch(_){}
+                    },{passive:false});
+                    // 触摸竖向滚动（非 scrubbing 时）
+                    var touchScrollY=0;
+                    el.addEventListener('touchstart',function(e){
+                        if(!isScrubbing){touchScrollY=e.touches[0].clientY;}
+                    },{passive:false});
+                    el.addEventListener('touchmove',function(e){
+                        if(isScrubbing)return;
+                        var t=e.touches[0];
+                        if(!t)return;
+                        var dy=touchScrollY-t.clientY;
+                        if(Math.abs(dy)>2){
+                            el.scrollTop+=dy;
+                            touchScrollY=t.clientY;
+                        }
+                        try{e.preventDefault();}catch(_){}
+                    },{passive:false});
                 }
 
                 window.onload=function(){
@@ -258,19 +329,36 @@ internal object OsmdHtml {
                                 setStatus("解析 "+(xml.length/1024).toFixed(0)+"KB");
                                 var t0=Date.now();
                                 osmd.load(xml).then(function(){
-                                    // endless 模式设 pageWidth + 固定 zoom
-                                    var pw=Math.round(cW/3.78);
-                                    if(osmd.Sheet)osmd.Sheet.pageWidth=pw;
-                                    var zoom=Math.max(0.5,Math.min(cW/800.0,2.0));
-                                    osmd.Zoom=zoom;
+                                    // 两步渲染：OSMD 内部单位与像素的换算因子取决于
+                                    // MusicXML 的 <scaling> 设置，无法用固定公式推算。
+                                    // 因此先以 zoom=1 渲染一次测量 SVG 实际像素宽度，
+                                    // 再算出正确的 zoom 重新渲染使其铺满容器。
+                                    setStatus("测量宽度");
+                                    osmd.Zoom=1.0;
                                     osmd.updateGraphic();
                                     osmd.render();
+                                    var svg=document.querySelector('#osmd svg');
+                                    var svgW=0;
+                                    if(svg){
+                                        svgW=svg.getBoundingClientRect().width;
+                                        if(!svgW||svgW<10) svgW=parseFloat(svg.getAttribute('width'))||0;
+                                    }
+                                    if(svgW>10){
+                                        var fitZoom=cW/svgW;
+                                        fitZoom=Math.max(0.3,Math.min(fitZoom,4.0));
+                                        setStatus("适配 zoom="+fitZoom.toFixed(2));
+                                        osmd.Zoom=fitZoom;
+                                        osmd.updateGraphic();
+                                        osmd.render();
+                                    }
                                     window.__renderTime=Date.now()-t0;
                                     document.getElementById('loading').style.display='none';
                                     try{osmd.cursor.show();}catch(e){}
                                     buildCursorTimes();
                                     setStatus("就绪 "+window.__renderTime.toFixed(0)+"ms");
                                     initInteraction();
+                                    // 渲染完成后截图（SVG→PNG）
+                                    setTimeout(function(){window.captureSnapshot&&window.captureSnapshot();},100);
                                 }).catch(function(ex){fail(ex&&(ex.message||ex)||ex);});
                             })
                             .catch(function(ex){fail('XML获取失败: '+(ex&&ex.message||ex));});

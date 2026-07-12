@@ -32,6 +32,7 @@ actual fun ScoreSheetView(
     onSeek: (Long) -> Unit,
     onStepForward: () -> Unit,
     onStepBackward: () -> Unit,
+    onSnapshot: ((SheetSnapshot) -> Unit)?,
 ) {
     val context = LocalContext.current
     var lastSyncedTick by remember { mutableLongStateOf(Long.MIN_VALUE) }
@@ -54,6 +55,7 @@ actual fun ScoreSheetView(
             settings.domStorageEnabled = true
             settings.builtInZoomControls = true
             settings.displayZoomControls = false
+            setBackgroundColor(android.graphics.Color.TRANSPARENT)
             webViewClient = object : WebViewClient() {
                 override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
                     val path = request?.url?.path ?: return null

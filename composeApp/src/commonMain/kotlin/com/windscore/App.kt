@@ -36,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -52,6 +53,8 @@ import com.windscore.ui.PianoRoll
 import com.windscore.ui.ResultScreen
 import com.windscore.ui.ScoreFilePickerButton
 import com.windscore.ui.ScoreSheetView
+import com.windscore.ui.NativeSheetView
+import com.windscore.ui.SheetSnapshot
 import com.windscore.ui.StaticKeyboard
 import com.windscore.ui.components.PillButton
 import com.windscore.ui.components.PillButtonStyle
@@ -73,6 +76,8 @@ import windscore.composeapp.generated.resources.repeat_thin
 import windscore.composeapp.generated.resources.stop_thin
 import windscore.composeapp.generated.resources.x_thin
 import org.jetbrains.compose.resources.painterResource
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.dp
 
 enum class ViewMode { ROLL, SHEET_KEYBOARD, SHEET_FULL }
 
@@ -80,6 +85,7 @@ enum class ViewMode { ROLL, SHEET_KEYBOARD, SHEET_FULL }
 fun App(
     midiManager: MidiManager,
     isCompact: Boolean = false,
+    spacePressed: Int = 0,
 ) {
     var currentScore by remember { mutableStateOf<Score?>(null) }
     var session by remember { mutableStateOf<ScoreSession?>(null) }
@@ -123,6 +129,18 @@ fun App(
         onDispose {
             midiManager.stop()
             synth.stop()
+        }
+    }
+
+    // 空格键播放/暂停（桌面端通过 AWT KeyEventDispatcher 触发）
+    LaunchedEffect(spacePressed) {
+        if (spacePressed > 0) {
+            val s = session ?: return@LaunchedEffect
+            if (!isPlaying) {
+                val cursorTick = if (playTick > 0) playTick else s.currentTick
+                player?.seekTo(cursorTick)
+            }
+            player?.toggle()
         }
     }
 
@@ -924,31 +942,59 @@ private fun MainStage(
             PianoRoll(
                 score = session.score,
                 currentTickProvider = { tick },
-                modifier = Modifier.fillMaxSize().alpha(if (showRoll) 1f else 0f),
+                modifier = Modifier.fillMaxSize()
+                    .clip(RoundedCornerShape(WindScoreRounded.lg))
+                    .alpha(if (showRoll) 1f else 0f),
                 hostedTrack = session.hostedTrack,
                 heldPitchesProvider = { activePitches },
                 pulseIntensityProvider = { session.pulseIntensity },
                 bpmProvider = { session.score.tempo.takeIf { it > 0 } ?: 120 },
             )
-            // 五线谱 — 始终挂载（autoResize:false 时改变尺寸不触发重渲染）
+            // 五线谱 — 预渲染快照模式
             if (rawXml != null) {
                 val sheetFraction = if (showSheetKb) 0.72f else 1f
+                var sheetSnapshot by remember { mutableStateOf<SheetSnapshot?>(null) }
+
+                // WebView 渲染器：始终在屏幕外后台渲染，用户永不可见
                 ScoreSheetView(
                     rawXml = rawXml,
                     currentTickProvider = { tick },
                     modifier = Modifier.fillMaxWidth().fillMaxHeight(sheetFraction)
-                        .then(if (sheetVisible) Modifier else Modifier.offset(x = 99999.dp)),
+                        .offset(x = 99999.dp),
                     divisions = session.score.divisions,
                     onRenderTime = onRenderTime,
-                    onSeek = onSeek,
-                    onStepForward = onStepForward,
-                    onStepBackward = onStepBackward,
+                    onSnapshot = { snap -> sheetSnapshot = snap },
                 )
+
+                // 快照就绪前：显示加载指示器
+                if (sheetSnapshot == null && sheetVisible) {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().fillMaxHeight(sheetFraction),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("正在加载乐谱…", style = MaterialTheme.typography.bodyMedium, color = WindScoreColors.ink)
+                        }
+                    }
+                }
+
+                // 快照就绪后：显示 NativeSheetView（纯 Compose Canvas）
+                if (sheetSnapshot != null && sheetVisible) {
+                    NativeSheetView(
+                        snapshot = sheetSnapshot!!,
+                        currentTickProvider = { tick },
+                        onSeek = onSeek,
+                        onStepForward = onStepForward,
+                        onStepBackward = onStepBackward,
+                        modifier = Modifier.fillMaxWidth().fillMaxHeight(sheetFraction),
+                    )
+                }
             }
             // 静态键盘 — 模式二下半部分
             StaticKeyboard(
                 modifier = Modifier.fillMaxWidth().fillMaxHeight(0.28f)
                     .align(Alignment.BottomCenter)
+                    .clip(RoundedCornerShape(WindScoreRounded.lg))
                     .alpha(if (showSheetKb) 1f else 0f),
                 pitchLow = session.score.notes.minOf { it.pitch }.coerceIn(21, 108),
                 pitchHigh = session.score.notes.maxOf { it.pitch }.coerceIn(21, 108),

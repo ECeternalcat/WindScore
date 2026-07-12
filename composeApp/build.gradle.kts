@@ -65,12 +65,12 @@ kotlin {
                 implementation(compose.desktop.currentOs)
                 // 看谱模式：JavaFX WebView（仅 Desktop），按构建宿主自动选择原生分类器
                 val jfx = javafxClassifier
-                implementation("org.openjfx:javafx-base:21.0.5:$jfx")
-                implementation("org.openjfx:javafx-graphics:21.0.5:$jfx")
-                implementation("org.openjfx:javafx-controls:21.0.5:$jfx")
-                implementation("org.openjfx:javafx-swing:21.0.5:$jfx")
-                implementation("org.openjfx:javafx-media:21.0.5:$jfx")
-                implementation("org.openjfx:javafx-web:21.0.5:$jfx")
+                implementation("org.openjfx:javafx-base:23:$jfx")
+                implementation("org.openjfx:javafx-graphics:23:$jfx")
+                implementation("org.openjfx:javafx-controls:23:$jfx")
+                implementation("org.openjfx:javafx-swing:23:$jfx")
+                implementation("org.openjfx:javafx-media:23:$jfx")
+                implementation("org.openjfx:javafx-web:23:$jfx")
             }
         }
     }

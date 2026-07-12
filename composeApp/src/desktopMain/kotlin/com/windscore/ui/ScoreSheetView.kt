@@ -16,6 +16,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.awt.SwingPanel
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.toComposeImageBitmap
 import androidx.compose.ui.text.style.TextAlign
 import com.sun.net.httpserver.HttpServer
 import javafx.application.Platform
@@ -46,12 +48,14 @@ actual fun ScoreSheetView(
     onSeek: (Long) -> Unit,
     onStepForward: () -> Unit,
     onStepBackward: () -> Unit,
+    onSnapshot: ((SheetSnapshot) -> Unit)?,
 ) {
     var state by remember { mutableStateOf<LoadState>(LoadState.Loading) }
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
     val tickProvider by rememberUpdatedState(currentTickProvider)
     val onStepFwd by rememberUpdatedState(onStepForward)
     val onStepBack by rememberUpdatedState(onStepBackward)
+    val snapshotHandler by rememberUpdatedState(onSnapshot)
     val renderDone = remember { AtomicBoolean(false) }
 
     val serverInfo = remember {
@@ -159,7 +163,67 @@ actual fun ScoreSheetView(
         renderDone.set(success)
         if (!success) return@LaunchedEffect
 
-        // Cursor sync: always poll tickAndSeek (handles cursor sync + command drain)
+        // 截图模式：等待 JS 端分块 SVG→PNG 完成
+        if (snapshotHandler != null) {
+            var snapshotWaited = 0
+            var snapshotDone = false
+            while (snapshotWaited < 60000 && !snapshotDone) {
+                delay(300)
+                snapshotWaited += 300
+                val latch = java.util.concurrent.CountDownLatch(1)
+                val readyBox = intArrayOf(0, 0, 0, 0) // [ready, count, width, totalHeight]
+                Platform.runLater {
+                    runCatching {
+                        readyBox[0] = (wv.engine.executeScript("(window.__snapshotChunksReady||0)") as? Number)?.toInt() ?: 0
+                        readyBox[1] = (wv.engine.executeScript("(window.__snapshotChunkCount||0)") as? Number)?.toInt() ?: 0
+                        readyBox[2] = (wv.engine.executeScript("(window.__snapshotChunkWidth||0)") as? Number)?.toInt() ?: 0
+                        readyBox[3] = (wv.engine.executeScript("(window.__snapshotTotalHeight||0)") as? Number)?.toInt() ?: 0
+                    }
+                    latch.countDown()
+                }
+                latch.await(3, java.util.concurrent.TimeUnit.SECONDS)
+                if (readyBox[1] > 0 && readyBox[0] >= readyBox[1]) {
+                    snapshotDone = true
+                    // 1. JavaFX 线程：一次性提取所有 data URL + 光标坐标
+                    val urls = mutableListOf<String>()
+                    for (ci in 0 until readyBox[1]) {
+                        urls.add(runLaterAndGet {
+                            wv.engine.executeScript("(window.__snapshotChunks[$ci]||'')")?.toString() ?: ""
+                        })
+                    }
+                    val posJson = runLaterAndGet {
+                        wv.engine.executeScript("JSON.stringify(window.__cursorPos||[])")?.toString() ?: "[]"
+                    }
+                    val timesJson = runLaterAndGet {
+                        wv.engine.executeScript("JSON.stringify(window.__cursorTimes||[])")?.toString() ?: "[]"
+                    }
+                    // 2. 后台线程：解码 PNG（不阻塞 UI）
+                    val chunks = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                        val result = mutableListOf<ImageBitmap>()
+                        var firstH = 0
+                        for (url in urls) {
+                            if (url.startsWith("data:image/png;base64,")) {
+                                val bytes = java.util.Base64.getDecoder().decode(url.substringAfter("base64,"))
+                                val bImg = javax.imageio.ImageIO.read(java.io.ByteArrayInputStream(bytes))
+                                if (firstH == 0) firstH = bImg.height
+                                result.add(bImg.toComposeImageBitmap())
+                            }
+                        }
+                        firstH to result
+                    }
+                    try {
+                        val steps = parseCursorSteps(posJson, timesJson, divisions)
+                        snapshotHandler?.invoke(SheetSnapshot(chunks.second, readyBox[2], chunks.first, readyBox[3], steps))
+                        println("[OSMD] Snapshot: ${readyBox[2]}x${readyBox[3]}, ${chunks.second.size} chunks, ${steps.size} steps")
+                    } catch (e: Exception) {
+                        println("[OSMD] Snapshot build failed: ${e.message}")
+                    }
+                }
+            }
+            return@LaunchedEffect
+        }
+
+        // 实时 WebView 模式（无截图回调时）：poll tickAndSeek
         var lastTick = Long.MIN_VALUE
         while (true) {
             val tick = tickProvider()
@@ -209,3 +273,32 @@ actual fun ScoreSheetView(
 }
 
 private enum class LoadState { Loading, Ok, Failed }
+
+private fun parseCursorSteps(posJson: String, timesJson: String, divisions: Int): List<CursorStep> {
+    val posNums = posJson.removeSurrounding("[", "]")
+        .split(",").mapNotNull { it.trim().toDoubleOrNull() }
+    val timeNums = timesJson.removeSurrounding("[", "]")
+        .split(",").mapNotNull { it.trim().toDoubleOrNull() }
+    val steps = mutableListOf<CursorStep>()
+    var pi = 0
+    for (i in timeNums.indices) {
+        val tick = Math.round(timeNums[i] * 4.0 * divisions)
+        if (pi + 2 < posNums.size) {
+            steps.add(CursorStep(tick, posNums[pi].toFloat(), posNums[pi + 1].toFloat(), posNums[pi + 2].toFloat()))
+            pi += 3
+        }
+    }
+    return steps
+}
+
+private fun <T> runLaterAndGet(block: () -> T): T {
+    val latch = java.util.concurrent.CountDownLatch(1)
+    @Suppress("UNCHECKED_CAST")
+    val result = arrayOfNulls<Any>(1)
+    Platform.runLater {
+        runCatching { result[0] = block() }
+        latch.countDown()
+    }
+    latch.await(3, java.util.concurrent.TimeUnit.SECONDS)
+    return result[0] as T
+}
