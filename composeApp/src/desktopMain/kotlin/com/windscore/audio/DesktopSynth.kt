@@ -21,17 +21,17 @@ class DesktopSynth : AudioSynth {
         receiver = s.receiver
     }
 
-    override fun noteOn(pitch: Int, velocity: Int) {
+    override fun noteOn(channel: Int, pitch: Int, velocity: Int) {
         val r = receiver ?: return
         val msg = ShortMessage()
-        msg.setMessage(ShortMessage.NOTE_ON, 0, pitch.coerceIn(0, 127), velocity.coerceIn(0, 127))
+        msg.setMessage(ShortMessage.NOTE_ON, channel.coerceIn(0, 15), pitch.coerceIn(0, 127), velocity.coerceIn(0, 127))
         r.send(msg, -1)
     }
 
-    override fun noteOff(pitch: Int) {
+    override fun noteOff(channel: Int, pitch: Int) {
         val r = receiver ?: return
         val msg = ShortMessage()
-        msg.setMessage(ShortMessage.NOTE_OFF, 0, pitch.coerceIn(0, 127), 0)
+        msg.setMessage(ShortMessage.NOTE_OFF, channel.coerceIn(0, 15), pitch.coerceIn(0, 127), 0)
         r.send(msg, -1)
     }
 

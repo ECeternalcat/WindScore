@@ -50,6 +50,10 @@ import com.windscore.core.model.Score
 import com.windscore.ViewMode
 import com.windscore.ui.components.PillButton
 import com.windscore.ui.components.PillButtonStyle
+import com.windscore.ui.components.CustomSwitch
+import com.windscore.ui.components.PillToggle
+import com.windscore.ui.components.CircularIconButton
+import com.windscore.ui.components.pitchName
 import com.windscore.ui.theme.WindScoreColors
 import com.windscore.ui.theme.WindScoreRounded
 import com.windscore.ui.theme.WindScoreSpacing
@@ -84,6 +88,12 @@ fun PlayerScreen(
     playingPitches: Set<Int>,
     renderMs: Double?,
     spacePressed: Int = 0,
+    countdownEnabled: Boolean,
+    onCountdownEnabledChange: (Boolean) -> Unit,
+    metronomeVol: Int,
+    onMetronomeVolChange: (Int) -> Unit,
+    playbackSpeed: Float,
+    onPlaybackSpeedChange: (Float) -> Unit,
     onSeek: (Long) -> Unit,
     onStepForward: () -> Unit,
     onStepBackward: () -> Unit,
@@ -109,29 +119,26 @@ fun PlayerScreen(
     }
 
     val scope = rememberCoroutineScope()
-    var countdownEnabled by remember { mutableStateOf(false) }
     var countdownSeconds by remember { mutableStateOf(0) }
     var countdownJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
-    var metronomeVol by remember { mutableStateOf(50) }
     var metronomePrevVol by remember { mutableStateOf(50) } // 记住静音前音量
-
-    LaunchedEffect(player, metronomeVol) {
-        player?.metronomeVolume = metronomeVol
-    }
 
     fun toggleMute() {
         if (metronomeVol > 0) {
             metronomePrevVol = metronomeVol
-            metronomeVol = 0
+            onMetronomeVolChange(0)
         } else {
-            metronomeVol = if (metronomePrevVol > 0) metronomePrevVol else 50
+            onMetronomeVolChange(if (metronomePrevVol > 0) metronomePrevVol else 50)
         }
     }
 
     val sheetReady = viewMode == ViewMode.ROLL || renderMs != null
 
+    var lastHandledSpacePressed by remember { mutableStateOf(spacePressed) }
+
     LaunchedEffect(spacePressed) {
-        if (spacePressed > 0 && sheetReady) {
+        if (spacePressed > lastHandledSpacePressed && sheetReady) {
+            lastHandledSpacePressed = spacePressed
             if (!isPlaying && countdownEnabled) {
                 if (countdownSeconds == 0) {
                     countdownJob?.cancel()
@@ -239,13 +246,15 @@ fun PlayerScreen(
                             sheetReady = sheetReady,
                             running = running,
                             player = player,
+                            playbackSpeed = playbackSpeed,
+                            onPlaybackSpeedChange = onPlaybackSpeedChange,
                             onToggleMidi = onToggleMidi,
                             onReset = onReset,
                             onShowToast = { toastMessage = it },
                             countdownEnabled = countdownEnabled,
-                            onCountdownEnabledChange = { countdownEnabled = it },
+                            onCountdownEnabledChange = onCountdownEnabledChange,
                             metronomeVol = metronomeVol,
-                            onMetronomeVolChange = { metronomeVol = it },
+                            onMetronomeVolChange = onMetronomeVolChange,
                             onToggleMute = ::toggleMute,
                             onModeChange = onModeChange,
                             onViewChange = onViewChange,
@@ -718,414 +727,6 @@ private fun MainStage(
             }
         }
     }
-}
-
-@Composable
-private fun ControlSidebar(
-    session: ScoreSession,
-    practiceMode: PracticeMode,
-    viewMode: ViewMode,
-    pendingLoopStart: Long?,
-    scoreHasSheet: Boolean,
-    isPlaying: Boolean,
-    sheetReady: Boolean,
-    running: Boolean,
-    player: ScorePlayer?,
-    onToggleMidi: () -> Unit,
-    onReset: () -> Unit,
-    onShowToast: (String) -> Unit,
-    countdownEnabled: Boolean,
-    onCountdownEnabledChange: (Boolean) -> Unit,
-    metronomeVol: Int,
-    onMetronomeVolChange: (Int) -> Unit,
-    onToggleMute: () -> Unit,
-    onModeChange: (PracticeMode) -> Unit,
-    onViewChange: (ViewMode) -> Unit,
-    onLoopStart: () -> Unit,
-    onLoopEnd: () -> Unit,
-    onClearLoop: () -> Unit,
-    onTogglePlay: () -> Unit,
-    onStopPlay: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(WindScoreRounded.lg))
-            .background(WindScoreColors.canvas)
-            .border(1.dp, WindScoreColors.hairline, RoundedCornerShape(WindScoreRounded.lg))
-            .padding(WindScoreSpacing.md),
-        verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.md),
-    ) {
-        // Top: 启动midi接入 (Start MIDI connection)
-        PillButton(
-            style = if (running) PillButtonStyle.SECONDARY else PillButtonStyle.PRIMARY,
-            onClick = onToggleMidi,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(if (running) "断开 MIDI 接入" else "启动 MIDI 接入")
-        }
-
-        // Group 1: 模式 (Mode)
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, WindScoreColors.hairlineSoft, RoundedCornerShape(WindScoreRounded.md))
-                .padding(WindScoreSpacing.sm),
-            verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)
-        ) {
-            Text("模式", style = MaterialTheme.typography.labelSmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
-            Spacer(Modifier.height(2.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)
-            ) {
-                PillToggle(practiceMode == PracticeMode.BOTH, { onModeChange(PracticeMode.BOTH) }, "双手", modifier = Modifier.weight(1f))
-                PillToggle(practiceMode == PracticeMode.RIGHT_ONLY, { onModeChange(PracticeMode.RIGHT_ONLY) }, "右手", modifier = Modifier.weight(1f))
-                PillToggle(practiceMode == PracticeMode.LEFT_ONLY, { onModeChange(PracticeMode.LEFT_ONLY) }, "左手", modifier = Modifier.weight(1f))
-            }
-        }
-
-        // Group 2: 视图与播放 (View & Play)
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, WindScoreColors.hairlineSoft, RoundedCornerShape(WindScoreRounded.md))
-                .padding(WindScoreSpacing.sm),
-            verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.md)
-            ) {
-                // Left: View Mode Group
-                Column(modifier = Modifier.weight(3f)) {
-                    Text("视图", style = MaterialTheme.typography.labelSmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
-                    Spacer(Modifier.height(4.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)) {
-                        CircularIconButton(onClick = { onViewChange(ViewMode.ROLL) }, selected = viewMode == ViewMode.ROLL) {
-                            Icon(painterResource(Res.drawable.piano_keys_thin), "卷帘", Modifier.size(20.dp))
-                        }
-                        if (scoreHasSheet) {
-                            CircularIconButton(onClick = { onViewChange(ViewMode.SHEET_KEYBOARD) }, selected = viewMode == ViewMode.SHEET_KEYBOARD) {
-                                Icon(painterResource(Res.drawable.book_open_text_thin), "识谱", Modifier.size(20.dp))
-                            }
-                            CircularIconButton(onClick = { onViewChange(ViewMode.SHEET_FULL) }, selected = viewMode == ViewMode.SHEET_FULL) {
-                                Icon(painterResource(Res.drawable.music_notes_thin), "看谱", Modifier.size(20.dp))
-                            }
-                        }
-                    }
-                }
-
-                // Right: Playback Control Group
-                Column(modifier = Modifier.weight(2f)) {
-                    Text("播放", style = MaterialTheme.typography.labelSmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
-                    Spacer(Modifier.height(4.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)) {
-                        CircularIconButton(onClick = onTogglePlay, enabled = sheetReady) {
-                            Icon(
-                                painterResource(if (isPlaying) Res.drawable.pause_thin else Res.drawable.play_thin),
-                                if (isPlaying) "暂停" else "播放", Modifier.size(20.dp),
-                            )
-                        }
-                        CircularIconButton(onClick = onStopPlay, enabled = sheetReady) {
-                            Icon(
-                                painterResource(Res.drawable.stop_thin), "停止", Modifier.size(20.dp),
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        // Speed group (播放速度)
-        var speed by remember(player) { mutableStateOf((player?.speedMultiplier ?: 1.0).toFloat()) }
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, WindScoreColors.hairlineSoft, RoundedCornerShape(WindScoreRounded.md))
-                .padding(WindScoreSpacing.sm),
-            verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("速度", style = MaterialTheme.typography.labelSmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
-                Text(
-                    text = "${(speed * 100).toInt()}%",
-                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.W600),
-                    color = WindScoreColors.ink
-                )
-            }
-
-            // Slider (拖动条)
-            androidx.compose.material3.Slider(
-                value = speed,
-                onValueChange = { newValue ->
-                    if (isPlaying) {
-                        onShowToast("请暂停后调整速度")
-                    } else {
-                        speed = newValue.coerceIn(0.0f, 2.0f)
-                        player?.speedMultiplier = speed.toDouble()
-                    }
-                },
-                valueRange = 0.0f..2.0f,
-                modifier = Modifier.fillMaxWidth().height(24.dp),
-                colors = androidx.compose.material3.SliderDefaults.colors(
-                    thumbColor = WindScoreColors.primary,
-                    activeTrackColor = WindScoreColors.primary,
-                    inactiveTrackColor = WindScoreColors.hairlineSoft
-                )
-            )
-
-            // Speed Presets Buttons
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)
-            ) {
-                listOf(0.5f to "x0.5", 1.0f to "原速", 1.5f to "x1.5").forEach { (value, label) ->
-                    val isSelected = speed == value
-                    PillToggle(
-                        selected = isSelected,
-                        onClick = {
-                            if (isPlaying) {
-                                onShowToast("请暂停后调整速度")
-                            } else {
-                                speed = value
-                                player?.speedMultiplier = speed.toDouble()
-                            }
-                        },
-                        label = label,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-            }
-        }
-
-        // Group 3: 循环 (Loop)
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, WindScoreColors.hairlineSoft, RoundedCornerShape(WindScoreRounded.md))
-                .padding(WindScoreSpacing.sm),
-            verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)
-        ) {
-            Text("循环", style = MaterialTheme.typography.labelSmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
-            Spacer(Modifier.height(4.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.sm),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // Loop Start
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xxs)) {
-                    CircularIconButton(onClick = onLoopStart, enabled = !session.isLoopActive) {
-                        Icon(painterResource(Res.drawable.repeat_thin), "起点", Modifier.size(20.dp))
-                    }
-                    Text("起点", style = MaterialTheme.typography.bodySmall, color = WindScoreColors.ink)
-                }
-
-                // Loop End
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xxs)) {
-                    CircularIconButton(onClick = onLoopEnd, enabled = !session.isLoopActive && pendingLoopStart != null) {
-                        Icon(painterResource(Res.drawable.repeat_thin), "终点", Modifier.size(20.dp))
-                    }
-                    Text("终点", style = MaterialTheme.typography.bodySmall, color = WindScoreColors.ink)
-                }
-
-                // Clear
-                CircularIconButton(onClick = onClearLoop, enabled = session.isLoopActive) {
-                    Icon(painterResource(Res.drawable.x_thin), "清除", Modifier.size(20.dp))
-                }
-            }
-            if (session.isLoopActive) {
-                Text("循环 ${session.loopRange.first}~${session.loopRange.last}",
-                    style = MaterialTheme.typography.bodySmall, color = WindScoreColors.accentMagenta)
-            } else if (pendingLoopStart != null) {
-                Text("起点 $pendingLoopStart", style = MaterialTheme.typography.bodySmall, color = WindScoreColors.ink)
-            }
-        }
-
-        // Group 4: 节拍器 (Metronome)
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .border(1.dp, WindScoreColors.hairlineSoft, RoundedCornerShape(WindScoreRounded.md))
-                .padding(WindScoreSpacing.sm),
-            verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("节拍器", style = MaterialTheme.typography.labelSmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)
-                ) {
-                    Text("预备拍", style = MaterialTheme.typography.bodySmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
-                    CustomSwitch(
-                        checked = countdownEnabled,
-                        onCheckedChange = onCountdownEnabledChange
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(2.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)
-            ) {
-                Icon(
-                    painter = painterResource(
-                        if (metronomeVol > 0) Res.drawable.speaker_high_thin else Res.drawable.speaker_slash_thin
-                    ),
-                    contentDescription = "节拍器音量",
-                    modifier = Modifier.size(20.dp).clip(RoundedCornerShape(WindScoreRounded.full))
-                        .clickable(onClick = onToggleMute),
-                    tint = WindScoreColors.ink.copy(alpha = 0.5f)
-                )
-                androidx.compose.material3.Slider(
-                    value = metronomeVol.toFloat(),
-                    onValueChange = { newValue ->
-                        onMetronomeVolChange(newValue.toInt())
-                    },
-                    valueRange = 0.0f..100.0f,
-                    modifier = Modifier.weight(1f).height(24.dp),
-                    colors = androidx.compose.material3.SliderDefaults.colors(
-                        thumbColor = WindScoreColors.primary,
-                        activeTrackColor = WindScoreColors.primary,
-                        inactiveTrackColor = WindScoreColors.hairlineSoft
-                    )
-                )
-                Text(
-                    text = "${metronomeVol}%",
-                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.W600),
-                    color = WindScoreColors.ink,
-                    modifier = Modifier.width(44.dp),
-                    textAlign = TextAlign.End
-                )
-            }
-        }
-
-        Spacer(Modifier.weight(1f))
-
-        // Bottom: 重新加载 (Reload)
-        PillButton(
-            style = PillButtonStyle.SECONDARY,
-            onClick = onReset,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)
-            ) {
-                Icon(
-                    painter = painterResource(Res.drawable.arrows_counter_clockwise_thin),
-                    contentDescription = "重新加载",
-                    modifier = Modifier.size(16.dp)
-                )
-                Text("重新加载")
-            }
-        }
-    }
-}
-
-@Composable
-private fun CustomSwitch(
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val background = if (checked) WindScoreColors.primary else WindScoreColors.hairlineSoft
-    val alignment = if (checked) Alignment.CenterEnd else Alignment.CenterStart
-    Box(
-        modifier = modifier
-            .width(40.dp)
-            .height(22.dp)
-            .clip(RoundedCornerShape(11.dp))
-            .background(background)
-            .clickable { onCheckedChange(!checked) }
-            .padding(2.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxHeight()
-                .width(18.dp)
-                .clip(RoundedCornerShape(9.dp))
-                .background(Color.White)
-                .align(alignment)
-        )
-    }
-}
-
-@Composable
-private fun PillToggle(
-    selected: Boolean,
-    onClick: () -> Unit,
-    label: String,
-    enabled: Boolean = true,
-    modifier: Modifier = Modifier,
-) {
-    PillButton(
-        onClick = onClick,
-        enabled = enabled,
-        modifier = modifier,
-        style = if (selected) PillButtonStyle.PRIMARY else PillButtonStyle.SECONDARY,
-        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.W600, fontSize = 12.sp),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-}
-
-@Composable
-private fun CircularIconButton(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-    selected: Boolean = false,
-    content: @Composable () -> Unit,
-) {
-    val background = when {
-        selected -> WindScoreColors.primary
-        else -> WindScoreColors.surfaceSoft
-    }
-    val contentColor = when {
-        selected -> WindScoreColors.onPrimary
-        else -> WindScoreColors.ink
-    }
-    Box(
-        modifier = modifier
-            .size(40.dp)
-            .clip(RoundedCornerShape(WindScoreRounded.full))
-            .background(if (enabled) background else WindScoreColors.hairlineSoft)
-            .clickable(enabled = enabled, onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        androidx.compose.runtime.CompositionLocalProvider(
-            androidx.compose.material3.LocalContentColor provides if (enabled) contentColor else contentColor.copy(alpha = 0.4f),
-        ) {
-            content()
-        }
-    }
-}
-
-private val NOTE_NAMES = arrayOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
-
-fun pitchName(pitch: Int): String {
-    val name = NOTE_NAMES[pitch.mod(12)]
-    val octave = pitch / 12 - 1
-    return "$name$octave"
 }
 
 @Composable

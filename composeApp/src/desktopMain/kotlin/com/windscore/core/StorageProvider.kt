@@ -1,7 +1,6 @@
 package com.windscore.core
 
 import com.windscore.core.model.Score
-import com.windscore.core.parser.MusicXmlParser
 import java.io.File
 import java.security.MessageDigest
 
@@ -19,72 +18,22 @@ actual fun calculateMd5(text: String): String {
 }
 
 actual fun saveRecentScores(scores: List<Score>) {
-    try {
-        val scoresDir = File(getScoresDir())
-        if (!scoresDir.exists()) scoresDir.mkdirs()
-
-        // 1. Write each score XML to scores/xmlHash.xml
-        for (score in scores) {
-            val xml = score.rawXml ?: continue
-            val xmlHash = calculateMd5(xml)
-            val scoreFile = File(scoresDir, "$xmlHash.xml")
-            if (!scoreFile.exists()) {
-                scoreFile.writeText(xml, Charsets.UTF_8)
-            }
-        }
-
-        // 2. Write recents.json
-        val sb = java.lang.StringBuilder()
-        sb.append("[\n")
-        var first = true
-        for (score in scores) {
-            val xml = score.rawXml ?: continue
-            val xmlHash = calculateMd5(xml)
-            val titleEsc = score.title.replace("\"", "\\\"")
-            if (!first) sb.append(",\n")
-            sb.append("  {\"title\":\"").append(titleEsc).append("\",\"xmlHash\":\"").append(xmlHash).append("\"}")
-            first = false
-        }
-        sb.append("\n]")
-
-        val recentsFile = File(getAppStorageDir(), "recents.json")
-        recentsFile.writeText(sb.toString(), Charsets.UTF_8)
-        println("[Storage] Saved recent scores list successfully.")
-    } catch (e: Exception) {
-        println("[Storage] Failed to save recent scores: ${e.message}")
-    }
+    RecentsStorage.save(scores)
 }
 
 actual fun loadRecentScores(onLoaded: (List<Score>) -> Unit) {
-    try {
-        val recentsFile = File(getAppStorageDir(), "recents.json")
-        if (!recentsFile.exists()) {
-            onLoaded(emptyList())
-            return
-        }
-        val json = recentsFile.readText(Charsets.UTF_8)
-        val itemPattern = "\\{\\s*\"title\"\\s*:\\s*\"([^\"]+)\"\\s*,\\s*\"xmlHash\"\\s*:\\s*\"([^\"]+)\"\\s*\\}".toRegex()
-        val items = itemPattern.findAll(json).map { match ->
-            val title = match.groupValues[1]
-            val xmlHash = match.groupValues[2]
-            Pair(title, xmlHash)
-        }.toList()
+    onLoaded(RecentsStorage.load())
+}
 
-        val scoresDir = File(getScoresDir())
-        val result = mutableListOf<Score>()
-        for (item in items) {
-            val scoreFile = File(scoresDir, "${item.second}.xml")
-            if (scoreFile.exists()) {
-                val xmlBytes = scoreFile.readBytes()
-                val score = MusicXmlParser.parse(xmlBytes)
-                val finalScore = score.copy(title = item.first, rawXml = String(xmlBytes, Charsets.UTF_8))
-                result.add(finalScore)
-            }
-        }
-        onLoaded(result)
-        println("[Storage] Loaded ${result.size} recent scores from local storage.")
-    } catch (e: Exception) {
-        println("[Storage] Failed to load recent scores: ${e.message}")
-        onLoaded(emptyList())
-    }
+actual fun loadScoreXml(scoreId: String): String? {
+    val file = File(getScoresDir(), "$scoreId.xml")
+    return if (file.exists()) file.readText(Charsets.UTF_8) else null
+}
+
+actual fun loadScoreSettings(scoreId: String): com.windscore.core.model.ScoreSettings {
+    return SettingsStorage.load(scoreId)
+}
+
+actual fun saveScoreSettings(scoreId: String, settings: com.windscore.core.model.ScoreSettings) {
+    SettingsStorage.save(scoreId, settings)
 }

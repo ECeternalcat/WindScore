@@ -25,8 +25,13 @@ import com.windscore.ui.SettingsScreen
 import com.windscore.ui.WelcomeScreen
 import com.windscore.ui.theme.WindScoreColors
 import com.windscore.ui.theme.WindScoreTheme
+import kotlinx.serialization.Serializable
+import androidx.compose.runtime.snapshotFlow
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 
+@Serializable
 enum class ViewMode { ROLL, SHEET_KEYBOARD, SHEET_FULL }
 
 @Composable
@@ -45,9 +50,24 @@ fun App(
     var showSettings by remember { mutableStateOf(false) }
     val recentScores = remember { mutableStateListOf<Score>() }
 
+    var metronomeVol by remember { mutableStateOf(50) }
+    var countdownEnabled by remember { mutableStateOf(false) }
+    var playbackSpeed by remember { mutableStateOf(1.0f) }
+
+
+
     val synth = remember { createAudioSynth() }
     val scope = rememberCoroutineScope()
-    val player = remember(currentScore) { currentScore?.let { ScorePlayer(it, synth, scope) } }
+    val player = remember(currentScore) { 
+        currentScore?.let { score -> 
+            ScorePlayer(score, synth, scope).apply {
+                val tick = session?.currentTick ?: 0L
+                if (tick > 0L) {
+                    seekTo(tick)
+                }
+            }
+        } 
+    }
     val noTickFlow = remember { kotlinx.coroutines.flow.MutableStateFlow(0L) }
     val noPlayFlow = remember { kotlinx.coroutines.flow.MutableStateFlow(false) }
     val noPitchesFlow = remember { kotlinx.coroutines.flow.MutableStateFlow<Set<Int>>(emptySet()) }
@@ -55,10 +75,46 @@ fun App(
     val isPlaying by (player?.playing ?: noPlayFlow).collectAsState()
     val playingPitches by (player?.playingPitches ?: noPitchesFlow).collectAsState()
 
+    LaunchedEffect(player, metronomeVol) {
+        player?.metronomeVolume = metronomeVol
+    }
+    LaunchedEffect(player, playbackSpeed) {
+        player?.speedMultiplier = playbackSpeed.toDouble()
+    }
+
+    // Auto-save ScoreSettings
+    @OptIn(kotlinx.coroutines.FlowPreview::class)
+    LaunchedEffect(currentScore, practiceMode, viewMode, playbackSpeed, metronomeVol, countdownEnabled, pendingLoopStart, session, isPlaying) {
+        val score = currentScore ?: return@LaunchedEffect
+        val activeSession = session ?: return@LaunchedEffect
+        snapshotFlow {
+            if (!isPlaying) {
+                com.windscore.core.model.ScoreSettings(
+                    practiceMode = practiceMode,
+                    viewMode = viewMode,
+                    speedMultiplier = playbackSpeed.toDouble(),
+                    loopStartTick = pendingLoopStart.takeIf { !activeSession.isLoopActive } ?: activeSession.loopRange?.first,
+                    loopEndTick = activeSession.loopRange?.last,
+                    metronomeVol = metronomeVol,
+                    countdownEnabled = countdownEnabled,
+                    currentTick = activeSession.currentTick.let { if (it >= score.totalTicks) 0L else it }
+                )
+            } else null
+        }
+        .filterNotNull()
+        .debounce(500L)
+        .collect { settings ->
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                com.windscore.core.saveScoreSettings(score.id, settings)
+            }
+        }
+    }
+
     // 自动清理 Session 协程
     DisposableEffect(session) {
+        val currentSession = session
         onDispose {
-            session?.close()
+            currentSession?.close()
         }
     }
 
@@ -108,29 +164,87 @@ fun App(
         }
     }
     LaunchedEffect(Unit) {
-        com.windscore.core.loadRecentScores { loaded ->
-            recentScores.clear()
-            recentScores.addAll(loaded)
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            com.windscore.core.loadRecentScores { loaded ->
+                recentScores.clear()
+                recentScores.addAll(loaded)
+            }
         }
     }
 
-    fun openScore(score: Score) {
-        currentScore = score
-        practiceMode = PracticeMode.BOTH
-        viewMode = ViewMode.SHEET_FULL
-        renderMs = null
-        pendingLoopStart = null
-        session = ScoreSession(score, synth, scope, PracticeMode.BOTH)
+    fun openScore(score: Score, restoreSettings: Boolean = true) {
+        val scoreId = score.id.takeIf { it.isNotEmpty() } ?: score.rawXml?.let { com.windscore.core.calculateMd5(it) } ?: ""
+        val xmlContent = if (score.rawXml == null && scoreId.isNotEmpty()) {
+            com.windscore.core.loadScoreXml(scoreId)
+        } else {
+            score.rawXml
+        }
+        val finalScore = score.copy(id = scoreId, rawXml = xmlContent)
+
+        if (currentScore?.id != finalScore.id) {
+            renderMs = null
+        }
+        currentScore = finalScore
+
+        if (restoreSettings) {
+            val settings = com.windscore.core.loadScoreSettings(scoreId)
+            practiceMode = settings.practiceMode
+            viewMode = settings.viewMode
+            playbackSpeed = settings.speedMultiplier.toFloat()
+            metronomeVol = settings.metronomeVol
+            countdownEnabled = settings.countdownEnabled
+            pendingLoopStart = settings.loopStartTick
+
+            session = ScoreSession(finalScore, synth, scope, settings.practiceMode).apply {
+                if (settings.loopStartTick != null && settings.loopEndTick != null) {
+                    setLoop(settings.loopStartTick, settings.loopEndTick, playAudio = false)
+                }
+                if (settings.currentTick > 0 && settings.currentTick < finalScore.totalTicks) {
+                    seekTo(settings.currentTick)
+                }
+            }
+        } else {
+            val currentTickVal = session?.currentTick ?: 0L
+            val activeLoopRange = session?.takeIf { it.isLoopActive }?.loopRange
+            session = ScoreSession(finalScore, synth, scope, practiceMode).apply {
+                if (activeLoopRange != null) {
+                    setLoop(activeLoopRange.first, activeLoopRange.last, playAudio = false)
+                }
+                if (currentTickVal > 0) {
+                    seekTo(currentTickVal)
+                }
+            }
+        }
+
         val existingIndex = recentScores.indexOfFirst { it.title == score.title && it.totalTicks == score.totalTicks }
         if (existingIndex >= 0) {
             recentScores.removeAt(existingIndex)
         }
-        recentScores.add(0, score)
+        recentScores.add(0, score.copy(id = scoreId, rawXml = null))
         if (recentScores.size > 10) recentScores.removeLast()
-        com.windscore.core.saveRecentScores(recentScores)
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            com.windscore.core.saveRecentScores(recentScores)
+        }
     }
 
     fun closeScore() {
+        val score = currentScore
+        val activeSession = session
+        if (score != null && activeSession != null) {
+            val settings = com.windscore.core.model.ScoreSettings(
+                practiceMode = practiceMode,
+                viewMode = viewMode,
+                speedMultiplier = playbackSpeed.toDouble(),
+                loopStartTick = pendingLoopStart.takeIf { !activeSession.isLoopActive } ?: activeSession.loopRange?.first,
+                loopEndTick = activeSession.loopRange?.last,
+                metronomeVol = metronomeVol,
+                countdownEnabled = countdownEnabled,
+                currentTick = activeSession.currentTick.let { if (it >= score.totalTicks) 0L else it }
+            )
+            scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                com.windscore.core.saveScoreSettings(score.id, settings)
+            }
+        }
         player?.stop()
         session = null
         currentScore = null
@@ -142,7 +256,7 @@ fun App(
 
     fun setPracticeMode(mode: PracticeMode) {
         practiceMode = mode
-        currentScore?.let { openScore(it) }
+        currentScore?.let { openScore(it, restoreSettings = false) }
     }
 
     WindScoreTheme {
@@ -159,12 +273,16 @@ fun App(
                         val idx = recentScores.indexOfFirst { it.title == score.title && it.totalTicks == score.totalTicks }
                         if (idx >= 0) {
                             recentScores[idx] = recentScores[idx].copy(title = newName)
-                            com.windscore.core.saveRecentScores(recentScores)
+                            scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                com.windscore.core.saveRecentScores(recentScores)
+                            }
                         }
                     },
                     onDelete = { score ->
                         recentScores.removeAll { it.title == score.title && it.totalTicks == score.totalTicks }
-                        com.windscore.core.saveRecentScores(recentScores)
+                        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                            com.windscore.core.saveRecentScores(recentScores)
+                        }
                     },
                 )
             } else {
@@ -195,6 +313,12 @@ fun App(
                     playingPitches = playingPitches,
                     renderMs = renderMs,
                     spacePressed = spacePressed,
+                    countdownEnabled = countdownEnabled,
+                    onCountdownEnabledChange = { countdownEnabled = it },
+                    metronomeVol = metronomeVol,
+                    onMetronomeVolChange = { metronomeVol = it },
+                    playbackSpeed = playbackSpeed,
+                    onPlaybackSpeedChange = { playbackSpeed = it },
                     onSeek = { tick ->
                         player?.seekTo(tick)
                         s.seekTo(tick)

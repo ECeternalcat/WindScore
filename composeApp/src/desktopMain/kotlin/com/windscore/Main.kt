@@ -30,17 +30,18 @@ fun main() = application {
             }
         }
         mgr.addKeyEventDispatcher(dispatcher)
-        // 保持屏幕常亮：每 30 秒模拟一次无害按键（Shift），重置 OS 空闲计时器
+        // 保持屏幕常亮：每 30 秒模拟一次无害按键（F15），重置 OS 空闲计时器。
+        // 使用 F15 而非 Shift，避免在用户于其他应用输入文本时干扰输入（Shift 会修饰按键）。
         val keepAwake = java.util.Timer("keepAwake", true)
         keepAwake.scheduleAtFixedRate(object : java.util.TimerTask() {
             override fun run() {
                 try {
                     val robot = java.awt.Robot()
-                    robot.keyPress(KeyEvent.VK_SHIFT)
-                    robot.keyRelease(KeyEvent.VK_SHIFT)
+                    robot.keyPress(KeyEvent.VK_F15)
+                    robot.keyRelease(KeyEvent.VK_F15)
                 } catch (_: Exception) {}
             }
-        }, 0, 30000)
+        }, 30000, 30000)
         onDispose {
             mgr.removeKeyEventDispatcher(dispatcher)
             keepAwake.cancel()

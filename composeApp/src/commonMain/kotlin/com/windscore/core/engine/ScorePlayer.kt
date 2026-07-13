@@ -88,11 +88,14 @@ class ScorePlayer(
                         lastBeat = currentBeat
                         if (metronomeVolume > 0) {
                             val vel = (metronomeVolume * 1.27).toInt().coerceIn(0, 127)
-                            val clickPitch = if (currentBeat % 4L == 0L) 108 else 96
+                            // 使用打击乐通道（GM channel 10 / 索引 9）上的木块音色，
+                            // 避免与乐谱钢琴音域（96/108 等真实音高）冲突、互相切断
+                            val clickPitch = if (currentBeat % 4L == 0L) 76 else 77 // High / Low Woodblock
+                            val clickChannel = 9
                             scope.launch(Dispatchers.Default) {
-                                synth.noteOn(clickPitch, vel)
+                                synth.noteOn(clickChannel, clickPitch, vel)
                                 delay(60)
-                                synth.noteOff(clickPitch)
+                                synth.noteOff(clickChannel, clickPitch)
                             }
                         }
                     }

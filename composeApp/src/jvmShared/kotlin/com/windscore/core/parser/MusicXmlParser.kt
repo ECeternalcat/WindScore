@@ -75,12 +75,13 @@ object MusicXmlParser {
         val rawNotes = mutableListOf<RawNote>()
         var tickCursor = 0L
         var maxTick = 0L
+        var globalMaxTick = 0L
         var lastStartTick = 0L
 
         val parts = doc.getElementsByTagName("part")
         for (pi in 0 until parts.length) {
             val part = parts.item(pi) as Element
-            // 每个 part 重置时间轴（本谱只有一个 piano part）
+            // 每个 part 重置时间轴游标，但 globalMaxTick 跨 part 累计，确保多 Part 总谱总时长正确
             tickCursor = 0L
             maxTick = 0L
             lastStartTick = 0L
@@ -146,6 +147,7 @@ object MusicXmlParser {
                     node = node.nextSibling
                 }
             }
+            globalMaxTick = maxOf(globalMaxTick, maxTick)
         }
 
         // —— Tie 合并 ——
@@ -204,12 +206,15 @@ object MusicXmlParser {
             )
         }.sortedWith(compareBy({ it.startTick }, { it.pitch }))
 
+        val xmlText = xmlBytes.toString(Charsets.UTF_8)
+        val xmlHash = com.windscore.core.calculateMd5(xmlText)
         return Score(
+            id = xmlHash,
             notes = finalNotes,
             divisions = divisions,
             tempo = tempo,
-            totalTicks = maxTick,
-            rawXml = xmlBytes.toString(Charsets.UTF_8),
+            totalTicks = maxOf(globalMaxTick, maxTick),
+            rawXml = xmlText,
             title = title,
         )
     }

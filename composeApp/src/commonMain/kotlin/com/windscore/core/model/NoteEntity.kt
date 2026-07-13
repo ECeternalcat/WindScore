@@ -1,11 +1,14 @@
 package com.windscore.core.model
 
-import kotlin.jvm.Volatile
+import kotlin.concurrent.Volatile
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.Transient
 
 /**
  * 降维后的唯一真理：按时间排序的一维音符单元。
  * 抛弃了五线谱排版、连音线、休止符等所有 MusicXML 排版细节。
  */
+@Serializable
 data class NoteEntity(
     val id: Int,
     val pitch: Int,
@@ -16,5 +19,6 @@ data class NoteEntity(
     val fingering: String? = null,
 ) {
     @Volatile
+    @Transient
     var isHit: Boolean = false
 }

@@ -29,6 +29,7 @@ import javafx.scene.web.WebView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.net.InetSocketAddress
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.swing.JPanel
@@ -145,11 +146,11 @@ actual fun ScoreSheetView(
             val htmlText = OsmdHtml.buildHtml(divisions)
             val htmlHash = com.windscore.core.calculateMd5(htmlText)
             val cacheKey = "${xmlHash}_$htmlHash"
-            val cacheDir = java.io.File(com.windscore.core.getCacheDir(), cacheKey)
+            val cacheDir = File(com.windscore.core.getCacheDir(), cacheKey)
 
             val handler = snapshotHandler
             if (handler != null && cacheDir.exists()) {
-                val metaFile = java.io.File(cacheDir, "meta.json")
+                val metaFile = File(cacheDir, "meta.json")
                 if (metaFile.exists()) {
                     try {
                         val metaJson = metaFile.readText(Charsets.UTF_8)

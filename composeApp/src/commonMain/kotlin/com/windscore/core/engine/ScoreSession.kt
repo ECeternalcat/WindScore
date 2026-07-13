@@ -1,4 +1,4 @@
-﻿package com.windscore.core.engine
+package com.windscore.core.engine
 
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
@@ -97,7 +97,6 @@ class ScoreSession(
     }
 
     init {
-        playHosted(engine.arrive())
         sync()
         startPulseDecay()
     }
@@ -125,7 +124,10 @@ class ScoreSession(
     fun wrongPressCount(): Int = engine.wrongPressCount()
     fun groupWrongCounts(): IntArray = engine.groupWrongCounts()
 
+    private var interactiveStarted = false
+
     fun onNoteOn(pitch: Int) {
+        interactiveStarted = true
         playHosted(engine.onNoteOn(pitch))
         sync()
     }
@@ -135,39 +137,44 @@ class ScoreSession(
         sync()
     }
 
-    fun reset() {
-        playHosted(engine.reset())
+    fun reset(playAudio: Boolean = false) {
+        interactiveStarted = false
+        val notes = engine.reset()
+        if (playAudio) playHosted(notes)
         sync()
     }
 
     /** 定点跳转（文档 3.3）。 */
     fun seekTo(tick: Long) {
+        interactiveStarted = false
         engine.seekTo(tick)
         sync()
     }
 
     /** 微观步进：前进一个音符组（文档 3.3 盲操微调）。 */
     fun stepForward() {
+        interactiveStarted = false
         engine.stepForward()
         sync()
     }
 
     /** 微观步进：后退一个音符组（文档 3.3 盲操微调）。 */
     fun stepBackward() {
+        interactiveStarted = false
         engine.stepBackward()
         sync()
     }
 
     /** 设置 A/B 循环范围；调用后当前进度会调整到循环起点附近。 */
-    fun setLoop(startTick: Long, endTick: Long) {
+    fun setLoop(startTick: Long, endTick: Long, playAudio: Boolean = false) {
         engine.setLoop(startTick, endTick)
-        reset()
+        reset(playAudio)
     }
 
     /** 清除 A/B 循环。 */
-    fun clearLoop() {
+    fun clearLoop(playAudio: Boolean = false) {
         engine.clearLoop()
-        reset()
+        reset(playAudio)
     }
 
     private fun sync() {
@@ -193,7 +200,7 @@ class ScoreSession(
      */
     private fun scheduleHostedIfNeeded() {
         hostedJob?.cancel()
-        if (!isHostedEnabled || finished || engine.pendingPitches().isNotEmpty()) {
+        if (!isHostedEnabled || !interactiveStarted || finished || engine.pendingPitches().isNotEmpty()) {
             lastHostedTick = -1
             return
         }

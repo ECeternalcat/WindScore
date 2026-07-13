@@ -165,4 +165,61 @@ class MusicXmlParserTest {
         val score = MusicXmlParser.parse(xml)
         assertEquals(121, score.tempo, "BPM 120.5 应被四舍五入为 121")
     }
+
+    /**
+     * 审计 M1：多 Part（如总谱/重奏）乐谱的 totalTicks 应反映所有 Part 中最长的时长，
+     * 而非被最后一个 Part 覆盖。
+     */
+    @Test
+    fun multiPartTotalTicksReflectsLongestPart() {
+        val xml = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <score-partwise version="3.1">
+              <part id="P1">
+                <measure number="1">
+                  <attributes><divisions>4</divisions></attributes>
+                  <note>
+                    <pitch><step>C</step><octave>4</octave></pitch>
+                    <duration>4</duration>
+                    <type>quarter</type>
+                    <staff>1</staff>
+                  </note>
+                  <note>
+                    <pitch><step>D</step><octave>4</octave></pitch>
+                    <duration>4</duration>
+                    <type>quarter</type>
+                    <staff>1</staff>
+                  </note>
+                  <note>
+                    <pitch><step>E</step><octave>4</octave></pitch>
+                    <duration>4</duration>
+                    <type>quarter</type>
+                    <staff>1</staff>
+                  </note>
+                  <note>
+                    <pitch><step>F</step><octave>4</octave></pitch>
+                    <duration>4</duration>
+                    <type>quarter</type>
+                    <staff>1</staff>
+                  </note>
+                </measure>
+              </part>
+              <part id="P2">
+                <measure number="1">
+                  <attributes><divisions>4</divisions></attributes>
+                  <note>
+                    <pitch><step>C</step><octave>3</octave></pitch>
+                    <duration>4</duration>
+                    <type>quarter</type>
+                    <staff>1</staff>
+                  </note>
+                </measure>
+              </part>
+            </score-partwise>
+        """.trimIndent().toByteArray()
+        val score = MusicXmlParser.parseXml(xml)
+
+        // P1 = 16 ticks, P2 = 4 ticks. 旧的 bug 会把 totalTicks 覆盖为最后一个 Part 的 4。
+        assertEquals(16L, score.totalTicks, "多 Part 乐谱 totalTicks 应取最长 Part（16），而非最后一个 Part（4）")
+    }
 }

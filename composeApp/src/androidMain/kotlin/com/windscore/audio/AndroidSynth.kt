@@ -15,14 +15,16 @@ class AndroidSynth : AudioSynth {
         driver?.start()
     }
 
-    override fun noteOn(pitch: Int, velocity: Int) {
+    override fun noteOn(channel: Int, pitch: Int, velocity: Int) {
+        val ch = channel.coerceIn(0, 15) and 0x0F
         driver?.write(
-            byteArrayOf(0x90.toByte(), pitch.coerceIn(0, 127).toByte(), velocity.coerceIn(0, 127).toByte())
+            byteArrayOf((0x90 or ch).toByte(), pitch.coerceIn(0, 127).toByte(), velocity.coerceIn(0, 127).toByte())
         )
     }
 
-    override fun noteOff(pitch: Int) {
-        driver?.write(byteArrayOf(0x80.toByte(), pitch.coerceIn(0, 127).toByte(), 0))
+    override fun noteOff(channel: Int, pitch: Int) {
+        val ch = channel.coerceIn(0, 15) and 0x0F
+        driver?.write(byteArrayOf((0x80 or ch).toByte(), pitch.coerceIn(0, 127).toByte(), 0))
     }
 
     override fun stop() {

@@ -179,9 +179,6 @@ class JudgmentEngine(
         PracticeMode.LEFT_ONLY -> track == TrackType.LEFT_HAND
     }
 
-    /** 初始/重置后调用：游标落到第一组（或循环起点），返回应自动托管的音。 */
-    fun arrive(): List<NoteEntity> = step()
-
     /** 用户按下某音高。返回本次新到达组应自动托管的音。 */
     fun onNoteOn(pitch: Int): List<NoteEntity> {
         activeKeys.add(pitch)
@@ -206,7 +203,7 @@ class JudgmentEngine(
         wrongPressCount = 0
         groupIndex = if (loopEnabled) findGroupIndexAtOrAfter(loopStartTick) else 0
         lastArrivedGroupIndex = groupIndex - 1
-        return step()
+        return emptyList()
     }
 
     /**
