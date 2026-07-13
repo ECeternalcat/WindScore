@@ -1,4 +1,4 @@
-package com.windscore.core.engine
+﻿package com.windscore.core.engine
 
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
@@ -36,6 +36,9 @@ class ScoreSession(
     }
 
     /** 托管段自动推进任务；遇到练习组或结束时取消。 */
+    /** Hosted play control switch. Set to false when MIDI player is running. */
+    var isHostedEnabled: Boolean = true
+
     private var hostedJob: Job? = null
 
     /** 上一个已处理托管组的起始 tick，用于计算下一托管组的节奏间隔。 */
@@ -190,7 +193,7 @@ class ScoreSession(
      */
     private fun scheduleHostedIfNeeded() {
         hostedJob?.cancel()
-        if (finished || engine.pendingPitches().isNotEmpty()) {
+        if (!isHostedEnabled || finished || engine.pendingPitches().isNotEmpty()) {
             lastHostedTick = -1
             return
         }

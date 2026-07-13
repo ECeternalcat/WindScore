@@ -55,6 +55,12 @@ class ScorePlayer(
     private var job: Job? = null
     private var localTick: Double = 0.0
 
+    /** Playback speed multiplier (e.g. 0.5 for half speed, 1.0 for original, 1.5 for fast) */
+    var speedMultiplier: Double = 1.0
+
+    /** Metronome volume (0 to 100). Default is 50. */
+    var metronomeVolume: Int = 50
+
     fun play() {
         if (_playing.value) return
         if (_finished.value || _tick.value >= score.totalTicks) reset()
@@ -66,14 +72,31 @@ class ScorePlayer(
             val startMark = clock.markNow()
             var lastMs = startMark.elapsedNow().inWholeMilliseconds
             localTick = _tick.value.toDouble()
+            var lastBeat = (localTick.toLong() / (score.divisions.takeIf { it > 0 } ?: 4)) - 1
             try {
                 while (isActive && _playing.value && localTick < score.totalTicks) {
                     delay(LOOP_MS)
                     val now = startMark.elapsedNow().inWholeMilliseconds
                     val dt = (now - lastMs) / 1000.0
                     lastMs = now
-                    localTick += tps * dt
+                    localTick += tps * dt * speedMultiplier
                     val tickLong = localTick.toLong()
+
+                    val divisions = score.divisions.takeIf { it > 0 } ?: 4
+                    val currentBeat = tickLong / divisions
+                    if (currentBeat > lastBeat) {
+                        lastBeat = currentBeat
+                        if (metronomeVolume > 0) {
+                            val vel = (metronomeVolume * 1.27).toInt().coerceIn(0, 127)
+                            val clickPitch = if (currentBeat % 4L == 0L) 108 else 96
+                            scope.launch(Dispatchers.Default) {
+                                synth.noteOn(clickPitch, vel)
+                                delay(60)
+                                synth.noteOff(clickPitch)
+                            }
+                        }
+                    }
+
                     while (eventIndex < events.size && events[eventIndex].tick <= tickLong) {
                         applyEvent(events[eventIndex])
                         eventIndex++

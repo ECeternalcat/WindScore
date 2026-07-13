@@ -49,7 +49,7 @@ fun main() = application {
 
     Window(
         onCloseRequest = ::exitApplication,
-        title = "WindScore — 钢琴伴学",
+        title = "WindScore",
         state = windowState,
     ) {
         App(createMidiManager(), isCompact = false, spacePressed = spaceCount)

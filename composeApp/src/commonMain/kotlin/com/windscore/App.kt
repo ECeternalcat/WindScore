@@ -16,12 +16,12 @@ import androidx.compose.ui.Modifier
 import com.windscore.audio.createAudioSynth
 import com.windscore.core.engine.ScorePlayer
 import com.windscore.core.engine.ScoreSession
-import com.windscore.core.loadScore
 import com.windscore.core.model.PracticeMode
 import com.windscore.core.model.Score
 import com.windscore.midi.MidiEvent
 import com.windscore.midi.MidiManager
 import com.windscore.ui.PlayerScreen
+import com.windscore.ui.SettingsScreen
 import com.windscore.ui.WelcomeScreen
 import com.windscore.ui.theme.WindScoreColors
 import com.windscore.ui.theme.WindScoreTheme
@@ -42,6 +42,7 @@ fun App(
     var renderMs by remember { mutableStateOf<Double?>(null) }
     var pendingLoopStart by remember { mutableStateOf<Long?>(null) }
     var running by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
     val recentScores = remember { mutableStateListOf<Score>() }
 
     val synth = remember { createAudioSynth() }
@@ -61,16 +62,10 @@ fun App(
         }
     }
 
-    // 当乐谱打开且五线谱渲染完成后，在后台启动 (warmup) 声音合成器，防止与 WebView 初始化发生 native 死锁，也防止点击播放时卡顿
-    LaunchedEffect(currentScore, renderMs) {
-        val score = currentScore
-        if (score != null) {
-            val shouldWarmup = score.rawXml == null || renderMs != null
-            if (shouldWarmup) {
-                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
-                    synth.start()
-                }
-            }
+    // App 启动即预热合成器，避免首次播放延迟 1 秒（Java Sound open 耗时）
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+            synth.start()
         }
     }
 
@@ -112,16 +107,10 @@ fun App(
             synth.stop()
         }
     }
-
-    // 空格键播放/暂停（桌面端通过 AWT KeyEventDispatcher 触发）
-    LaunchedEffect(spacePressed) {
-        if (spacePressed > 0) {
-            val s = session ?: return@LaunchedEffect
-            if (!isPlaying) {
-                val cursorTick = if (playTick > 0) playTick else s.currentTick
-                player?.seekTo(cursorTick)
-            }
-            player?.toggle()
+    LaunchedEffect(Unit) {
+        com.windscore.core.loadRecentScores { loaded ->
+            recentScores.clear()
+            recentScores.addAll(loaded)
         }
     }
 
@@ -132,10 +121,13 @@ fun App(
         renderMs = null
         pendingLoopStart = null
         session = ScoreSession(score, synth, scope, PracticeMode.BOTH)
-        if (!recentScores.any { it.title == score.title && it.totalTicks == score.totalTicks }) {
-            recentScores.add(0, score)
-            if (recentScores.size > 10) recentScores.removeLast()
+        val existingIndex = recentScores.indexOfFirst { it.title == score.title && it.totalTicks == score.totalTicks }
+        if (existingIndex >= 0) {
+            recentScores.removeAt(existingIndex)
         }
+        recentScores.add(0, score)
+        if (recentScores.size > 10) recentScores.removeLast()
+        com.windscore.core.saveRecentScores(recentScores)
     }
 
     fun closeScore() {
@@ -162,11 +154,33 @@ fun App(
                 WelcomeScreen(
                     isCompact = isCompact,
                     recentScores = recentScores,
-                    onLoadDefault = { openScore(loadScore()) },
                     onScoreClick = { openScore(it) },
+                    onRename = { score, newName ->
+                        val idx = recentScores.indexOfFirst { it.title == score.title && it.totalTicks == score.totalTicks }
+                        if (idx >= 0) {
+                            recentScores[idx] = recentScores[idx].copy(title = newName)
+                            com.windscore.core.saveRecentScores(recentScores)
+                        }
+                    },
+                    onDelete = { score ->
+                        recentScores.removeAll { it.title == score.title && it.totalTicks == score.totalTicks }
+                        com.windscore.core.saveRecentScores(recentScores)
+                    },
                 )
             } else {
                 val s = session ?: return@Surface
+
+                // 播放中实时同步进度到练习 Session，并在暂停时做最终同步确保进度对齐
+                LaunchedEffect(isPlaying, playTick) {
+                    if (isPlaying) {
+                        s.isHostedEnabled = false
+                        s.seekTo(playTick)
+                    } else {
+                        s.isHostedEnabled = true
+                        s.seekTo(playTick)
+                    }
+                }
+
                 PlayerScreen(
                     score = s.score,
                     session = s,
@@ -180,14 +194,18 @@ fun App(
                     isPlaying = isPlaying,
                     playingPitches = playingPitches,
                     renderMs = renderMs,
+                    spacePressed = spacePressed,
                     onSeek = { tick ->
-                        if (isPlaying || playTick > 0) player?.seekTo(tick) else s.seekTo(tick)
+                        player?.seekTo(tick)
+                        s.seekTo(tick)
                     },
                     onStepForward = {
-                        if (isPlaying || playTick > 0) player?.stepForward() else s.stepForward()
+                        player?.stepForward()
+                        s.stepForward()
                     },
                     onStepBackward = {
-                        if (isPlaying || playTick > 0) player?.stepBackward() else s.stepBackward()
+                        player?.stepBackward()
+                        s.stepBackward()
                     },
                     onBack = { closeScore() },
                     onToggleMidi = {
@@ -214,7 +232,17 @@ fun App(
                     },
                     onStopPlay = { player?.stop() },
                     onRenderTime = { renderMs = it },
+                    onShowSettings = { showSettings = true },
                 )
+
+                if (showSettings) {
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = WindScoreColors.canvas,
+                    ) {
+                        SettingsScreen(onBack = { showSettings = false })
+                    }
+                }
             }
         }
     }

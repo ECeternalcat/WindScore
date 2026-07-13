@@ -59,6 +59,7 @@ actual fun ScoreSheetView(
     val onStepBack by rememberUpdatedState(onStepBackward)
     val snapshotHandler by rememberUpdatedState(onSnapshot)
     val renderDone = remember { AtomicBoolean(false) }
+    val initFailed = remember { AtomicBoolean(false) }
 
     val serverInfo = remember {
         val osmdJsBytes = Thread.currentThread().contextClassLoader
@@ -101,7 +102,10 @@ actual fun ScoreSheetView(
         background = Color.White,
         factory = {
             try {
-                try { Platform.startup {} } catch (_: IllegalStateException) {}
+                try {
+                    Platform.startup {}
+                    Platform.setImplicitExit(false)
+                } catch (_: IllegalStateException) {}
                 val panel = JFXPanel()
                 panel.border = javax.swing.BorderFactory.createEmptyBorder()
                 panel.isFocusable = false
@@ -117,11 +121,13 @@ actual fun ScoreSheetView(
                         state = LoadState.Ok
                     }.onFailure {
                         println("[OSMD] WebView init failed: ${it.message}")
+                        initFailed.set(true)
                         state = LoadState.Failed
                     }
                 }
                 panel
             } catch (t: Throwable) {
+                initFailed.set(true)
                 state = LoadState.Failed; JPanel()
             }
         },
@@ -133,8 +139,39 @@ actual fun ScoreSheetView(
         val uiContext = coroutineContext
         withContext(Dispatchers.Default) {
             renderDone.set(false)
+
+            // Check cache
+            val xmlHash = com.windscore.core.calculateMd5(rawXml)
+            val htmlText = OsmdHtml.buildHtml(divisions)
+            val htmlHash = com.windscore.core.calculateMd5(htmlText)
+            val cacheKey = "${xmlHash}_$htmlHash"
+            val cacheDir = java.io.File(com.windscore.core.getCacheDir(), cacheKey)
+
+            val handler = snapshotHandler
+            if (handler != null && cacheDir.exists()) {
+                val metaFile = java.io.File(cacheDir, "meta.json")
+                if (metaFile.exists()) {
+                    try {
+                        val metaJson = metaFile.readText(Charsets.UTF_8)
+                        val snapshot = parseSnapshotCache(cacheDir, metaJson)
+                        if (snapshot != null) {
+                            withContext(uiContext) {
+                                onRenderTime(0.0)
+                                handler.invoke(snapshot)
+                            }
+                            renderDone.set(true)
+                            println("[OSMD] Loaded SheetSnapshot from local cache: $cacheKey")
+                            return@withContext
+                        }
+                    } catch (e: Exception) {
+                        println("[OSMD] Failed to load cache: ${e.message}")
+                    }
+                }
+            }
+
             var wv = webViewRef.get()
-            while (wv == null) { delay(100); wv = webViewRef.get() }
+            while (wv == null && !initFailed.get()) { delay(100); wv = webViewRef.get() }
+            if (initFailed.get() || wv == null) return@withContext
             val webView = wv // 定义只读 val 避免闭包内 Smart Cast 失败
 
             serverData.html = OsmdHtml.buildHtml(divisions)
@@ -172,7 +209,6 @@ actual fun ScoreSheetView(
             if (!success) return@withContext
 
             // 截图模式：等待 JS 端分块 SVG→PNG 完成
-            val handler = snapshotHandler
             if (handler != null) {
                 var snapshotWaited = 0
                 var snapshotDone = false
@@ -209,9 +245,11 @@ actual fun ScoreSheetView(
                         // 2. 后台线程：解码 PNG（不阻塞 UI）
                         val chunks = mutableListOf<ImageBitmap>()
                         var firstH = 0
+                        val rawPngBytesList = mutableListOf<ByteArray>()
                         for (url in urls) {
                             if (url.startsWith("data:image/png;base64,")) {
                                 val bytes = java.util.Base64.getDecoder().decode(url.substringAfter("base64,"))
+                                rawPngBytesList.add(bytes)
                                 val bImg = javax.imageio.ImageIO.read(java.io.ByteArrayInputStream(bytes))
                                 if (firstH == 0) firstH = bImg.height
                                 chunks.add(bImg.toComposeImageBitmap())
@@ -220,6 +258,10 @@ actual fun ScoreSheetView(
                         try {
                             val steps = parseCursorSteps(posJson, timesJson, divisions)
                             val snapshot = SheetSnapshot(chunks, readyBox[2], firstH, readyBox[3], steps)
+                            
+                            // Save to cache asynchronously
+                            saveSnapshotCache(cacheDir, readyBox[2], firstH, readyBox[3], steps, rawPngBytesList)
+
                             withContext(uiContext) {
                                 handler.invoke(snapshot)
                             }
@@ -313,4 +355,81 @@ private fun <T> runLaterAndGet(block: () -> T): T {
     }
     latch.await(3, java.util.concurrent.TimeUnit.SECONDS)
     return result[0] as T
+}
+
+private fun parseSnapshotCache(cacheDir: java.io.File, json: String): SheetSnapshot? {
+    try {
+        val width = "\"width\"\\s*:\\s*(\\d+)".toRegex().find(json)?.groupValues?.get(1)?.toIntOrNull() ?: return null
+        val firstH = "\"firstH\"\\s*:\\s*(\\d+)".toRegex().find(json)?.groupValues?.get(1)?.toIntOrNull() ?: return null
+        val totalHeight = "\"totalHeight\"\\s*:\\s*(\\d+)".toRegex().find(json)?.groupValues?.get(1)?.toIntOrNull() ?: return null
+        
+        val stepPattern = "\\{\\s*\"tick\"\\s*:\\s*(\\d+)\\s*,\\s*\"x\"\\s*:\\s*([\\d.-]+)\\s*,\\s*\"y\"\\s*:\\s*([\\d.-]+)\\s*,\\s*\"h\"\\s*:\\s*([\\d.-]+)\\s*\\}".toRegex()
+        val steps = stepPattern.findAll(json).map { match ->
+            val tick = match.groupValues[1].toLong()
+            val x = match.groupValues[2].toFloat()
+            val y = match.groupValues[3].toFloat()
+            val h = match.groupValues[4].toFloat()
+            CursorStep(tick, x, y, h)
+        }.toList()
+        
+        val chunks = mutableListOf<androidx.compose.ui.graphics.ImageBitmap>()
+        var index = 0
+        while (true) {
+            val chunkFile = java.io.File(cacheDir, "chunk_$index.png")
+            if (!chunkFile.exists()) break
+            val bytes = chunkFile.readBytes()
+            val bImg = javax.imageio.ImageIO.read(java.io.ByteArrayInputStream(bytes)) ?: return null
+            chunks.add(bImg.toComposeImageBitmap())
+            index++
+        }
+        if (chunks.isEmpty()) return null
+        return SheetSnapshot(chunks, width, firstH, totalHeight, steps)
+    } catch (e: Exception) {
+        println("[OSMD] Error parsing cache: ${e.message}")
+        return null
+    }
+}
+
+private fun saveSnapshotCache(
+    cacheDir: java.io.File,
+    width: Int,
+    firstH: Int,
+    totalHeight: Int,
+    steps: List<CursorStep>,
+    rawPngBytesList: List<ByteArray>
+) {
+    try {
+        if (!cacheDir.exists()) cacheDir.mkdirs()
+        
+        // Write chunks
+        for (i in rawPngBytesList.indices) {
+            val chunkFile = java.io.File(cacheDir, "chunk_$i.png")
+            chunkFile.writeBytes(rawPngBytesList[i])
+        }
+        
+        // Write meta.json
+        val sb = StringBuilder()
+        sb.append("{\n")
+        sb.append("  \"width\": ").append(width).append(",\n")
+        sb.append("  \"firstH\": ").append(firstH).append(",\n")
+        sb.append("  \"totalHeight\": ").append(totalHeight).append(",\n")
+        sb.append("  \"steps\": [\n")
+        for (i in steps.indices) {
+            val step = steps[i]
+            sb.append("    {\"tick\":").append(step.tick)
+              .append(",\"x\":").append(step.x)
+              .append(",\"y\":").append(step.y)
+              .append(",\"h\":").append(step.height).append("}")
+            if (i < steps.size - 1) sb.append(",")
+            sb.append("\n")
+        }
+        sb.append("  ]\n")
+        sb.append("}")
+        
+        val metaFile = java.io.File(cacheDir, "meta.json")
+        metaFile.writeText(sb.toString(), Charsets.UTF_8)
+        println("[OSMD] Saved SheetSnapshot cache to disk: ${cacheDir.name}")
+    } catch (e: Exception) {
+        println("[OSMD] Failed to write cache: ${e.message}")
+    }
 }

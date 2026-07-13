@@ -11,6 +11,7 @@ import com.windscore.midi.createMidiManager
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.windscore.core.AndroidContext.context = applicationContext
         requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         // 练习时保持屏幕常亮
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)

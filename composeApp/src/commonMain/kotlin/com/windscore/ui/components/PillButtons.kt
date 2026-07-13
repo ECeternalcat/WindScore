@@ -1,5 +1,7 @@
 package com.windscore.ui.components
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -18,6 +20,7 @@ fun PillButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     style: PillButtonStyle = PillButtonStyle.PRIMARY,
+    contentPadding: PaddingValues = ButtonDefaults.ContentPadding,
     content: @Composable () -> Unit,
 ) {
     val (container, contentColor, disabledContainer, disabledContent) = when (style) {
@@ -34,17 +37,23 @@ fun PillButton(
             WindScoreColors.ink.copy(alpha = 0.4f),
         )
     }
+    val border = when (style) {
+        PillButtonStyle.PRIMARY -> null
+        PillButtonStyle.SECONDARY -> BorderStroke(1.dp, WindScoreColors.hairline)
+    }
     Button(
         onClick = onClick,
         modifier = modifier.height(40.dp),
         enabled = enabled,
         shape = RoundedCornerShape(WindScoreRounded.pill),
+        border = border,
         colors = ButtonDefaults.buttonColors(
             containerColor = container,
             contentColor = contentColor,
             disabledContainerColor = disabledContainer,
             disabledContentColor = disabledContent,
         ),
+        contentPadding = contentPadding,
     ) {
         content()
     }
