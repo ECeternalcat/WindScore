@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,13 +33,19 @@ fun CustomSwitch(
 ) {
     val background = if (checked) WindScoreColors.primary else WindScoreColors.hairlineSoft
     val alignment = if (checked) Alignment.CenterEnd else Alignment.CenterStart
+    val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     Box(
         modifier = modifier
+            .bounceClick(interactionSource)
             .width(40.dp)
             .height(22.dp)
             .clip(RoundedCornerShape(11.dp))
             .background(background)
-            .clickable { onCheckedChange(!checked) }
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = { onCheckedChange(!checked) }
+            )
             .padding(2.dp)
     ) {
         Box(
@@ -92,12 +99,19 @@ fun CircularIconButton(
         selected -> WindScoreColors.onPrimary
         else -> WindScoreColors.ink
     }
+    val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     Box(
         modifier = modifier
+            .bounceClick(interactionSource)
             .size(40.dp)
             .clip(RoundedCornerShape(WindScoreRounded.full))
             .background(if (enabled) background else WindScoreColors.hairlineSoft)
-            .clickable(enabled = enabled, onClick = onClick),
+            .clickable(
+                enabled = enabled,
+                interactionSource = interactionSource,
+                indication = androidx.compose.foundation.LocalIndication.current,
+                onClick = onClick
+            ),
         contentAlignment = Alignment.Center,
     ) {
         androidx.compose.runtime.CompositionLocalProvider(

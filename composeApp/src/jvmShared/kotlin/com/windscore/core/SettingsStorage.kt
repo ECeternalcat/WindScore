@@ -19,7 +19,11 @@ internal object SettingsStorage {
                 val jsonText = file.readText(Charsets.UTF_8)
                 Json.decodeFromString(ScoreSettings.serializer(), jsonText)
             } else {
-                ScoreSettings()
+                val globalConfig = ConfigStorage.load()
+                ScoreSettings(
+                    viewMode = globalConfig.defaultViewMode,
+                    countdownEnabled = globalConfig.defaultCountdownSeconds > 0
+                )
             }
         } catch (e: Exception) {
             println("[SettingsStorage] Failed to load settings for $scoreId: ${e.message}")

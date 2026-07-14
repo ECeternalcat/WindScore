@@ -1,6 +1,13 @@
 package com.windscore.ui
 
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -122,6 +129,7 @@ fun PlayerScreen(
     scoringPhase: ScoringPhase = ScoringPhase.SETUP,
     onStartScoring: (PracticeMode) -> Unit = {},
     onExitScoring: () -> Unit = {},
+    appConfig: com.windscore.core.model.AppConfig = com.windscore.core.loadAppConfig(),
 ) {
     val scope = rememberCoroutineScope()
     val s = strings()
@@ -167,7 +175,7 @@ fun PlayerScreen(
                     if (countdownSeconds == 0) {
                         countdownJob?.cancel()
                         countdownJob = scope.launch {
-                            countdownSeconds = 3
+                            countdownSeconds = appConfig.defaultCountdownSeconds.coerceAtLeast(1)
                             while (countdownSeconds > 0) {
                                 delay(1000)
                                 countdownSeconds--
@@ -315,7 +323,7 @@ fun PlayerScreen(
                                                         if (countdownSeconds == 0) {
                                                             countdownJob?.cancel()
                                                             countdownJob = scope.launch {
-                                                                countdownSeconds = 3
+                                                                countdownSeconds = appConfig.defaultCountdownSeconds.coerceAtLeast(1)
                                                                 while (countdownSeconds > 0) {
                                                                     delay(1000)
                                                                     countdownSeconds--
@@ -368,7 +376,8 @@ fun PlayerScreen(
                                 onClick = { sidebarTab = SidebarTab.PRACTICE },
                                 enabled = !scoringActive,
                                 style = if (sidebarTab == SidebarTab.PRACTICE) PillButtonStyle.PRIMARY else PillButtonStyle.SECONDARY,
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
@@ -386,7 +395,8 @@ fun PlayerScreen(
                                 onClick = { sidebarTab = SidebarTab.SCORING },
                                 enabled = !scoringActive,
                                 style = if (sidebarTab == SidebarTab.SCORING) PillButtonStyle.PRIMARY else PillButtonStyle.SECONDARY,
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
@@ -406,7 +416,13 @@ fun PlayerScreen(
             }
         }
 
-        (toastMessage ?: localToastMessage)?.let { msg ->
+        val activeToast = toastMessage ?: localToastMessage
+        AnimatedVisibility(
+            visible = activeToast != null,
+            enter = slideInVertically(initialOffsetY = { it / 2 }) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { it / 2 }) + fadeOut(),
+            modifier = Modifier.fillMaxSize()
+        ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -421,7 +437,7 @@ fun PlayerScreen(
                     modifier = Modifier.padding(horizontal = 32.dp, vertical = 16.dp)
                 ) {
                     Text(
-                        text = msg,
+                        text = activeToast ?: "",
                         style = MaterialTheme.typography.bodyMedium,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
                     )
@@ -740,35 +756,11 @@ private fun MainStage(
             val activePitches = if (isPlaying) playingPitches else session.heldPitches
             val targetPitches = if (isPlaying) playingPitches else session.pendingPitches
 
-            PianoRoll(
-                score = session.score,
-                currentTickProvider = { tick },
-                modifier = Modifier.fillMaxSize()
-                    .clip(RoundedCornerShape(WindScoreRounded.lg))
-                    .alpha(if (showRoll) 1f else 0f),
-                hostedTrack = session.hostedTrack,
-                heldPitchesProvider = { activePitches },
-                pulseIntensityProvider = { session.pulseIntensity },
-                bpmProvider = { session.score.tempo.takeIf { it > 0 } ?: 120 },
-                pendingLoopStart = pendingLoopStart,
-                loopRange = activeLoopRange,
-            )
-            // 五线谱 — 预渲染快照模式
+            var sheetSnapshot by remember(rawXml) { mutableStateOf<SheetSnapshot?>(null) }
+
+            // WebView 渲染器始终在后台静默运行
             if (rawXml != null) {
                 val sheetFraction = if (showSheetKb) 0.72f else 1f
-                var sheetSnapshot by remember(rawXml) { mutableStateOf<SheetSnapshot?>(null) }
-                var loadingSeconds by remember(rawXml) { mutableStateOf(0) }
-                LaunchedEffect(sheetSnapshot, rawXml) {
-                    if (sheetSnapshot == null) {
-                        loadingSeconds = 0
-                        while (true) {
-                            delay(1000)
-                            loadingSeconds++
-                        }
-                    }
-                }
-
-                // WebView 渲染器：始终在屏幕外后台渲染，用户永不可见
                 ScoreSheetView(
                     rawXml = rawXml,
                     currentTickProvider = { tick },
@@ -778,80 +770,119 @@ private fun MainStage(
                     onRenderTime = onRenderTime,
                     onSnapshot = { snap -> sheetSnapshot = snap },
                 )
+            }
 
-                // 快照就绪前：显示加载指示器（带圆盘进度动画和微调文本）
-                if (sheetSnapshot == null && sheetVisible) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .fillMaxHeight(sheetFraction)
-                            .clip(RoundedCornerShape(WindScoreRounded.lg))
-                            .background(Color.White),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            CircularProgressIndicator(
-                                color = WindScoreColors.accentMagenta,
-                                strokeWidth = 3.dp,
-                                modifier = Modifier.size(36.dp),
-                            )
-                            Spacer(Modifier.height(WindScoreSpacing.md))
-                            val loadingText = when {
-                                loadingSeconds < 10 -> s.loadingScore
-                                loadingSeconds < 20 -> s.loadingSlow
-                                loadingSeconds < 30 -> s.loadingSlower
-                                else -> s.loadingFailed
+            Crossfade(
+                targetState = viewMode,
+                modifier = Modifier.fillMaxSize(),
+                label = "mainStageCrossfade"
+            ) { mode ->
+                when (mode) {
+                    ViewMode.ROLL -> {
+                        PianoRoll(
+                            score = session.score,
+                            currentTickProvider = { tick },
+                            modifier = Modifier.fillMaxSize()
+                                .clip(RoundedCornerShape(WindScoreRounded.lg)),
+                            hostedTrack = session.hostedTrack,
+                            heldPitchesProvider = { activePitches },
+                            pulseIntensityProvider = { session.pulseIntensity },
+                            bpmProvider = { session.score.tempo.takeIf { it > 0 } ?: 120 },
+                            pendingLoopStart = pendingLoopStart,
+                            loopRange = activeLoopRange,
+                        )
+                    }
+                    ViewMode.SHEET_KEYBOARD, ViewMode.SHEET_FULL -> {
+                        if (rawXml != null) {
+                            val isKb = mode == ViewMode.SHEET_KEYBOARD
+                            val sheetFraction = if (isKb) 0.72f else 1f
+                            var loadingSeconds by remember(rawXml) { mutableStateOf(0) }
+                            LaunchedEffect(sheetSnapshot, rawXml) {
+                                if (sheetSnapshot == null) {
+                                    loadingSeconds = 0
+                                    while (true) {
+                                        delay(1000)
+                                        loadingSeconds++
+                                    }
+                                }
                             }
-                            Text(
-                                text = loadingText,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = WindScoreColors.ink,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.padding(horizontal = WindScoreSpacing.lg)
-                            )
+
+                            if (sheetSnapshot == null) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .fillMaxHeight(sheetFraction)
+                                        .clip(RoundedCornerShape(WindScoreRounded.lg))
+                                        .background(Color.White),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        CircularProgressIndicator(
+                                            color = WindScoreColors.accentMagenta,
+                                            strokeWidth = 3.dp,
+                                            modifier = Modifier.size(36.dp),
+                                        )
+                                        Spacer(Modifier.height(WindScoreSpacing.md))
+                                        val loadingText = when {
+                                            loadingSeconds < 10 -> s.loadingScore
+                                            loadingSeconds < 20 -> s.loadingSlow
+                                            loadingSeconds < 30 -> s.loadingSlower
+                                            else -> s.loadingFailed
+                                        }
+                                        Text(
+                                            text = loadingText,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = WindScoreColors.ink,
+                                            textAlign = TextAlign.Center,
+                                            modifier = Modifier.padding(horizontal = WindScoreSpacing.lg)
+                                        )
+                                    }
+                                }
+                            } else {
+                                NativeSheetView(
+                                    snapshot = sheetSnapshot!!,
+                                    currentTickProvider = { tick },
+                                    onSeek = onSeek,
+                                    onStepForward = onStepForward,
+                                    onStepBackward = onStepBackward,
+                                    pendingLoopStart = pendingLoopStart,
+                                    loopRange = activeLoopRange,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .fillMaxHeight(sheetFraction)
+                                        .clip(RoundedCornerShape(WindScoreRounded.lg))
+                                        .background(Color.White),
+                                )
+                            }
                         }
                     }
                 }
-
-                // 快照就绪后：显示 NativeSheetView（纯 Compose Canvas，带圆角和白底隔离）
-                if (sheetSnapshot != null && sheetVisible) {
-                    NativeSheetView(
-                        snapshot = sheetSnapshot!!,
-                        currentTickProvider = { tick },
-                        onSeek = onSeek,
-                        onStepForward = onStepForward,
-                        onStepBackward = onStepBackward,
-                        pendingLoopStart = pendingLoopStart,
-                        loopRange = activeLoopRange,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .fillMaxHeight(sheetFraction)
-                            .clip(RoundedCornerShape(WindScoreRounded.lg))
-                            .background(Color.White),
-                    )
-                }
             }
-            // 静态键盘 — 模式二下半部分
-            StaticKeyboard(
-                modifier = Modifier.fillMaxWidth().fillMaxHeight(0.28f)
-                    .align(Alignment.BottomCenter)
-                    .clip(RoundedCornerShape(WindScoreRounded.lg))
-                    .alpha(if (showSheetKb) 1f else 0f),
-                pitchLow = session.score.notes.minOf { it.pitch }.coerceIn(21, 108),
-                pitchHigh = session.score.notes.maxOf { it.pitch }.coerceIn(21, 108),
-                pendingPitchesProvider = { targetPitches },
-                heldPitchesProvider = { activePitches },
+
+            // 静态键盘（通过 alpha 动画过渡）
+            val keyboardAlpha by animateFloatAsState(
+                targetValue = if (showSheetKb) 1f else 0f,
+                label = "keyboardAlpha"
             )
-            // 练习结算页（评分结算由下方 overlay 单独处理，避免重复）
-            if (session.finished && scoringPhase != ScoringPhase.RESULT) {
-                ResultScreen(
-                    session = session,
-                    modifier = Modifier.fillMaxSize(),
-                    onReset = { session.reset() },
+            if (keyboardAlpha > 0.01f) {
+                StaticKeyboard(
+                    modifier = Modifier.fillMaxWidth().fillMaxHeight(0.28f)
+                        .align(Alignment.BottomCenter)
+                        .clip(RoundedCornerShape(WindScoreRounded.lg))
+                        .alpha(keyboardAlpha),
+                    pitchLow = session.score.notes.minOf { it.pitch }.coerceIn(21, 108),
+                    pitchHigh = session.score.notes.maxOf { it.pitch }.coerceIn(21, 108),
+                    pendingPitchesProvider = { targetPitches },
+                    heldPitchesProvider = { activePitches },
                 )
             }
+
             // 评分结算覆盖层：覆盖主舞台，显示最终分数 + 回到练习
-            if (scoringPhase == ScoringPhase.RESULT) {
+            AnimatedVisibility(
+                visible = scoringPhase == ScoringPhase.RESULT,
+                enter = fadeIn(animationSpec = tween(durationMillis = 600)),
+                exit = fadeOut(animationSpec = tween(durationMillis = 400))
+            ) {
                 ScoringResultOverlay(
                     session = session,
                     onReturnToPractice = onReturnToPractice,
@@ -891,7 +922,7 @@ private fun StatusCard(session: ScoreSession, modifier: Modifier = Modifier) {
                 color = WindScoreColors.ink.copy(alpha = 0.5f)
             )
             Text(
-                text = if (session.finished) s.finishedAccuracy(session.scorePercent()) else pending,
+                text = if (session.finished) s.performanceComplete else pending,
                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.W500),
                 color = if (session.finished) WindScoreColors.semanticSuccess else WindScoreColors.ink,
                 maxLines = 1,

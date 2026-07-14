@@ -79,7 +79,10 @@ class ScorePlayer(
                 while (isActive && _playing.value && localTick < score.totalTicks) {
                     delay(LOOP_MS)
                     val now = startMark.elapsedNow().inWholeMilliseconds
-                    val dt = (now - lastMs) / 1000.0
+                    var dt = (now - lastMs) / 1000.0
+                    if (dt > 0.1) {
+                        dt = 0.05 // Cap to 50ms to prevent note blasting/skipping during system lags
+                    }
                     lastMs = now
                     localTick += tps * dt * speedMultiplier
                     val tickLong = localTick.toLong()

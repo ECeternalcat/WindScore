@@ -26,25 +26,49 @@ import androidx.compose.ui.unit.sp
  * 字体：figmaSans/figmaMono 为专有字体，此处使用系统默认无衬线 + JetBrains Mono 风格回退，
  * 并按 DESIGN.md 的尺寸/字重/字距精确设置 Typography。
  */
-object WindScoreColors {
-    val primary = Color(0xFF000000)
-    val onPrimary = Color(0xFFFFFFFF)
-    val ink = Color(0xFF000000)
-    val canvas = Color(0xFFFFFFFF)
-    val inverseCanvas = Color(0xFF000000)
-    val inverseInk = Color(0xFFFFFFFF)
-    val onInverseSoft = Color(0xFFFFFFFF)
-    val hairline = Color(0xFFE6E6E6)
-    val hairlineSoft = Color(0xFFF1F1F1)
-    val surfaceSoft = Color(0xFFF7F7F5)
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.SideEffect
 
-    val blockLime = Color(0xFFDCEEB1)
-    val blockLilac = Color(0xFFC5B0F4)
-    val blockCream = Color(0xFFF4ECD6)
-    val blockPink = Color(0xFFEFD4D4)
-    val blockMint = Color(0xFFC8E6CD)
-    val blockCoral = Color(0xFFF3C9B6)
-    val blockNavy = Color(0xFF1F1D3D)
+var isDarkThemeGlobal by mutableStateOf(false)
+
+private val LIGHT_PRIMARY = Color(0xFF000000)
+private val LIGHT_ON_PRIMARY = Color(0xFFFFFFFF)
+private val LIGHT_INK = Color(0xFF000000)
+private val LIGHT_CANVAS = Color(0xFFFFFFFF)
+private val LIGHT_SURFACE_SOFT = Color(0xFFF7F7F5)
+private val LIGHT_HAIRLINE = Color(0xFFE6E6E6)
+private val LIGHT_HAIRLINE_SOFT = Color(0xFFF1F1F1)
+
+private val DARK_PRIMARY = Color(0xFFFFFFFF)
+private val DARK_ON_PRIMARY = Color(0xFF000000)
+private val DARK_INK = Color(0xFFFFFFFF)
+private val DARK_CANVAS = Color(0xFF1E1E1E)
+private val DARK_SURFACE_SOFT = Color(0xFF2D2D2D)
+private val DARK_HAIRLINE = Color(0xFF2E2E2E)
+private val DARK_HAIRLINE_SOFT = Color(0xFF242424)
+
+object WindScoreColors {
+    val primary: Color get() = if (isDarkThemeGlobal) DARK_PRIMARY else LIGHT_PRIMARY
+    val onPrimary: Color get() = if (isDarkThemeGlobal) DARK_ON_PRIMARY else LIGHT_ON_PRIMARY
+    val ink: Color get() = if (isDarkThemeGlobal) DARK_INK else LIGHT_INK
+    val canvas: Color get() = if (isDarkThemeGlobal) DARK_CANVAS else LIGHT_CANVAS
+    val inverseCanvas: Color get() = if (isDarkThemeGlobal) LIGHT_CANVAS else DARK_CANVAS
+    val inverseInk: Color get() = if (isDarkThemeGlobal) LIGHT_INK else DARK_INK
+    val onInverseSoft: Color get() = if (isDarkThemeGlobal) LIGHT_CANVAS else DARK_CANVAS
+    val hairline: Color get() = if (isDarkThemeGlobal) DARK_HAIRLINE else LIGHT_HAIRLINE
+    val hairlineSoft: Color get() = if (isDarkThemeGlobal) DARK_HAIRLINE_SOFT else LIGHT_HAIRLINE_SOFT
+    val surfaceSoft: Color get() = if (isDarkThemeGlobal) DARK_SURFACE_SOFT else LIGHT_SURFACE_SOFT
+
+    val blockLime: Color get() = if (isDarkThemeGlobal) Color(0xFF4C523C) else Color(0xFFDCEEB1)
+    val blockLilac: Color get() = if (isDarkThemeGlobal) Color(0xFF403657) else Color(0xFFC5B0F4)
+    val blockCream: Color get() = if (isDarkThemeGlobal) Color(0xFF524D41) else Color(0xFFF4ECD6)
+    val blockPink: Color get() = if (isDarkThemeGlobal) Color(0xFF5E4E4E) else Color(0xFFEFD4D4)
+    val blockMint: Color get() = if (isDarkThemeGlobal) Color(0xFF3F4D42) else Color(0xFFC8E6CD)
+    val blockCoral: Color get() = if (isDarkThemeGlobal) Color(0xFF57433B) else Color(0xFFF3C9B6)
+    val blockNavy: Color get() = if (isDarkThemeGlobal) Color(0xFFDCDCEB) else Color(0xFF1F1D3D)
 
     val accentMagenta = Color(0xFFFF3D8B)
     val semanticSuccess = Color(0xFF1EA64A)
@@ -164,31 +188,31 @@ private val windScoreTypography = Typography(
 )
 
 private val windScoreLightColors = lightColorScheme(
-    primary = WindScoreColors.primary,
-    onPrimary = WindScoreColors.onPrimary,
-    secondary = WindScoreColors.canvas,
-    onSecondary = WindScoreColors.ink,
-    background = WindScoreColors.canvas,
-    onBackground = WindScoreColors.ink,
-    surface = WindScoreColors.canvas,
-    onSurface = WindScoreColors.ink,
-    surfaceVariant = WindScoreColors.surfaceSoft,
-    onSurfaceVariant = WindScoreColors.ink,
-    outline = WindScoreColors.hairline,
+    primary = LIGHT_PRIMARY,
+    onPrimary = LIGHT_ON_PRIMARY,
+    secondary = LIGHT_CANVAS,
+    onSecondary = LIGHT_INK,
+    background = LIGHT_CANVAS,
+    onBackground = LIGHT_INK,
+    surface = LIGHT_CANVAS,
+    onSurface = LIGHT_INK,
+    surfaceVariant = LIGHT_SURFACE_SOFT,
+    onSurfaceVariant = LIGHT_INK,
+    outline = LIGHT_HAIRLINE,
 )
 
 private val windScoreDarkColors = darkColorScheme(
-    primary = WindScoreColors.onPrimary,
-    onPrimary = WindScoreColors.primary,
-    secondary = WindScoreColors.inverseCanvas,
-    onSecondary = WindScoreColors.inverseInk,
-    background = WindScoreColors.inverseCanvas,
-    onBackground = WindScoreColors.inverseInk,
-    surface = WindScoreColors.inverseCanvas,
-    onSurface = WindScoreColors.inverseInk,
-    surfaceVariant = WindScoreColors.blockNavy,
-    onSurfaceVariant = WindScoreColors.inverseInk,
-    outline = WindScoreColors.onInverseSoft.copy(alpha = 0.3f),
+    primary = DARK_PRIMARY,
+    onPrimary = DARK_ON_PRIMARY,
+    secondary = DARK_CANVAS,
+    onSecondary = DARK_INK,
+    background = DARK_CANVAS,
+    onBackground = DARK_INK,
+    surface = DARK_CANVAS,
+    onSurface = DARK_INK,
+    surfaceVariant = DARK_SURFACE_SOFT,
+    onSurfaceVariant = DARK_INK,
+    outline = DARK_HAIRLINE,
 )
 
 val windScoreShapes = Shapes(
@@ -204,6 +228,9 @@ fun WindScoreTheme(
     darkTheme: Boolean = false,
     content: @Composable () -> Unit,
 ) {
+    SideEffect {
+        isDarkThemeGlobal = darkTheme
+    }
     val colorScheme = if (darkTheme) windScoreDarkColors else windScoreLightColors
     MaterialTheme(
         colorScheme = colorScheme,

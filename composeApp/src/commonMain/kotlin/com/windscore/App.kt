@@ -3,6 +3,22 @@ package com.windscore
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.unit.dp
+import androidx.compose.material3.Icon
+import org.jetbrains.compose.resources.painterResource
+import windscore.composeapp.generated.resources.Res
+import windscore.composeapp.generated.resources.piano_keys_thin
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -22,6 +38,7 @@ import com.windscore.midi.MidiEvent
 import com.windscore.midi.MidiManager
 import com.windscore.ui.PlayerScreen
 import com.windscore.ui.SettingsScreen
+import com.windscore.ui.SettingsDialog
 import com.windscore.ui.WelcomeScreen
 import com.windscore.ui.i18n.AppLanguage
 import com.windscore.ui.i18n.AppStrings
@@ -62,8 +79,21 @@ fun App(
     var toastMessage by remember { mutableStateOf<String?>(null) }
     var running by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    var appConfig by remember { mutableStateOf(com.windscore.core.loadAppConfig()) }
+    val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
+    val isDarkTheme = when (appConfig.themeMode) {
+        com.windscore.core.model.ThemeMode.FOLLOW_SYSTEM -> systemDark
+        com.windscore.core.model.ThemeMode.LIGHT -> false
+        com.windscore.core.model.ThemeMode.DARK -> true
+    }
     val recentScores = remember { mutableStateListOf<Score>() }
     val tr = strings()
+
+    var showSplash by remember { mutableStateOf(true) }
+    LaunchedEffect(Unit) {
+        delay(1000)
+        showSplash = false
+    }
 
     LaunchedEffect(toastMessage) {
         if (toastMessage != null) {
@@ -95,6 +125,9 @@ fun App(
     }
     val player = remember(currentScore) { 
         currentScore?.let { score -> 
+            scope.launch(kotlinx.coroutines.Dispatchers.Default) {
+                synth.start() // Pre-start/warm up the synthesizer in the background
+            }
             ScorePlayer(score, synth, scope).apply {
                 val tick = session?.currentTick ?: 0L
                 if (tick > 0L) {
@@ -320,190 +353,238 @@ fun App(
         scoringPhase = com.windscore.ui.ScoringPhase.SETUP
     }
 
-    WindScoreTheme {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = WindScoreColors.canvas,
-        ) {
-            if (currentScore == null) {
-                WelcomeScreen(
-                    isCompact = isCompact,
-                    recentScores = recentScores,
-                    onScoreClick = { openScore(it) },
-                    onRename = { score, newName ->
-                        val idx = recentScores.indexOfFirst { it.title == score.title && it.totalTicks == score.totalTicks }
-                        if (idx >= 0) {
-                            recentScores[idx] = recentScores[idx].copy(title = newName)
+    WindScoreTheme(darkTheme = isDarkTheme) {
+        Box(Modifier.fillMaxSize()) {
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = WindScoreColors.canvas,
+            ) {
+                Crossfade(
+                targetState = currentScore,
+                modifier = Modifier.fillMaxSize(),
+                label = "welcomeScreenCrossfade"
+            ) { score ->
+                if (score == null) {
+                    WelcomeScreen(
+                        isCompact = isCompact,
+                        recentScores = recentScores,
+                        onScoreClick = { openScore(it) },
+                        onRename = { scoreItem, newName ->
+                            val idx = recentScores.indexOfFirst { it.title == scoreItem.title && it.totalTicks == scoreItem.totalTicks }
+                            if (idx >= 0) {
+                                recentScores[idx] = recentScores[idx].copy(title = newName)
+                                scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                    com.windscore.core.saveRecentScores(recentScores)
+                                }
+                            }
+                        },
+                        onDelete = { scoreItem ->
+                            recentScores.removeAll { it.title == scoreItem.title && it.totalTicks == scoreItem.totalTicks }
                             scope.launch(kotlinx.coroutines.Dispatchers.IO) {
                                 com.windscore.core.saveRecentScores(recentScores)
                             }
+                        },
+                        onLanguageChange = { changeLanguage(it) },
+                        config = appConfig,
+                        onConfigChange = {
+                            appConfig = it
+                            com.windscore.core.saveAppConfig(it)
                         }
-                    },
-                    onDelete = { score ->
-                        recentScores.removeAll { it.title == score.title && it.totalTicks == score.totalTicks }
-                        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                            com.windscore.core.saveRecentScores(recentScores)
+                    )
+                } else {
+                    val s = session ?: return@Crossfade
+
+                    // 播放中实时同步进度到练习 Session，并在暂停时做最终同步确保进度对齐
+                    // 评分进行中时跳过：避免把练习 Session 进度重置，干扰评分主舞台
+                    LaunchedEffect(isPlaying, playTick) {
+                        if (scoringSession != null) return@LaunchedEffect
+                        if (isPlaying) {
+                            s.isHostedEnabled = false
+                            s.seekTo(playTick)
+                        } else {
+                            s.isHostedEnabled = true
+                            s.seekTo(playTick)
                         }
-                    },
-                    onLanguageChange = { changeLanguage(it) },
-                )
-            } else {
-                val s = session ?: return@Surface
-
-                // 播放中实时同步进度到练习 Session，并在暂停时做最终同步确保进度对齐
-                // 评分进行中时跳过：避免把练习 Session 进度重置，干扰评分主舞台
-                LaunchedEffect(isPlaying, playTick) {
-                    if (scoringSession != null) return@LaunchedEffect
-                    if (isPlaying) {
-                        s.isHostedEnabled = false
-                        s.seekTo(playTick)
-                    } else {
-                        s.isHostedEnabled = true
-                        s.seekTo(playTick)
                     }
-                }
 
-                // 评分完成自动进入结算
-                LaunchedEffect(scoringSession?.finished) {
-                    val sc = scoringSession
-                    if (sc != null && sc.finished && scoringPhase == com.windscore.ui.ScoringPhase.ACTIVE) {
-                        scoringPhase = com.windscore.ui.ScoringPhase.RESULT
+                    // 评分完成自动进入结算
+                    LaunchedEffect(scoringSession?.finished) {
+                        val sc = scoringSession
+                        if (sc != null && sc.finished && scoringPhase == com.windscore.ui.ScoringPhase.ACTIVE) {
+                            delay(1000)
+                            scoringPhase = com.windscore.ui.ScoringPhase.RESULT
+                        }
                     }
-                }
 
-                PlayerScreen(
-                    score = s.score,
-                    session = s,
-                    isCompact = isCompact,
-                    running = running,
-                    practiceMode = practiceMode,
-                    viewMode = viewMode,
-                    pendingLoopStart = pendingLoopStart,
-                    player = player,
-                    playTick = playTick,
-                    isPlaying = isPlaying,
-                    playingPitches = playingPitches,
-                    renderMs = renderMs,
-                    spacePressed = spacePressed,
-                    countdownEnabled = countdownEnabled,
-                    onCountdownEnabledChange = { countdownEnabled = it },
-                    metronomeVol = metronomeVol,
-                    onMetronomeVolChange = { metronomeVol = it },
-                    playbackSpeed = playbackSpeed,
-                    onPlaybackSpeedChange = { playbackSpeed = it },
-                    onSeek = { tick ->
-                        when (loopSetupState) {
-                            LoopSetupState.WAITING_FOR_START -> {
-                                pendingLoopStart = tick
-                                loopSetupState = LoopSetupState.WAITING_FOR_END
-                                toastMessage = tr.loopStartAdded
-                            }
-                            LoopSetupState.WAITING_FOR_END -> {
-                                val start = pendingLoopStart ?: 0L
-                                s.setLoop(start, tick)
-                                val range = if (start < tick) start..tick else tick..start
-                                activeLoopRange = range
-                                player?.loopRange = range
-                                pendingLoopStart = null
-                                loopSetupState = LoopSetupState.IDLE
-                                toastMessage = tr.loopSetDone
-                                player?.seekTo(range.first)
-                                s.seekTo(range.first)
-                            }
-                            LoopSetupState.WAITING_FOR_NEW_START -> {
-                                val end = s.loopRange.last
-                                s.setLoop(tick, end)
-                                val range = if (tick < end) tick..end else end..tick
-                                activeLoopRange = range
-                                player?.loopRange = range
-                                loopSetupState = LoopSetupState.IDLE
-                                toastMessage = tr.settingDone
-                                player?.seekTo(range.first)
-                                s.seekTo(range.first)
-                            }
-                            LoopSetupState.WAITING_FOR_NEW_END -> {
-                                val start = s.loopRange.first
-                                s.setLoop(start, tick)
-                                val range = if (start < tick) start..tick else tick..start
-                                activeLoopRange = range
-                                player?.loopRange = range
-                                loopSetupState = LoopSetupState.IDLE
-                                toastMessage = tr.settingDone
-                                player?.seekTo(range.first)
-                                s.seekTo(range.first)
-                            }
-                            LoopSetupState.IDLE -> {
-                                if (activeLoopRange != null) {
-                                    toastMessage = tr.closeLoopFirst
-                                } else {
-                                    player?.seekTo(tick)
-                                    s.seekTo(tick)
+                    PlayerScreen(
+                        score = s.score,
+                        session = s,
+                        isCompact = isCompact,
+                        running = running,
+                        practiceMode = practiceMode,
+                        viewMode = viewMode,
+                        pendingLoopStart = pendingLoopStart,
+                        player = player,
+                        playTick = playTick,
+                        isPlaying = isPlaying,
+                        playingPitches = playingPitches,
+                        renderMs = renderMs,
+                        spacePressed = spacePressed,
+                        countdownEnabled = countdownEnabled,
+                        onCountdownEnabledChange = { countdownEnabled = it },
+                        metronomeVol = metronomeVol,
+                        onMetronomeVolChange = { metronomeVol = it },
+                        playbackSpeed = playbackSpeed,
+                        onPlaybackSpeedChange = { playbackSpeed = it },
+                        onSeek = { tick ->
+                            when (loopSetupState) {
+                                LoopSetupState.WAITING_FOR_START -> {
+                                    pendingLoopStart = tick
+                                    loopSetupState = LoopSetupState.WAITING_FOR_END
+                                    toastMessage = tr.loopStartAdded
+                                }
+                                LoopSetupState.WAITING_FOR_END -> {
+                                    val start = pendingLoopStart ?: 0L
+                                    s.setLoop(start, tick)
+                                    val range = if (start < tick) start..tick else tick..start
+                                    activeLoopRange = range
+                                    player?.loopRange = range
+                                    pendingLoopStart = null
+                                    loopSetupState = LoopSetupState.IDLE
+                                    toastMessage = tr.loopSetDone
+                                    player?.seekTo(range.first)
+                                    s.seekTo(range.first)
+                                }
+                                LoopSetupState.WAITING_FOR_NEW_START -> {
+                                    val end = s.loopRange.last
+                                    s.setLoop(tick, end)
+                                    val range = if (tick < end) tick..end else end..tick
+                                    activeLoopRange = range
+                                    player?.loopRange = range
+                                    loopSetupState = LoopSetupState.IDLE
+                                    toastMessage = tr.settingDone
+                                    player?.seekTo(range.first)
+                                    s.seekTo(range.first)
+                                }
+                                LoopSetupState.WAITING_FOR_NEW_END -> {
+                                    val start = s.loopRange.first
+                                    s.setLoop(start, tick)
+                                    val range = if (start < tick) start..tick else tick..start
+                                    activeLoopRange = range
+                                    player?.loopRange = range
+                                    loopSetupState = LoopSetupState.IDLE
+                                    toastMessage = tr.settingDone
+                                    player?.seekTo(range.first)
+                                    s.seekTo(range.first)
+                                }
+                                LoopSetupState.IDLE -> {
+                                    if (activeLoopRange != null) {
+                                        toastMessage = tr.closeLoopFirst
+                                    } else {
+                                        player?.seekTo(tick)
+                                        s.seekTo(tick)
+                                    }
                                 }
                             }
-                        }
-                    },
-                    onStepForward = {
-                        player?.stepForward()
-                        s.stepForward()
-                    },
-                    onStepBackward = {
-                        player?.stepBackward()
-                        s.stepBackward()
-                    },
-                    onBack = { closeScore() },
-                    onToggleMidi = {
-                        running = !running
-                    },
-                    onReset = { resetSession() },
-                    onModeChange = { setPracticeMode(it) },
-                    onViewChange = { viewMode = it },
-                    onLoopStart = {
-                        if (activeLoopRange != null) {
-                            loopSetupState = LoopSetupState.WAITING_FOR_NEW_START
-                            toastMessage = tr.clickNewStart
-                        } else {
-                            loopSetupState = LoopSetupState.WAITING_FOR_START
-                            toastMessage = tr.clickStartPos
-                        }
-                    },
-                    onLoopEnd = {
-                        if (activeLoopRange != null) {
-                            loopSetupState = LoopSetupState.WAITING_FOR_NEW_END
-                            toastMessage = tr.clickNewEnd
-                        }
-                    },
-                    onClearLoop = {
-                        s.clearLoop()
-                        activeLoopRange = null
-                        player?.loopRange = null
-                        pendingLoopStart = null
-                        loopSetupState = LoopSetupState.IDLE
-                    },
-                    onTogglePlay = {
-                        if (!isPlaying) {
-                            val cursorTick = if (playTick > 0) playTick else s.currentTick
-                            player?.seekTo(cursorTick)
-                        }
-                        player?.toggle()
-                    },
-                    onStopPlay = { player?.stop() },
-                    onRenderTime = { renderMs = it },
-                    onShowSettings = { showSettings = true },
-                    toastMessage = toastMessage,
-                    activeLoopRange = activeLoopRange,
-                    scoringSession = scoringSession,
-                    scoringPhase = scoringPhase,
-                    onStartScoring = { startScoring(it) },
-                    onExitScoring = { exitScoring() },
-                )
+                        },
+                        onStepForward = {
+                            player?.stepForward()
+                            s.stepForward()
+                        },
+                        onStepBackward = {
+                            player?.stepBackward()
+                            s.stepBackward()
+                        },
+                        onBack = { closeScore() },
+                        onToggleMidi = {
+                            running = !running
+                        },
+                        onReset = { resetSession() },
+                        onModeChange = { setPracticeMode(it) },
+                        onViewChange = { viewMode = it },
+                        onLoopStart = {
+                            if (activeLoopRange != null) {
+                                loopSetupState = LoopSetupState.WAITING_FOR_NEW_START
+                                toastMessage = tr.clickNewStart
+                            } else {
+                                loopSetupState = LoopSetupState.WAITING_FOR_START
+                                toastMessage = tr.clickStartPos
+                            }
+                        },
+                        onLoopEnd = {
+                            if (activeLoopRange != null) {
+                                loopSetupState = LoopSetupState.WAITING_FOR_NEW_END
+                                toastMessage = tr.clickNewEnd
+                            }
+                        },
+                        onClearLoop = {
+                            s.clearLoop()
+                            activeLoopRange = null
+                            player?.loopRange = null
+                            pendingLoopStart = null
+                            loopSetupState = LoopSetupState.IDLE
+                        },
+                        onTogglePlay = {
+                            if (!isPlaying) {
+                                val cursorTick = if (playTick > 0) playTick else s.currentTick
+                                player?.seekTo(cursorTick)
+                            }
+                            player?.toggle()
+                        },
+                        onStopPlay = { player?.stop() },
+                        onRenderTime = { renderMs = it },
+                        onShowSettings = { showSettings = true },
+                        toastMessage = toastMessage,
+                        activeLoopRange = activeLoopRange,
+                        scoringSession = scoringSession,
+                        scoringPhase = scoringPhase,
+                        onStartScoring = { startScoring(it) },
+                        onExitScoring = { exitScoring() },
+                        appConfig = appConfig,
+                    )
 
-                if (showSettings) {
-                    Surface(
-                        modifier = Modifier.fillMaxSize(),
-                        color = WindScoreColors.canvas,
+                    SettingsDialog(
+                        visible = showSettings,
+                        onDismiss = { showSettings = false }
                     ) {
-                        SettingsScreen(onBack = { showSettings = false }, onLanguageChange = { changeLanguage(it) })
+                        WindScoreTheme(darkTheme = isDarkTheme) {
+                            Surface(
+                                modifier = Modifier.fillMaxSize(),
+                                color = WindScoreColors.canvas,
+                            ) {
+                                SettingsScreen(
+                                    onBack = { showSettings = false },
+                                    onLanguageChange = { changeLanguage(it) },
+                                    config = appConfig,
+                                    onConfigChange = {
+                                        appConfig = it
+                                        com.windscore.core.saveAppConfig(it)
+                                    }
+                                )
+                            }
+                        }
                     }
+                }
+            }
+        }
+        // Splash Screen overlay
+        AnimatedVisibility(
+            visible = showSplash,
+                enter = fadeIn(),
+                exit = fadeOut(animationSpec = tween(durationMillis = 400))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(WindScoreColors.canvas),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(Res.drawable.piano_keys_thin),
+                        contentDescription = "Loading",
+                        tint = WindScoreColors.ink,
+                        modifier = Modifier.size(64.dp)
+                    )
                 }
             }
         }

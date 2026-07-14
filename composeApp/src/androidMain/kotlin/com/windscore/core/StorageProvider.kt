@@ -44,6 +44,14 @@ actual fun saveScoreSettings(scoreId: String, settings: com.windscore.core.model
     SettingsStorage.save(scoreId, settings)
 }
 
+actual fun loadAppConfig(): com.windscore.core.model.AppConfig {
+    return ConfigStorage.load()
+}
+
+actual fun saveAppConfig(config: com.windscore.core.model.AppConfig) {
+    ConfigStorage.save(config)
+}
+
 actual fun loadAppLanguage(default: String): String = LangStorage.load(default)
 
 actual fun saveAppLanguage(code: String) {

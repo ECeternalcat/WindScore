@@ -7,6 +7,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.windscore.ui.theme.WindScoreColors
@@ -41,9 +42,10 @@ fun PillButton(
         PillButtonStyle.PRIMARY -> null
         PillButtonStyle.SECONDARY -> BorderStroke(1.dp, WindScoreColors.hairline)
     }
+    val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     Button(
         onClick = onClick,
-        modifier = modifier.height(40.dp),
+        modifier = modifier.bounceClick(interactionSource).height(40.dp),
         enabled = enabled,
         shape = RoundedCornerShape(WindScoreRounded.pill),
         border = border,
@@ -53,6 +55,7 @@ fun PillButton(
             disabledContainerColor = disabledContainer,
             disabledContentColor = disabledContent,
         ),
+        interactionSource = interactionSource,
         contentPadding = contentPadding,
     ) {
         content()

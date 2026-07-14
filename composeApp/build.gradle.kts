@@ -74,6 +74,9 @@ kotlin {
                 implementation("org.openjfx:javafx-swing:23:$jfx")
                 implementation("org.openjfx:javafx-media:23:$jfx")
                 implementation("org.openjfx:javafx-web:23:$jfx")
+                // JNA for native Windows Dark Mode Title Bar
+                implementation("net.java.dev.jna:jna:5.14.0")
+                implementation("net.java.dev.jna:jna-platform:5.14.0")
             }
         }
     }

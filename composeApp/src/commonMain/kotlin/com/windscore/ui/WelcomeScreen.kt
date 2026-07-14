@@ -42,7 +42,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import com.windscore.core.model.AppConfig
+import com.windscore.core.model.ThemeMode
+import com.windscore.ViewMode
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.graphics.Color
@@ -59,6 +64,7 @@ import com.windscore.ui.i18n.strings
 import com.windscore.ui.theme.WindScoreColors
 import com.windscore.ui.theme.WindScoreRounded
 import com.windscore.ui.theme.WindScoreSpacing
+import com.windscore.ui.theme.WindScoreTheme
 import org.jetbrains.compose.resources.DrawableResource
 import org.jetbrains.compose.resources.painterResource
 import windscore.composeapp.generated.resources.Res
@@ -81,6 +87,8 @@ fun WelcomeScreen(
     onRename: (Score, String) -> Unit,
     onDelete: (Score) -> Unit,
     onLanguageChange: (AppLanguage) -> Unit = {},
+    config: AppConfig = com.windscore.core.loadAppConfig(),
+    onConfigChange: (AppConfig) -> Unit = {},
 ) {
     var showSettings by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
@@ -91,6 +99,13 @@ fun WelcomeScreen(
     var renamingScore by remember { mutableStateOf<Score?>(null) }
     var renameInput by remember { mutableStateOf("") }
 
+    val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
+    val isDarkTheme = when (config.themeMode) {
+        ThemeMode.FOLLOW_SYSTEM -> systemDark
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+    }
+
     Column(
         Modifier.fillMaxSize()
             .clickable(
@@ -100,9 +115,7 @@ fun WelcomeScreen(
             ),
     ) {
         WelcomeTopBar()
-        if (showSettings) {
-            SettingsScreen(onBack = { showSettings = false }, modifier = Modifier.weight(1f), onLanguageChange = onLanguageChange)
-        } else if (isCompact) {
+        if (isCompact) {
             ScoreListBody(
                 recentScores = recentScores,
                 onScoreClick = onScoreClick,
@@ -120,6 +133,25 @@ fun WelcomeScreen(
                 onDelete = { pendingDelete = it },
                 modifier = Modifier.weight(1f),
             )
+        }
+    }
+
+    SettingsDialog(
+        visible = showSettings,
+        onDismiss = { showSettings = false }
+    ) {
+        WindScoreTheme(darkTheme = isDarkTheme) {
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = WindScoreColors.canvas,
+            ) {
+                SettingsScreen(
+                    onBack = { showSettings = false },
+                    onLanguageChange = onLanguageChange,
+                    config = config,
+                    onConfigChange = onConfigChange
+                )
+            }
         }
     }
 
@@ -265,8 +297,29 @@ private fun ActionButton(icon: DrawableResource, label: String, onClick: () -> U
 }
 
 @Composable
-fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier, onLanguageChange: (AppLanguage) -> Unit = {}) {
+fun SettingsScreen(
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    onLanguageChange: (AppLanguage) -> Unit = {},
+    config: AppConfig = com.windscore.core.loadAppConfig(),
+    onConfigChange: (AppConfig) -> Unit = {}
+) {
     val s = strings()
+    val isZh = AppStrings.language == AppLanguage.CHINESE
+    val isJa = AppStrings.language == AppLanguage.JAPANESE
+
+    val themeLabel = if (isZh) "界面主题" else if (isJa) "UIテーマ" else "UI Theme"
+    val followSystemLabel = if (isZh) "跟随系统" else if (isJa) "システム" else "System"
+    val lightLabel = if (isZh) "浅色" else if (isJa) "ライト" else "Light"
+    val darkLabel = if (isZh) "深色" else if (isJa) "ダーク" else "Dark"
+
+    val defaultViewLabel = if (isZh) "默认视图" else if (isJa) "デフォルトビュー" else "Default View"
+    val viewRollLabel = s.pianoRoll
+    val viewSheetKbLabel = s.readSheet
+    val viewSheetFullLabel = s.viewSheet
+
+    val defaultPreBeatLabel = if (isZh) "默认预备拍" else if (isJa) "デフォルトカウント" else "Default Pre-beat"
+
     Column(modifier = modifier.fillMaxSize().padding(WindScoreSpacing.xxl)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
@@ -280,56 +333,168 @@ fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier, onLanguage
         }
         Spacer(Modifier.height(WindScoreSpacing.xl))
 
-        // 语言 / Language
-        Surface(
-            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(WindScoreRounded.lg)),
-            color = WindScoreColors.surfaceSoft,
-            shape = RoundedCornerShape(WindScoreRounded.lg),
+        Column(
+            modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.md)
         ) {
-            Column(modifier = Modifier.padding(WindScoreSpacing.lg), verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.sm)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(
-                        modifier = Modifier.size(40.dp).clip(RoundedCornerShape(WindScoreRounded.md)).background(WindScoreColors.blockLilac),
-                        contentAlignment = Alignment.Center,
+            // 语言 / Language
+            Surface(
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(WindScoreRounded.lg)),
+                color = WindScoreColors.surfaceSoft,
+                shape = RoundedCornerShape(WindScoreRounded.lg),
+            ) {
+                Column(modifier = Modifier.padding(WindScoreSpacing.lg), verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.sm)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text("Aあ", style = MaterialTheme.typography.titleMedium, color = WindScoreColors.ink)
+                        Box(
+                            modifier = Modifier.size(40.dp).clip(RoundedCornerShape(WindScoreRounded.md)).background(WindScoreColors.blockLilac),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text("Aあ", style = MaterialTheme.typography.titleMedium, color = WindScoreColors.ink)
+                        }
+                        Spacer(Modifier.width(WindScoreSpacing.md))
+                        Text(s.language, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.W500), color = WindScoreColors.ink)
                     }
-                    Spacer(Modifier.width(WindScoreSpacing.md))
-                    Text(s.language, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.W500), color = WindScoreColors.ink)
-                }
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)) {
-                    AppLanguage.entries.forEach { lang ->
-                        PillToggle(
-                            selected = AppStrings.language == lang,
-                            onClick = { onLanguageChange(lang) },
-                            label = lang.nativeName,
-                            modifier = Modifier.weight(1f),
-                        )
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)) {
+                        AppLanguage.entries.forEach { lang ->
+                            PillToggle(
+                                selected = AppStrings.language == lang,
+                                onClick = { onLanguageChange(lang) },
+                                label = lang.nativeName,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
                     }
                 }
             }
-        }
-        Spacer(Modifier.height(WindScoreSpacing.md))
 
-        Surface(
-            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(WindScoreRounded.lg)).clickable { openUrl(FEEDBACK_URL) },
-            color = WindScoreColors.surfaceSoft,
-            shape = RoundedCornerShape(WindScoreRounded.lg),
-        ) {
-            Row(modifier = Modifier.padding(WindScoreSpacing.lg), verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier.size(40.dp).clip(RoundedCornerShape(WindScoreRounded.md)).background(WindScoreColors.blockPink),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(painterResource(Res.drawable.bug_thin), null, Modifier.size(22.dp), WindScoreColors.ink)
+            // 界面主题 / UI Theme
+            Surface(
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(WindScoreRounded.lg)),
+                color = WindScoreColors.surfaceSoft,
+                shape = RoundedCornerShape(WindScoreRounded.lg),
+            ) {
+                Column(modifier = Modifier.padding(WindScoreSpacing.lg), verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.sm)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            modifier = Modifier.size(40.dp).clip(RoundedCornerShape(WindScoreRounded.md)).background(WindScoreColors.blockMint),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text("🌓", style = MaterialTheme.typography.titleMedium, color = WindScoreColors.ink)
+                        }
+                        Spacer(Modifier.width(WindScoreSpacing.md))
+                        Text(themeLabel, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.W500), color = WindScoreColors.ink)
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)) {
+                        listOf(
+                            ThemeMode.FOLLOW_SYSTEM to followSystemLabel,
+                            ThemeMode.LIGHT to lightLabel,
+                            ThemeMode.DARK to darkLabel
+                        ).forEach { (mode, label) ->
+                            PillToggle(
+                                selected = config.themeMode == mode,
+                                onClick = { onConfigChange(config.copy(themeMode = mode)) },
+                                label = label,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
                 }
-                Spacer(Modifier.width(WindScoreSpacing.md))
-                Column(Modifier.weight(1f)) {
-                    Text(s.feedback, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.W500), color = WindScoreColors.ink)
-                    Text(s.feedbackDesc, style = MaterialTheme.typography.bodySmall, color = WindScoreColors.ink)
+            }
+
+            // 默认视图 / Default View Mode
+            Surface(
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(WindScoreRounded.lg)),
+                color = WindScoreColors.surfaceSoft,
+                shape = RoundedCornerShape(WindScoreRounded.lg),
+            ) {
+                Column(modifier = Modifier.padding(WindScoreSpacing.lg), verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.sm)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            modifier = Modifier.size(40.dp).clip(RoundedCornerShape(WindScoreRounded.md)).background(WindScoreColors.blockLime),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(painterResource(Res.drawable.music_notes_thin), null, Modifier.size(20.dp), WindScoreColors.ink)
+                        }
+                        Spacer(Modifier.width(WindScoreSpacing.md))
+                        Text(defaultViewLabel, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.W500), color = WindScoreColors.ink)
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)) {
+                        listOf(
+                            ViewMode.ROLL to viewRollLabel,
+                            ViewMode.SHEET_KEYBOARD to viewSheetKbLabel,
+                            ViewMode.SHEET_FULL to viewSheetFullLabel
+                        ).forEach { (mode, label) ->
+                            PillToggle(
+                                selected = config.defaultViewMode == mode,
+                                onClick = { onConfigChange(config.copy(defaultViewMode = mode)) },
+                                label = label,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 默认预备拍秒数 / Default Pre-beat
+            Surface(
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(WindScoreRounded.lg)),
+                color = WindScoreColors.surfaceSoft,
+                shape = RoundedCornerShape(WindScoreRounded.lg),
+            ) {
+                Column(modifier = Modifier.padding(WindScoreSpacing.lg), verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.sm)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            modifier = Modifier.size(40.dp).clip(RoundedCornerShape(WindScoreRounded.md)).background(WindScoreColors.blockCoral),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(painterResource(Res.drawable.clock_thin), null, Modifier.size(20.dp), WindScoreColors.ink)
+                        }
+                        Spacer(Modifier.width(WindScoreSpacing.md))
+                        Text(defaultPreBeatLabel, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.W500), color = WindScoreColors.ink)
+                    }
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)) {
+                        listOf(0, 1, 2, 3, 4, 5).forEach { seconds ->
+                            PillToggle(
+                                selected = config.defaultCountdownSeconds == seconds,
+                                onClick = { onConfigChange(config.copy(defaultCountdownSeconds = seconds)) },
+                                label = "${seconds}s",
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 反馈 / Feedback
+            Surface(
+                modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(WindScoreRounded.lg)).clickable { openUrl(FEEDBACK_URL) },
+                color = WindScoreColors.surfaceSoft,
+                shape = RoundedCornerShape(WindScoreRounded.lg),
+            ) {
+                Row(modifier = Modifier.padding(WindScoreSpacing.lg), verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier.size(40.dp).clip(RoundedCornerShape(WindScoreRounded.md)).background(WindScoreColors.blockPink),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(painterResource(Res.drawable.bug_thin), null, Modifier.size(22.dp), WindScoreColors.ink)
+                    }
+                    Spacer(Modifier.width(WindScoreSpacing.md))
+                    Column(Modifier.weight(1f)) {
+                        Text(s.feedback, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.W500), color = WindScoreColors.ink)
+                        Text(s.feedbackDesc, style = MaterialTheme.typography.bodySmall, color = WindScoreColors.ink)
+                    }
                 }
             }
         }

@@ -22,18 +22,18 @@ import com.windscore.core.model.TrackType
 import com.windscore.ui.theme.WindScoreColors
 
 // 左手：薄荷绿（冷 pastel）
-private val LEFT_HIT = WindScoreColors.blockMint
-private val LEFT_UNHIT = Color(0xFF9DC9A4)
+private val LEFT_HIT get() = WindScoreColors.blockMint
+private val LEFT_UNHIT get() = if (com.windscore.ui.theme.isDarkThemeGlobal) Color(0xFF5D7D62) else Color(0xFF9DC9A4)
 // 右手：珊瑚橙（暖 pastel）
-private val RIGHT_HIT = WindScoreColors.blockCoral
-private val RIGHT_UNHIT = Color(0xFFD49A7E)
+private val RIGHT_HIT get() = WindScoreColors.blockCoral
+private val RIGHT_UNHIT get() = if (com.windscore.ui.theme.isDarkThemeGlobal) Color(0xFF8C6654) else Color(0xFFD49A7E)
 
-private val BG_TOP = WindScoreColors.canvas
-private val BG_BOTTOM = WindScoreColors.surfaceSoft
-private val HIT_LINE = WindScoreColors.ink
-private val WHITE_KEY = WindScoreColors.canvas
-private val BLACK_KEY = WindScoreColors.inverseCanvas
-private val GRID = WindScoreColors.hairline.copy(alpha = 0.5f)
+private val BG_TOP get() = WindScoreColors.canvas
+private val BG_BOTTOM get() = WindScoreColors.surfaceSoft
+private val HIT_LINE get() = WindScoreColors.ink
+private val WHITE_KEY get() = WindScoreColors.canvas
+private val BLACK_KEY get() = WindScoreColors.inverseCanvas
+private val GRID get() = WindScoreColors.hairline.copy(alpha = 0.5f)
 
 private val BLACK_KEY_OFFSETS = setOf(1, 3, 6, 8, 10)
 

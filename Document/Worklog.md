@@ -400,7 +400,58 @@ Addressed the second code audit (`Document/Audit_20260714.md`): fixed **9 of 13*
   - **Developer Note**: Use the `sidebarTab == SidebarTab.SCORING` check inside [PlayerScreen.kt](file:///c:/A1/Code/WindScore/composeApp/src/commonMain/kotlin/com/windscore/ui/PlayerScreen.kt) or propagate it to apply any further restrictions/disallowed features (e.g., keyboard shortcuts, seeking, adjustments) in scoring mode.
 
 ### Bug Fixes
+- **Scoring Tab Button Text Clipping**:
+  - **Bug**: In English mode, the bottom portion of the letter 'g' in the "Scoring" tab button text was clipped/cut off.
+  - **Cause**: M3 `Button` defaults to a larger vertical content padding which, when constrained to a fixed `40.dp` height, left insufficient room for descending letter glyphs.
+  - **Solution**: Explicitly set a smaller vertical content padding (`contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)`) for both the "Practice" and "Scoring" bottom tab buttons inside [PlayerScreen.kt](file:///c:/A1/Code/WindScore/composeApp/src/commonMain/kotlin/com/windscore/ui/PlayerScreen.kt), providing sufficient vertical space to prevent text clipping.
+- **Audio Synthesizer Lag & Note Blasting**:
+  - **Bug**: Sometimes clicking play right after loading froze/lagged for 1+ seconds with the cursor moving silently, followed by a blast of all notes at once when the audio output resumed.
+  - **Cause**: Starting the synthesizer (audio thread/device init) occurred synchronously when play was triggered, blocking either the UI/player thread, and generating large elapsed time deltas `dt` which forced the playback loop to jump ahead and play all missed notes instantly.
+  - **Solution**: (1) Pre-start (warm up) the synthesizer asynchronously in [App.kt](file:///c:/A1/Code/WindScore/composeApp/src/commonMain/kotlin/com/windscore/App.kt) as soon as `player` is initialized (on score load) using `scope.launch(Dispatchers.Default)`. (2) Capped the time step delta `dt` in [ScorePlayer.kt](file:///c:/A1/Code/WindScore/composeApp/src/commonMain/kotlin/com/windscore/core/engine/ScorePlayer.kt) to a maximum of `0.1` seconds, preventing progress skipping or note blasting during any system lag.
 - **Loop Settings Serialization Issue**:
   - **Bug**: When a loop was deleted, exiting the score and opening it again caused a yellow cursor representing the loop to appear at the beginning of the sheet (tick `0L..totalTicks`), and clicks on the score prompted the user to turn off loop.
   - **Cause**: The serialization settings fallback logic in `LaunchedEffect` and `closeScore()` used `pendingLoopStart.takeIf { !activeSession.isLoopActive } ?: activeSession.loopRange?.first` which evaluated to `0L` when loop was inactive (since `loopRange` returns `0L..totalTicks` by default when inactive).
   - **Solution**: Updated loop settings persistence inside [App.kt](file:///c:/A1/Code/WindScore/composeApp/src/commonMain/kotlin/com/windscore/App.kt) to strictly save `loopStartTick = if (activeSession.isLoopActive) activeSession.loopRange.first else pendingLoopStart` and `loopEndTick = if (activeSession.isLoopActive) activeSession.loopRange.last else null`, preventing any default fallback to `0L` and `totalTicks` when the loop is inactive.
+
+- **Elegant Launch Splash Screen Mask**:
+  - Implemented a theme-aware startup Splash screen in [App.kt](file:///c:/A1/Code/WindScore/composeApp/src/commonMain/kotlin/com/windscore/App.kt) that instantly matches the active light or dark theme background (`WindScoreColors.canvas`).
+  - Added a centered classic piano keys icon (`piano_keys_thin`) to mask all underlying JRE/AWT startup window state shifts, layout initialization, and MIDI manager loading processes.
+  - Automatically transitions to the main `WelcomeScreen` using a smooth 400ms fade-out animation after exactly 1 second.
+## Phase 7: Global Application Settings & UI Dark Theme
+- **AppConfig Data Structure**:
+  - Defined serializable `AppConfig` class in [AppConfig.kt](file:///c:/A1/Code/WindScore/composeApp/src/commonMain/kotlin/com/windscore/core/model/AppConfig.kt) supporting UI Night Mode (Follow System, Light, Dark), Default View Mode (Piano Roll, Sheet Keyboard, Sheet Full), and Default Pre-beat Countdown seconds.
+  - Implemented thread-safe `ConfigStorage` JSON serialization helper in [ConfigStorage.kt](file:///c:/A1/Code/WindScore/composeApp/src/jvmShared/kotlin/com/windscore/core/ConfigStorage.kt) to load/save `app_config.json` inside the platform application storage directory.
+- **Compile-Compatible Dynamic Colors Architecture**:
+  - **Issue**: `WindScoreColors` properties were defined as static constants, bypassing the Compose theme. Refactoring them to `@Composable` properties caused compilation errors because they were read inside non-composable lambdas (like `Canvas { ... }` drawing blocks in `PianoRoll.kt` and `StaticKeyboard.kt`).
+  - **Solution**: Defined a global `var isDarkThemeGlobal by mutableStateOf(false)` state tracker. Kept `WindScoreColors` properties as regular Kotlin getters (non-composable) that read `isDarkThemeGlobal`, triggering recomposition in Composable contexts and redraw invalidation in drawing contexts. Updates `isDarkThemeGlobal` inside `WindScoreTheme` using a `SideEffect`.
+- **Theme Mode & System Dark Mode Tracking**:
+  - Leveraged Compose's `isSystemInDarkTheme()` to detect the OS system dark state on Android and Desktop.
+  - Wired `appConfig` state dynamically to `WindScoreTheme(darkTheme = isDarkTheme)` inside [App.kt](file:///c:/A1/Code/WindScore/composeApp/src/commonMain/kotlin/com/windscore/App.kt), enabling instant dark theme switching.
+- **Global Settings Fallback**:
+  - Updated [SettingsStorage.kt](file:///c:/A1/Code/WindScore/composeApp/src/jvmShared/kotlin/com/windscore/core/SettingsStorage.kt) to check global config defaults (default view mode, pre-beat enable status) when initializing settings for a brand-new score.
+  - Updated countdown pre-beat playback loops in [PlayerScreen.kt](file:///c:/A1/Code/WindScore/composeApp/src/commonMain/kotlin/com/windscore/ui/PlayerScreen.kt) to use `appConfig.defaultCountdownSeconds` dynamically.
+- **Consistent Platform Settings Dialog & Context Theme Wrapping**:
+  - **Issue**: Clicking the settings button on the Welcome screen still showed the inline full-screen view on desktop instead of a standalone dialog window. In addition, opening the settings dialog from the player screen flashed the default light theme momentarily because JVM `DialogWindow` creates a separate window context root that bypasses the parent's `WindScoreTheme`.
+  - **Solution**: Wrapped the Welcome screen's settings button handler to call the platform-aware `SettingsDialog` instead of inline rendering. Wrapped the standalone settings dialog content in both [WelcomeScreen.kt](file:///c:/A1/Code/WindScore/composeApp/src/commonMain/kotlin/com/windscore/ui/WelcomeScreen.kt) and [App.kt](file:///c:/A1/Code/WindScore/composeApp/src/commonMain/kotlin/com/windscore/App.kt) inside `WindScoreTheme(darkTheme = isDarkTheme)`, ensuring correct theme propagation and instant dark mode rendering in separate Swing windows.
+- **UI Settings Panel**:
+  - Expanded [SettingsScreen](file:///c:/A1/Code/WindScore/composeApp/src/commonMain/kotlin/com/windscore/ui/WelcomeScreen.kt) with card selections for UI Theme, Default View Mode, and Default Pre-beat seconds (0s - 5s).
+  - Used scrollable Column layout to fit and display nicely on both desktop dialog windows and mobile screens.
+
+## Phase 6: Concise UI Animations System
+- **Bounce Click Micro-Animation**:
+  - Implemented `Modifier.bounceClick` extension in [ModifierExtensions.kt](file:///c:/A1/Code/WindScore/composeApp/src/commonMain/kotlin/com/windscore/ui/components/ModifierExtensions.kt) using Compose spring physics.
+  - Applied the bounce click scale-bounce animation to all circular icon buttons, custom switches, and pill button/toggles inside [CustomComponents.kt](file:///c:/A1/Code/WindScore/composeApp/src/commonMain/kotlin/com/windscore/ui/components/CustomComponents.kt) and [PillButtons.kt](file:///c:/A1/Code/WindScore/composeApp/src/commonMain/kotlin/com/windscore/ui/components/PillButtons.kt).
+- **Smooth MainStage View Switcher**:
+  - Replaced the abrupt alpha visibility logic in [PlayerScreen.kt](file:///c:/A1/Code/WindScore/composeApp/src/commonMain/kotlin/com/windscore/ui/PlayerScreen.kt) with a smooth `Crossfade` animation between `PianoRoll` and `NativeSheetView`.
+  - Shared `sheetSnapshot` across view mode selections to prevent restarting the off-screen WebView renderer when switching modes.
+  - Added a smooth keyboard alpha fade transition in [PlayerScreen.kt](file:///c:/A1/Code/WindScore/composeApp/src/commonMain/kotlin/com/windscore/ui/PlayerScreen.kt) using `animateFloatAsState`.
+- **Platform-Aware Settings Window**:
+  - Declared `expect fun SettingsDialog` in [SettingsDialog.kt](file:///c:/A1/Code/WindScore/composeApp/src/commonMain/kotlin/com/windscore/ui/SettingsDialog.kt).
+  - In [desktopMain](file:///c:/A1/Code/WindScore/composeApp/src/desktopMain/kotlin/com/windscore/ui/SettingsDialog.kt), implemented settings as a standalone JVM OS window (`DialogWindow`) with a fixed resolution (`480.dp` x `560.dp`), styling, and window decoration.
+  - In [androidMain](file:///c:/A1/Code/WindScore/composeApp/src/androidMain/kotlin/com/windscore/ui/SettingsDialog.kt), kept the settings as a full-screen sliding sheet using Compose mobile slide animations.
+- **Welcome to Player Screen Transitions**:
+  - Wrapped the screen switching logic in [App.kt](file:///c:/A1/Code/WindScore/composeApp/src/commonMain/kotlin/com/windscore/App.kt) inside a `Crossfade` animation.
+  - Toggling between `WelcomeScreen` and `PlayerScreen` now fades smoothly instead of instantly jumping.
+- **Slide Transitions**:
+  - Animated Toast notification message boxes in [PlayerScreen.kt](file:///c:/A1/Code/WindScore/composeApp/src/commonMain/kotlin/com/windscore/ui/PlayerScreen.kt) to slide up and down dynamically using `AnimatedVisibility`.
+  - Added slide-in-from-bottom and slide-out-to-bottom transitions for the settings drawer screen in [App.kt](file:///c:/A1/Code/WindScore/composeApp/src/commonMain/kotlin/com/windscore/App.kt) using `AnimatedVisibility`.

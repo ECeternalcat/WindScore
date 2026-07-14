@@ -2,9 +2,9 @@ package com.windscore
 
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
@@ -53,6 +53,17 @@ fun main() = application {
         title = "WindScore",
         state = windowState,
     ) {
+        androidx.compose.runtime.LaunchedEffect(Unit) {
+            try {
+                val screenSize = java.awt.Toolkit.getDefaultToolkit().getScreenSize()
+                window.minimumSize = java.awt.Dimension(screenSize.width, screenSize.height)
+                window.extendedState = java.awt.Frame.MAXIMIZED_BOTH
+                window.setLocation(0, 0)
+            } catch (_: Throwable) {}
+        }
+        androidx.compose.runtime.LaunchedEffect(com.windscore.ui.theme.isDarkThemeGlobal) {
+            com.windscore.ui.setWindowImmersiveDarkMode(window, com.windscore.ui.theme.isDarkThemeGlobal)
+        }
         App(createMidiManager(), isCompact = false, spacePressed = spaceCount)
     }
 }
