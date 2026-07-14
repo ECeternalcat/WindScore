@@ -8,6 +8,7 @@ import com.windscore.core.model.Score
 import com.windscore.core.parser.MusicXmlParser
 import com.windscore.ui.components.PillButton
 import com.windscore.ui.components.PillButtonStyle
+import com.windscore.ui.i18n.strings
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.File
@@ -21,20 +22,21 @@ actual fun ScoreFilePickerButton(
 ) {
     val openFile = rememberScoreFileOpener(onPicked)
     PillButton(onClick = openFile, modifier = modifier, style = style) {
-        androidx.compose.material3.Text("打开文件")
+        androidx.compose.material3.Text(strings().openFile)
     }
 }
 
 @Composable
 actual fun rememberScoreFileOpener(onPicked: (Score) -> Unit): () -> Unit {
     val scope = rememberCoroutineScope()
-    return remember(onPicked) {
+    val title = strings().openFile
+    return remember(onPicked, title) {
         {
             scope.launch(Dispatchers.IO) {
                 // 优先使用 PowerShell 调用现代 Windows 文件对话框（IFileOpenDialog）
-                val filePath = showPowerShellFileDialog()
+                val filePath = showPowerShellFileDialog(title)
                 // 回退到 AWT FileDialog（原生 Win32 对话框）
-                    ?: showAwtFileDialog()
+                    ?: showAwtFileDialog(title)
                 if (filePath != null) {
                     runCatching {
                         val bytes = File(filePath).readBytes()
@@ -51,13 +53,13 @@ actual fun rememberScoreFileOpener(onPicked: (Score) -> Unit): () -> Unit {
  * PowerShell System.Windows.Forms.OpenFileDialog — Windows 10/11 原生文件对话框。
  * 使用 -STA 模式（Windows Forms 要求单线程单元）。
  */
-private fun showPowerShellFileDialog(): String? {
+private fun showPowerShellFileDialog(title: String): String? {
     return try {
         val script = """
             Add-Type -AssemblyName System.Windows.Forms
             ${'$'}d = New-Object System.Windows.Forms.OpenFileDialog
             ${'$'}d.Filter = 'MusicXML (*.xml;*.mxl)|*.xml;*.mxl|All files (*.*)|*.*'
-            ${'$'}d.Title = '选择乐谱文件'
+            ${'$'}d.Title = '$title'
             ${'$'}d.AutoUpgradeEnabled = ${'$'}true
             if (${'$'}d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
                 [Console]::Out.WriteLine(${'$'}d.FileName)
@@ -78,12 +80,12 @@ private fun showPowerShellFileDialog(): String? {
 /**
  * AWT FileDialog 回退方案 — 使用 Win32 GetOpenFileName 原生对话框。
  */
-private fun showAwtFileDialog(): String? {
+private fun showAwtFileDialog(title: String): String? {
     var result: String? = null
     try {
         SwingUtilities.invokeAndWait {
             val parent = java.awt.Window.getWindows().firstOrNull { it.isVisible } as? java.awt.Frame
-            val dialog = java.awt.FileDialog(parent, "选择乐谱文件", java.awt.FileDialog.LOAD)
+            val dialog = java.awt.FileDialog(parent, title, java.awt.FileDialog.LOAD)
             dialog.setFilenameFilter { _, name -> name.endsWith(".xml", true) || name.endsWith(".mxl", true) }
             dialog.isVisible = true
             val files = dialog.files

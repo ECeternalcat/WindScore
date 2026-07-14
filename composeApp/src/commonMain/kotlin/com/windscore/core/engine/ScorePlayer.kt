@@ -58,6 +58,8 @@ class ScorePlayer(
     /** Playback speed multiplier (e.g. 0.5 for half speed, 1.0 for original, 1.5 for fast) */
     var speedMultiplier: Double = 1.0
 
+    var loopRange: LongRange? = null
+
     /** Metronome volume (0 to 100). Default is 50. */
     var metronomeVolume: Int = 50
 
@@ -104,7 +106,36 @@ class ScorePlayer(
                         applyEvent(events[eventIndex])
                         eventIndex++
                     }
-                    _tick.value = tickLong.coerceAtMost(score.totalTicks)
+                    
+                    val currentLoop = loopRange
+                    if (currentLoop != null && tickLong >= currentLoop.last) {
+                        // 1. Wait at the end of the loop so user can see the last notes
+                        _tick.value = currentLoop.last
+                        _playingPitches.value = active.keys.toSet()
+                        delay(500)
+
+                        // 2. Snap back to the beginning of the loop
+                        localTick = currentLoop.first.toDouble()
+                        _tick.value = currentLoop.first
+                        eventIndex = 0
+                        active.clear()
+                        silenceAll()
+                        while (eventIndex < events.size && events[eventIndex].tick < currentLoop.first) {
+                            val e = events[eventIndex]
+                            if (e.on) {
+                                active[e.pitch] = (active[e.pitch] ?: 0) + 1
+                            } else {
+                                val c = (active[e.pitch] ?: 0) - 1
+                                if (c <= 0) active.remove(e.pitch) else active[e.pitch] = c
+                            }
+                            eventIndex++
+                        }
+                        // 3. Wait at the start of the loop before playing
+                        delay(500)
+                        lastMs = startMark.elapsedNow().inWholeMilliseconds
+                    } else {
+                        _tick.value = tickLong.coerceAtMost(score.totalTicks)
+                    }
                     _playingPitches.value = active.keys.toSet()
                 }
                 if (localTick >= score.totalTicks) {

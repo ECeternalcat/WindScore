@@ -216,6 +216,9 @@ class JudgmentEngine(
         return step()
     }
 
+    /** 到达当前组并返回应自动托管的音（测试用例入口；等同于驱动一次 [step]）。 */
+    fun arrive(): List<NoteEntity> = step()
+
     /** 准度统计：若该音不在当前组的练习轨道需求中，记为“错按”，污染当前组。 */
     private fun recordPress(pitch: Int) {
         val group = groups.getOrNull(groupIndex) ?: return

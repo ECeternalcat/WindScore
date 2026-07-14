@@ -28,8 +28,8 @@ data class Score(
     /** 原始 MusicXML 文本（供 OSMD 看谱模式渲染；解析降维不需要）。 */
     @Transient
     val rawXml: String? = null,
-    /** 乐谱标题，用于乐谱库列表显示。 */
-    val title: String = "未命名乐谱",
+    /** 乐谱标题，用于乐谱库列表显示。为空时由 UI 层显示本地化的“未命名乐谱”。 */
+    val title: String = "",
 ) {
     companion object {
         const val CURRENT_VERSION = 1

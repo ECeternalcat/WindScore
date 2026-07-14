@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.sp
 import com.windscore.core.engine.ScoreSession
 import com.windscore.ui.components.PillButton
 import com.windscore.ui.components.PillButtonStyle
+import com.windscore.ui.i18n.strings
 import com.windscore.ui.theme.WindScoreColors
 import com.windscore.ui.theme.WindScoreRounded
 import com.windscore.ui.theme.WindScoreSpacing
@@ -44,6 +45,7 @@ fun ResultScreen(
     modifier: Modifier = Modifier,
     onReset: () -> Unit,
 ) {
+    val s = strings()
     val percent = session.scorePercent()
     val clean = session.cleanHitCount()
     val total = session.totalActiveNotes()
@@ -60,7 +62,7 @@ fun ResultScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                "演奏完成",
+                s.performanceComplete,
                 style = MaterialTheme.typography.headlineLarge,
                 color = WindScoreColors.ink,
             )
@@ -73,18 +75,18 @@ fun ResultScreen(
                 letterSpacing = (-0.96).sp,
             )
             Text(
-                "干净命中 $clean / $total   ·   错按 $wrong 次",
+                s.cleanHitsLine(clean, total, wrong),
                 style = MaterialTheme.typography.bodyMedium,
                 color = WindScoreColors.ink.copy(alpha = 0.7f),
             )
             Spacer(Modifier.height(WindScoreSpacing.xl))
             Text(
-                "卡壳热力图",
+                s.stuckHeatmap,
                 style = MaterialTheme.typography.titleMedium,
                 color = WindScoreColors.ink,
             )
             Text(
-                "颜色越暖表示该处越需要多练",
+                s.heatmapHint,
                 style = MaterialTheme.typography.bodySmall,
                 color = WindScoreColors.ink.copy(alpha = 0.5f),
             )
@@ -92,7 +94,7 @@ fun ResultScreen(
             Heatmap(heatmap, Modifier.fillMaxWidth().height(40.dp))
             Spacer(Modifier.height(WindScoreSpacing.xl))
             Row(horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.sm)) {
-                PillButton(style = PillButtonStyle.PRIMARY, onClick = onReset) { Text("再来一次") }
+                PillButton(style = PillButtonStyle.PRIMARY, onClick = onReset) { Text(s.tryAgain) }
             }
         }
     }

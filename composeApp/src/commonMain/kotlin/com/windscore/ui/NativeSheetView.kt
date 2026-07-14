@@ -27,6 +27,7 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 private val CURSOR_COLOR = Color(0xFF4A90D9).copy(alpha = 0.6f)
+private val LOOP_CURSOR_COLOR = Color(0xFFFFB300).copy(alpha = 0.85f)
 
 @Composable
 fun NativeSheetView(
@@ -35,6 +36,8 @@ fun NativeSheetView(
     onSeek: (Long) -> Unit,
     onStepForward: () -> Unit,
     onStepBackward: () -> Unit,
+    pendingLoopStart: Long? = null,
+    loopRange: LongRange? = null,
     modifier: Modifier = Modifier,
 ) {
     var scrollY by remember { mutableFloatStateOf(0f) }
@@ -48,6 +51,15 @@ fun NativeSheetView(
 
     val tick = currentTickProvider()
     val step = remember(tick, steps) { findCursorStep(tick, steps) }
+    
+    val loopStartStep = remember(pendingLoopStart, loopRange, steps) {
+        val st = pendingLoopStart ?: loopRange?.first
+        if (st != null) findCursorStep(st, steps) else null
+    }
+    val loopEndStep = remember(loopRange, steps) {
+        val et = loopRange?.last
+        if (et != null) findCursorStep(et, steps) else null
+    }
 
     // 在副作用中安全更新 scrollY 状态，避免在 Canvas draw 闭包内修改引起重绘循环
     LaunchedEffect(step, canvasSize) {
@@ -141,6 +153,28 @@ fun NativeSheetView(
                     CURSOR_COLOR,
                     Offset(step.x * scale, cursorY),
                     Size(4f * scale, step.height * scale),
+                )
+            }
+        }
+        
+        // 循环游标（黄色）
+        if (loopStartStep != null) {
+            val cursorY = (loopStartStep.y - scrollY) * scale
+            if (cursorY >= -loopStartStep.height * scale && cursorY <= viewH) {
+                drawRect(
+                    LOOP_CURSOR_COLOR,
+                    Offset(loopStartStep.x * scale, cursorY),
+                    Size(4f * scale, loopStartStep.height * scale),
+                )
+            }
+        }
+        if (loopEndStep != null) {
+            val cursorY = (loopEndStep.y - scrollY) * scale
+            if (cursorY >= -loopEndStep.height * scale && cursorY <= viewH) {
+                drawRect(
+                    LOOP_CURSOR_COLOR,
+                    Offset(loopEndStep.x * scale, cursorY),
+                    Size(4f * scale, loopEndStep.height * scale),
                 )
             }
         }

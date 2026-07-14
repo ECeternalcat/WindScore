@@ -230,7 +230,7 @@ object MusicXmlParser {
         if (credits.length > 0) {
             return (credits.item(0) as Element).textContent.trim()
         }
-        return "未命名乐谱"
+        return ""
     }
 
     private fun readPitch(note: Element): Int? {

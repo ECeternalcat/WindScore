@@ -52,6 +52,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.windscore.core.model.Score
 import com.windscore.ui.components.PillButtonStyle
+import com.windscore.ui.components.PillToggle
+import com.windscore.ui.i18n.AppLanguage
+import com.windscore.ui.i18n.AppStrings
+import com.windscore.ui.i18n.strings
 import com.windscore.ui.theme.WindScoreColors
 import com.windscore.ui.theme.WindScoreRounded
 import com.windscore.ui.theme.WindScoreSpacing
@@ -76,9 +80,11 @@ fun WelcomeScreen(
     onScoreClick: (Score) -> Unit,
     onRename: (Score, String) -> Unit,
     onDelete: (Score) -> Unit,
+    onLanguageChange: (AppLanguage) -> Unit = {},
 ) {
     var showSettings by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
+    val s = strings()
 
     // 弹窗状态
     var pendingDelete by remember { mutableStateOf<Score?>(null) }
@@ -95,7 +101,7 @@ fun WelcomeScreen(
     ) {
         WelcomeTopBar()
         if (showSettings) {
-            SettingsScreen(onBack = { showSettings = false }, modifier = Modifier.weight(1f))
+            SettingsScreen(onBack = { showSettings = false }, modifier = Modifier.weight(1f), onLanguageChange = onLanguageChange)
         } else if (isCompact) {
             ScoreListBody(
                 recentScores = recentScores,
@@ -121,16 +127,16 @@ fun WelcomeScreen(
     pendingDelete?.let { score ->
         AlertDialog(
             onDismissRequest = { pendingDelete = null },
-            title = { Text("删除乐谱") },
-            text = { Text("即将删除「${score.title}」，是否确定？") },
+            title = { Text(s.deleteScore) },
+            text = { Text(s.confirmDelete(score.title)) },
             confirmButton = {
                 TextButton(onClick = {
                     onDelete(score)
                     pendingDelete = null
-                }) { Text("确认删除", color = WindScoreColors.accentMagenta) }
+                }) { Text(s.confirmDeleteAction, color = WindScoreColors.accentMagenta) }
             },
             dismissButton = {
-                TextButton(onClick = { pendingDelete = null }) { Text("取消") }
+                TextButton(onClick = { pendingDelete = null }) { Text(s.cancel) }
             },
         )
     }
@@ -140,7 +146,7 @@ fun WelcomeScreen(
         val keyboard = LocalSoftwareKeyboardController.current
         AlertDialog(
             onDismissRequest = { renamingScore = null; keyboard?.hide() },
-            title = { Text("重命名") },
+            title = { Text(s.rename) },
             text = {
                 OutlinedTextField(
                     value = renameInput,
@@ -168,10 +174,10 @@ fun WelcomeScreen(
                         renamingScore = null
                         keyboard?.hide()
                     }
-                }) { Text("确定") }
+                }) { Text(s.confirm) }
             },
             dismissButton = {
-                TextButton(onClick = { renamingScore = null; keyboard?.hide() }) { Text("取消") }
+                TextButton(onClick = { renamingScore = null; keyboard?.hide() }) { Text(s.cancel) }
             },
         )
     }
@@ -179,13 +185,14 @@ fun WelcomeScreen(
 
 @Composable
 private fun WelcomeTopBar() {
+    val s = strings()
     Row(
         modifier = Modifier.fillMaxWidth().height(56.dp).padding(horizontal = WindScoreSpacing.lg),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text("WindScore", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.W700))
         Spacer(Modifier.width(WindScoreSpacing.sm))
-        Text("MusicXML播放器", style = MaterialTheme.typography.bodySmall, color = WindScoreColors.ink)
+        Text(s.appSubtitle, style = MaterialTheme.typography.bodySmall, color = WindScoreColors.ink)
     }
 }
 
@@ -223,6 +230,7 @@ private fun ActionCard(
     onShowSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val s = strings()
     Surface(
         modifier = modifier.clip(RoundedCornerShape(WindScoreRounded.lg)),
         color = WindScoreColors.blockLime,
@@ -234,9 +242,9 @@ private fun ActionCard(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             val openFile = rememberScoreFileOpener(onPickFile)
-            ActionButton(icon = Res.drawable.folder_open_thin, label = "打开文件", onClick = openFile)
+            ActionButton(icon = Res.drawable.folder_open_thin, label = s.openFile, onClick = openFile)
             Spacer(Modifier.width(WindScoreSpacing.xxl))
-            ActionButton(icon = Res.drawable.gear_six_thin, label = "设置", onClick = onShowSettings)
+            ActionButton(icon = Res.drawable.gear_six_thin, label = s.settings, onClick = onShowSettings)
         }
     }
 }
@@ -257,19 +265,55 @@ private fun ActionButton(icon: DrawableResource, label: String, onClick: () -> U
 }
 
 @Composable
-fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
+fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier, onLanguageChange: (AppLanguage) -> Unit = {}) {
+    val s = strings()
     Column(modifier = modifier.fillMaxSize().padding(WindScoreSpacing.xxl)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = Modifier.size(40.dp).clip(RoundedCornerShape(WindScoreRounded.full)).clickable(onClick = onBack),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(painterResource(Res.drawable.arrow_left_thin), "返回", Modifier.size(22.dp), WindScoreColors.ink)
+                Icon(painterResource(Res.drawable.arrow_left_thin), s.back, Modifier.size(22.dp), WindScoreColors.ink)
             }
             Spacer(Modifier.width(WindScoreSpacing.sm))
-            Text("设置", style = MaterialTheme.typography.headlineMedium, color = WindScoreColors.ink)
+            Text(s.settings, style = MaterialTheme.typography.headlineMedium, color = WindScoreColors.ink)
         }
         Spacer(Modifier.height(WindScoreSpacing.xl))
+
+        // 语言 / Language
+        Surface(
+            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(WindScoreRounded.lg)),
+            color = WindScoreColors.surfaceSoft,
+            shape = RoundedCornerShape(WindScoreRounded.lg),
+        ) {
+            Column(modifier = Modifier.padding(WindScoreSpacing.lg), verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.sm)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier.size(40.dp).clip(RoundedCornerShape(WindScoreRounded.md)).background(WindScoreColors.blockLilac),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text("Aあ", style = MaterialTheme.typography.titleMedium, color = WindScoreColors.ink)
+                    }
+                    Spacer(Modifier.width(WindScoreSpacing.md))
+                    Text(s.language, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.W500), color = WindScoreColors.ink)
+                }
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)) {
+                    AppLanguage.entries.forEach { lang ->
+                        PillToggle(
+                            selected = AppStrings.language == lang,
+                            onClick = { onLanguageChange(lang) },
+                            label = lang.nativeName,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(WindScoreSpacing.md))
+
         Surface(
             modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(WindScoreRounded.lg)).clickable { openUrl(FEEDBACK_URL) },
             color = WindScoreColors.surfaceSoft,
@@ -284,8 +328,8 @@ fun SettingsScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 }
                 Spacer(Modifier.width(WindScoreSpacing.md))
                 Column(Modifier.weight(1f)) {
-                    Text("意见反馈", style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.W500), color = WindScoreColors.ink)
-                    Text("在 GitHub Issues 中提交问题或建议", style = MaterialTheme.typography.bodySmall, color = WindScoreColors.ink)
+                    Text(s.feedback, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.W500), color = WindScoreColors.ink)
+                    Text(s.feedbackDesc, style = MaterialTheme.typography.bodySmall, color = WindScoreColors.ink)
                 }
             }
         }
@@ -305,6 +349,7 @@ private fun RecentScoresPanel(
     var searchQuery by remember { mutableStateOf("") }
     var searchFocused by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
+    val s = strings()
 
     val filtered = remember(searchQuery, scores) {
         if (searchQuery.isBlank()) scores
@@ -322,7 +367,7 @@ private fun RecentScoresPanel(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(painterResource(Res.drawable.clock_thin), null, Modifier.size(20.dp), WindScoreColors.ink)
                 Spacer(Modifier.width(WindScoreSpacing.xs))
-                Text("最近打开的乐谱", style = MaterialTheme.typography.titleMedium, color = WindScoreColors.ink)
+                Text(s.recentScores, style = MaterialTheme.typography.titleMedium, color = WindScoreColors.ink)
             }
             Spacer(Modifier.height(WindScoreSpacing.md))
             SearchField(
@@ -333,11 +378,11 @@ private fun RecentScoresPanel(
             Spacer(Modifier.height(WindScoreSpacing.sm))
             if (scores.isEmpty() && !searchFocused) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("暂无最近记录", style = MaterialTheme.typography.bodyMedium, color = WindScoreColors.ink)
+                    Text(s.noRecent, style = MaterialTheme.typography.bodyMedium, color = WindScoreColors.ink)
                 }
             } else if (showEmptyHint) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("没有匹配的文件", style = MaterialTheme.typography.bodyMedium, color = WindScoreColors.ink)
+                    Text(s.noMatch, style = MaterialTheme.typography.bodyMedium, color = WindScoreColors.ink)
                 }
             } else {
                 LazyColumn(
@@ -370,6 +415,7 @@ private fun ScoreListBody(
     var searchQuery by remember { mutableStateOf("") }
     var searchFocused by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
+    val s = strings()
 
     val filtered = remember(searchQuery, recentScores) {
         if (searchQuery.isBlank()) recentScores
@@ -388,13 +434,13 @@ private fun ScoreListBody(
                     .background(WindScoreColors.surfaceSoft).clickable(onClick = onShowSettings),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(painterResource(Res.drawable.gear_six_thin), "设置", Modifier.size(22.dp), WindScoreColors.ink)
+                Icon(painterResource(Res.drawable.gear_six_thin), s.settings, Modifier.size(22.dp), WindScoreColors.ink)
             }
         }
         Spacer(Modifier.height(WindScoreSpacing.lg))
         SearchField(searchQuery, { searchQuery = it }, { searchFocused = it })
         Spacer(Modifier.height(WindScoreSpacing.sm))
-        Text("乐谱库", style = MaterialTheme.typography.headlineLarge, color = WindScoreColors.ink)
+        Text(s.scoreLibrary, style = MaterialTheme.typography.headlineLarge, color = WindScoreColors.ink)
         Spacer(Modifier.height(WindScoreSpacing.sm))
         Surface(
             modifier = Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(WindScoreRounded.lg)),
@@ -403,11 +449,11 @@ private fun ScoreListBody(
         ) {
             if (recentScores.isEmpty() && !searchFocused) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("点击上方按钮加载第一首乐谱", style = MaterialTheme.typography.bodyMedium, color = WindScoreColors.ink)
+                    Text(s.loadFirstScore, style = MaterialTheme.typography.bodyMedium, color = WindScoreColors.ink)
                 }
             } else if (showEmptyHint) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("没有匹配的文件", style = MaterialTheme.typography.bodyMedium, color = WindScoreColors.ink)
+                    Text(s.noMatch, style = MaterialTheme.typography.bodyMedium, color = WindScoreColors.ink)
                 }
             } else {
                 LazyColumn(
@@ -434,11 +480,12 @@ private fun SearchField(
     onQueryChange: (String) -> Unit,
     onFocusChange: (Boolean) -> Unit,
 ) {
+    val s = strings()
     TextField(
         value = query,
         onValueChange = onQueryChange,
         modifier = Modifier.fillMaxWidth().onFocusChanged { onFocusChange(it.isFocused) },
-        placeholder = { Text("搜索乐谱…", style = MaterialTheme.typography.bodyMedium, color = WindScoreColors.ink.copy(alpha = 0.4f)) },
+        placeholder = { Text(s.searchScores, style = MaterialTheme.typography.bodyMedium, color = WindScoreColors.ink.copy(alpha = 0.4f)) },
         singleLine = true,
         shape = RoundedCornerShape(WindScoreRounded.md),
         colors = TextFieldDefaults.colors(
@@ -462,6 +509,8 @@ private fun ScoreListItem(
     onRename: () -> Unit,
     onDelete: () -> Unit,
 ) {
+    val s = strings()
+    val displayTitle = score.title.ifBlank { s.untitledScore }
     Surface(
         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(WindScoreRounded.md)).clickable(onClick = onClick),
         color = WindScoreColors.canvas,
@@ -477,13 +526,13 @@ private fun ScoreListItem(
             Spacer(Modifier.width(WindScoreSpacing.md))
             Column(Modifier.weight(1f)) {
                 Text(
-                    score.title,
+                    displayTitle,
                     style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.W500),
                     color = WindScoreColors.ink,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Text("${score.notes.size} 音符 · ${score.tempo} BPM", style = MaterialTheme.typography.bodySmall, color = WindScoreColors.ink)
+                Text(s.noteCountAndBpm(score.notes.size, score.tempo), style = MaterialTheme.typography.bodySmall, color = WindScoreColors.ink)
             }
             // 重命名
             Box(
@@ -491,7 +540,7 @@ private fun ScoreListItem(
                     .clickable(onClick = onRename),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(painterResource(Res.drawable.pencil_simple_thin), "重命名", Modifier.size(18.dp), WindScoreColors.ink.copy(alpha = 0.6f))
+                Icon(painterResource(Res.drawable.pencil_simple_thin), s.rename, Modifier.size(18.dp), WindScoreColors.ink.copy(alpha = 0.6f))
             }
             Spacer(Modifier.width(WindScoreSpacing.xxs))
             // 删除
@@ -500,7 +549,7 @@ private fun ScoreListItem(
                     .clickable(onClick = onDelete),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(painterResource(Res.drawable.trash_thin), "删除", Modifier.size(18.dp), WindScoreColors.ink.copy(alpha = 0.6f))
+                Icon(painterResource(Res.drawable.trash_thin), s.deleteScore, Modifier.size(18.dp), WindScoreColors.ink.copy(alpha = 0.6f))
             }
         }
     }

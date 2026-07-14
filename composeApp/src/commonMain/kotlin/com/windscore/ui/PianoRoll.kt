@@ -62,6 +62,8 @@ fun PianoRoll(
     heldPitchesProvider: () -> Set<Int> = { emptySet() },
     pulseIntensityProvider: () -> Float = { 0.15f },
     bpmProvider: () -> Int = { 120 },
+    pendingLoopStart: Long? = null,
+    loopRange: LongRange? = null,
 ) {
     if (score.notes.isEmpty()) {
         Box(modifier.fillMaxSize())
@@ -92,6 +94,7 @@ fun PianoRoll(
         drawBeatGrid(score, tick, ppt, hitLineY, w)
         drawNotes(score.notes, tick, ppt, hitLineY, pitchLow, keyWidth, h, hostedTrack, textMeasurer)
         drawHitLine(hitLineY, w)
+        drawLoopCursors(tick, ppt, hitLineY, w, h, pendingLoopStart, loopRange)
         drawHeldFeedback(held, pitchLow, keyWidth, hitLineY, keyboardHeight)
         drawKeyboard(pitchLow, pitchHigh, keyWidth, hitLineY, keyboardHeight, w, held)
     }
@@ -154,6 +157,52 @@ private fun DrawScope.drawHitLine(hitLineY: Float, w: Float) {
         end = Offset(w, hitLineY),
         strokeWidth = 2f,
     )
+}
+
+private fun DrawScope.drawLoopCursors(
+    tick: Long,
+    ppt: Float,
+    hitLineY: Float,
+    w: Float,
+    h: Float,
+    pendingLoopStart: Long?,
+    loopRange: LongRange?
+) {
+    val loopColor = Color(0xFFFFB300).copy(alpha = 0.85f)
+    val loopBgColor = Color(0xFFFFB300).copy(alpha = 0.15f)
+
+    fun drawLineAtTick(targetTick: Long) {
+        val y = hitLineY + (tick - targetTick) * ppt
+        if (y in 0f..h) {
+            drawLine(
+                color = loopColor,
+                start = Offset(0f, y),
+                end = Offset(w, y),
+                strokeWidth = 4f,
+            )
+        }
+    }
+
+    if (loopRange != null) {
+        val yStart = hitLineY + (tick - loopRange.first) * ppt
+        val yEnd = hitLineY + (tick - loopRange.last) * ppt
+        
+        val topY = minOf(yStart, yEnd).coerceAtLeast(0f)
+        val bottomY = maxOf(yStart, yEnd).coerceAtMost(h)
+        
+        if (bottomY > 0 && topY < h) {
+            drawRect(
+                color = loopBgColor,
+                topLeft = Offset(0f, topY),
+                size = Size(w, bottomY - topY)
+            )
+        }
+        
+        drawLineAtTick(loopRange.first)
+        drawLineAtTick(loopRange.last)
+    } else if (pendingLoopStart != null) {
+        drawLineAtTick(pendingLoopStart)
+    }
 }
 
 private fun DrawScope.drawNotes(

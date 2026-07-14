@@ -10,6 +10,7 @@ import com.windscore.core.model.Score
 import com.windscore.core.parser.MusicXmlParser
 import com.windscore.ui.components.PillButton
 import com.windscore.ui.components.PillButtonStyle
+import com.windscore.ui.i18n.strings
 
 @Composable
 actual fun ScoreFilePickerButton(
@@ -19,7 +20,7 @@ actual fun ScoreFilePickerButton(
 ) {
     val openFile = rememberScoreFileOpener(onPicked)
     PillButton(onClick = openFile, modifier = modifier, style = style) {
-        androidx.compose.material3.Text("打开文件")
+        androidx.compose.material3.Text(strings().openFile)
     }
 }
 

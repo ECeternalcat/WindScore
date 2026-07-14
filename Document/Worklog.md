@@ -379,3 +379,28 @@ Addressed the second code audit (`Document/Audit_20260714.md`): fixed **9 of 13*
 ### Verification status
 - `:composeApp:desktopTest` —— **23 tests all PASSED**.
 - `:composeApp:compileKotlinDesktop` and `:composeApp:compileDebugKotlinAndroid` compile successfully with no errors.
+
+## Phase 5: Interactive Loop Selection, Tabs Layout, and Scoring Mode Restrictions
+- **Interactive Loop Selection**:
+  - Implemented a state machine in [App.kt](file:///c:/A1/Code/WindScore/composeApp/src/commonMain/kotlin/com/windscore/App.kt) (`LoopSetupState`) to manage loop point selection step-by-step.
+  - Intercepted score seeking clicks during active loop setup to handle loop points rather than playhead jumps.
+  - Added step-by-step guidance toasts with yellow cursor drawing support across both [NativeSheetView.kt](file:///c:/A1/Code/WindScore/composeApp/src/commonMain/kotlin/com/windscore/ui/NativeSheetView.kt) and [PianoRoll.kt](file:///c:/A1/Code/WindScore/composeApp/src/commonMain/kotlin/com/windscore/ui/PianoRoll.kt).
+  - Configured custom delays (500ms pause on last note, 500ms wait after snapback) inside [ScorePlayer.kt](file:///c:/A1/Code/WindScore/composeApp/src/commonMain/kotlin/com/windscore/core/engine/ScorePlayer.kt) for looping.
+- **Sidebar Tab Layout**:
+  - Replaced the bottom "重新加载" (Reload) button in the right sidebar with two animated page tab buttons ("练习" and "评分").
+  - Wrapped right sidebar panels inside a Compose `Crossfade` to switch smoothly between the practice controls and scoring panels.
+  - Added custom icons (`music_notes_thin` for Practice, `pencil_simple_thin` for Scoring) to the page tab buttons and the scoring placeholder screen.
+  - Preserved all original control panels, layouts, view options, and metronome/countdown toggles exactly under the "练习" tab.
+
+### State Flag: `SidebarTab.SCORING`
+- **Definition**: The state variable `sidebarTab` of enum type `SidebarTab` is defined in [PlayerScreen.kt](file:///c:/A1/Code/WindScore/composeApp/src/commonMain/kotlin/com/windscore/ui/PlayerScreen.kt) to keep track of the active sidebar view (`PRACTICE` or `SCORING`).
+- **Applied Restrictions**:
+  - **Playback Disallowance**: When `sidebarTab == SidebarTab.SCORING`, pressing the spacebar does not start/pause playback.
+  - **User Alert**: Any attempt to play via spacebar in scoring mode triggers a toast message: `"抱歉，评分模式不允许播放乐谱"`.
+  - **Developer Note**: Use the `sidebarTab == SidebarTab.SCORING` check inside [PlayerScreen.kt](file:///c:/A1/Code/WindScore/composeApp/src/commonMain/kotlin/com/windscore/ui/PlayerScreen.kt) or propagate it to apply any further restrictions/disallowed features (e.g., keyboard shortcuts, seeking, adjustments) in scoring mode.
+
+### Bug Fixes
+- **Loop Settings Serialization Issue**:
+  - **Bug**: When a loop was deleted, exiting the score and opening it again caused a yellow cursor representing the loop to appear at the beginning of the sheet (tick `0L..totalTicks`), and clicks on the score prompted the user to turn off loop.
+  - **Cause**: The serialization settings fallback logic in `LaunchedEffect` and `closeScore()` used `pendingLoopStart.takeIf { !activeSession.isLoopActive } ?: activeSession.loopRange?.first` which evaluated to `0L` when loop was inactive (since `loopRange` returns `0L..totalTicks` by default when inactive).
+  - **Solution**: Updated loop settings persistence inside [App.kt](file:///c:/A1/Code/WindScore/composeApp/src/commonMain/kotlin/com/windscore/App.kt) to strictly save `loopStartTick = if (activeSession.isLoopActive) activeSession.loopRange.first else pendingLoopStart` and `loopEndTick = if (activeSession.isLoopActive) activeSession.loopRange.last else null`, preventing any default fallback to `0L` and `totalTicks` when the loop is inactive.

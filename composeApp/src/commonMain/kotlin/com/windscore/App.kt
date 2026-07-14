@@ -23,6 +23,9 @@ import com.windscore.midi.MidiManager
 import com.windscore.ui.PlayerScreen
 import com.windscore.ui.SettingsScreen
 import com.windscore.ui.WelcomeScreen
+import com.windscore.ui.i18n.AppLanguage
+import com.windscore.ui.i18n.AppStrings
+import com.windscore.ui.i18n.strings
 import com.windscore.ui.theme.WindScoreColors
 import com.windscore.ui.theme.WindScoreTheme
 import kotlinx.serialization.Serializable
@@ -30,9 +33,18 @@ import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 @Serializable
 enum class ViewMode { ROLL, SHEET_KEYBOARD, SHEET_FULL }
+
+enum class LoopSetupState {
+    IDLE,
+    WAITING_FOR_START,
+    WAITING_FOR_END,
+    WAITING_FOR_NEW_START,
+    WAITING_FOR_NEW_END
+}
 
 @Composable
 fun App(
@@ -46,18 +58,41 @@ fun App(
     var viewMode by remember { mutableStateOf(ViewMode.SHEET_FULL) }
     var renderMs by remember { mutableStateOf<Double?>(null) }
     var pendingLoopStart by remember { mutableStateOf<Long?>(null) }
+    var loopSetupState by remember { mutableStateOf(LoopSetupState.IDLE) }
+    var toastMessage by remember { mutableStateOf<String?>(null) }
     var running by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     val recentScores = remember { mutableStateListOf<Score>() }
+    val tr = strings()
+
+    LaunchedEffect(toastMessage) {
+        if (toastMessage != null) {
+            delay(2000)
+            toastMessage = null
+        }
+    }
 
     var metronomeVol by remember { mutableStateOf(50) }
     var countdownEnabled by remember { mutableStateOf(false) }
     var playbackSpeed by remember { mutableStateOf(1.0f) }
 
+    // 评分流程状态：scoringSession 非空表示正在评分；MIDI 事件会优先路由给它
+    var scoringSession by remember { mutableStateOf<ScoreSession?>(null) }
+    var scoringPhase by remember { mutableStateOf(com.windscore.ui.ScoringPhase.SETUP) }
 
+
+
+    var activeLoopRange by remember(session) { mutableStateOf(session?.takeIf { it.isLoopActive }?.loopRange) }
 
     val synth = remember { createAudioSynth() }
     val scope = rememberCoroutineScope()
+
+    fun changeLanguage(lang: AppLanguage) {
+        AppStrings.update(lang)
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            com.windscore.core.saveAppLanguage(lang.code)
+        }
+    }
     val player = remember(currentScore) { 
         currentScore?.let { score -> 
             ScorePlayer(score, synth, scope).apply {
@@ -65,6 +100,7 @@ fun App(
                 if (tick > 0L) {
                     seekTo(tick)
                 }
+                loopRange = session?.takeIf { it.isLoopActive }?.loopRange
             }
         } 
     }
@@ -93,8 +129,8 @@ fun App(
                     practiceMode = practiceMode,
                     viewMode = viewMode,
                     speedMultiplier = playbackSpeed.toDouble(),
-                    loopStartTick = pendingLoopStart.takeIf { !activeSession.isLoopActive } ?: activeSession.loopRange?.first,
-                    loopEndTick = activeSession.loopRange?.last,
+                    loopStartTick = if (activeSession.isLoopActive) activeSession.loopRange.first else pendingLoopStart,
+                    loopEndTick = if (activeSession.isLoopActive) activeSession.loopRange.last else null,
                     metronomeVol = metronomeVol,
                     countdownEnabled = countdownEnabled,
                     currentTick = activeSession.currentTick.let { if (it >= score.totalTicks) 0L else it }
@@ -143,11 +179,11 @@ fun App(
                     when (ev) {
                         is MidiEvent.NoteOn -> {
                             synth.noteOn(ev.pitch, ev.velocity)
-                            session?.onNoteOn(ev.pitch)
+                            (scoringSession ?: session)?.onNoteOn(ev.pitch)
                         }
                         is MidiEvent.NoteOff -> {
                             synth.noteOff(ev.pitch)
-                            session?.onNoteOff(ev.pitch)
+                            (scoringSession ?: session)?.onNoteOff(ev.pitch)
                         }
                     }
                 }
@@ -165,6 +201,8 @@ fun App(
     }
     LaunchedEffect(Unit) {
         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val code = com.windscore.core.loadAppLanguage("zh")
+            AppLanguage.fromCode(code)?.let { AppStrings.update(it) }
             com.windscore.core.loadRecentScores { loaded ->
                 recentScores.clear()
                 recentScores.addAll(loaded)
@@ -198,6 +236,7 @@ fun App(
             session = ScoreSession(finalScore, synth, scope, settings.practiceMode).apply {
                 if (settings.loopStartTick != null && settings.loopEndTick != null) {
                     setLoop(settings.loopStartTick, settings.loopEndTick, playAudio = false)
+                    activeLoopRange = settings.loopStartTick..settings.loopEndTick
                 }
                 if (settings.currentTick > 0 && settings.currentTick < finalScore.totalTicks) {
                     seekTo(settings.currentTick)
@@ -205,10 +244,11 @@ fun App(
             }
         } else {
             val currentTickVal = session?.currentTick ?: 0L
-            val activeLoopRange = session?.takeIf { it.isLoopActive }?.loopRange
+            val prevLoopRange = session?.takeIf { it.isLoopActive }?.loopRange
             session = ScoreSession(finalScore, synth, scope, practiceMode).apply {
-                if (activeLoopRange != null) {
-                    setLoop(activeLoopRange.first, activeLoopRange.last, playAudio = false)
+                if (prevLoopRange != null) {
+                    setLoop(prevLoopRange.first, prevLoopRange.last, playAudio = false)
+                    activeLoopRange = prevLoopRange
                 }
                 if (currentTickVal > 0) {
                     seekTo(currentTickVal)
@@ -235,8 +275,8 @@ fun App(
                 practiceMode = practiceMode,
                 viewMode = viewMode,
                 speedMultiplier = playbackSpeed.toDouble(),
-                loopStartTick = pendingLoopStart.takeIf { !activeSession.isLoopActive } ?: activeSession.loopRange?.first,
-                loopEndTick = activeSession.loopRange?.last,
+                loopStartTick = if (activeSession.isLoopActive) activeSession.loopRange.first else pendingLoopStart,
+                loopEndTick = if (activeSession.isLoopActive) activeSession.loopRange.last else null,
                 metronomeVol = metronomeVol,
                 countdownEnabled = countdownEnabled,
                 currentTick = activeSession.currentTick.let { if (it >= score.totalTicks) 0L else it }
@@ -246,6 +286,9 @@ fun App(
             }
         }
         player?.stop()
+        scoringSession?.close()
+        scoringSession = null
+        scoringPhase = com.windscore.ui.ScoringPhase.SETUP
         session = null
         currentScore = null
     }
@@ -257,6 +300,24 @@ fun App(
     fun setPracticeMode(mode: PracticeMode) {
         practiceMode = mode
         currentScore?.let { openScore(it, restoreSettings = false) }
+    }
+
+    /** 开始评分：以指定手别创建独立的评分 Session（从头开始），并确保 MIDI 采集已开启。 */
+    fun startScoring(mode: PracticeMode) {
+        val score = currentScore ?: return
+        player?.stop()
+        scoringSession?.close()
+        scoringSession = ScoreSession(score, synth, scope, mode)
+        scoringPhase = com.windscore.ui.ScoringPhase.ACTIVE
+        // 评分靠实时弹奏驱动，自动开启 MIDI 采集（若尚未开启）
+        if (!running) running = true
+    }
+
+    /** 退出评分：释放评分 Session 并回到评分设置态。 */
+    fun exitScoring() {
+        scoringSession?.close()
+        scoringSession = null
+        scoringPhase = com.windscore.ui.ScoringPhase.SETUP
     }
 
     WindScoreTheme {
@@ -284,18 +345,29 @@ fun App(
                             com.windscore.core.saveRecentScores(recentScores)
                         }
                     },
+                    onLanguageChange = { changeLanguage(it) },
                 )
             } else {
                 val s = session ?: return@Surface
 
                 // 播放中实时同步进度到练习 Session，并在暂停时做最终同步确保进度对齐
+                // 评分进行中时跳过：避免把练习 Session 进度重置，干扰评分主舞台
                 LaunchedEffect(isPlaying, playTick) {
+                    if (scoringSession != null) return@LaunchedEffect
                     if (isPlaying) {
                         s.isHostedEnabled = false
                         s.seekTo(playTick)
                     } else {
                         s.isHostedEnabled = true
                         s.seekTo(playTick)
+                    }
+                }
+
+                // 评分完成自动进入结算
+                LaunchedEffect(scoringSession?.finished) {
+                    val sc = scoringSession
+                    if (sc != null && sc.finished && scoringPhase == com.windscore.ui.ScoringPhase.ACTIVE) {
+                        scoringPhase = com.windscore.ui.ScoringPhase.RESULT
                     }
                 }
 
@@ -320,8 +392,55 @@ fun App(
                     playbackSpeed = playbackSpeed,
                     onPlaybackSpeedChange = { playbackSpeed = it },
                     onSeek = { tick ->
-                        player?.seekTo(tick)
-                        s.seekTo(tick)
+                        when (loopSetupState) {
+                            LoopSetupState.WAITING_FOR_START -> {
+                                pendingLoopStart = tick
+                                loopSetupState = LoopSetupState.WAITING_FOR_END
+                                toastMessage = tr.loopStartAdded
+                            }
+                            LoopSetupState.WAITING_FOR_END -> {
+                                val start = pendingLoopStart ?: 0L
+                                s.setLoop(start, tick)
+                                val range = if (start < tick) start..tick else tick..start
+                                activeLoopRange = range
+                                player?.loopRange = range
+                                pendingLoopStart = null
+                                loopSetupState = LoopSetupState.IDLE
+                                toastMessage = tr.loopSetDone
+                                player?.seekTo(range.first)
+                                s.seekTo(range.first)
+                            }
+                            LoopSetupState.WAITING_FOR_NEW_START -> {
+                                val end = s.loopRange.last
+                                s.setLoop(tick, end)
+                                val range = if (tick < end) tick..end else end..tick
+                                activeLoopRange = range
+                                player?.loopRange = range
+                                loopSetupState = LoopSetupState.IDLE
+                                toastMessage = tr.settingDone
+                                player?.seekTo(range.first)
+                                s.seekTo(range.first)
+                            }
+                            LoopSetupState.WAITING_FOR_NEW_END -> {
+                                val start = s.loopRange.first
+                                s.setLoop(start, tick)
+                                val range = if (start < tick) start..tick else tick..start
+                                activeLoopRange = range
+                                player?.loopRange = range
+                                loopSetupState = LoopSetupState.IDLE
+                                toastMessage = tr.settingDone
+                                player?.seekTo(range.first)
+                                s.seekTo(range.first)
+                            }
+                            LoopSetupState.IDLE -> {
+                                if (activeLoopRange != null) {
+                                    toastMessage = tr.closeLoopFirst
+                                } else {
+                                    player?.seekTo(tick)
+                                    s.seekTo(tick)
+                                }
+                            }
+                        }
                     },
                     onStepForward = {
                         player?.stepForward()
@@ -338,14 +457,27 @@ fun App(
                     onReset = { resetSession() },
                     onModeChange = { setPracticeMode(it) },
                     onViewChange = { viewMode = it },
-                    onLoopStart = { pendingLoopStart = s.currentTick },
+                    onLoopStart = {
+                        if (activeLoopRange != null) {
+                            loopSetupState = LoopSetupState.WAITING_FOR_NEW_START
+                            toastMessage = tr.clickNewStart
+                        } else {
+                            loopSetupState = LoopSetupState.WAITING_FOR_START
+                            toastMessage = tr.clickStartPos
+                        }
+                    },
                     onLoopEnd = {
-                        s.setLoop(pendingLoopStart ?: 0L, s.currentTick)
-                        pendingLoopStart = null
+                        if (activeLoopRange != null) {
+                            loopSetupState = LoopSetupState.WAITING_FOR_NEW_END
+                            toastMessage = tr.clickNewEnd
+                        }
                     },
                     onClearLoop = {
                         s.clearLoop()
+                        activeLoopRange = null
+                        player?.loopRange = null
                         pendingLoopStart = null
+                        loopSetupState = LoopSetupState.IDLE
                     },
                     onTogglePlay = {
                         if (!isPlaying) {
@@ -357,6 +489,12 @@ fun App(
                     onStopPlay = { player?.stop() },
                     onRenderTime = { renderMs = it },
                     onShowSettings = { showSettings = true },
+                    toastMessage = toastMessage,
+                    activeLoopRange = activeLoopRange,
+                    scoringSession = scoringSession,
+                    scoringPhase = scoringPhase,
+                    onStartScoring = { startScoring(it) },
+                    onExitScoring = { exitScoring() },
                 )
 
                 if (showSettings) {
@@ -364,7 +502,7 @@ fun App(
                         modifier = Modifier.fillMaxSize(),
                         color = WindScoreColors.canvas,
                     ) {
-                        SettingsScreen(onBack = { showSettings = false })
+                        SettingsScreen(onBack = { showSettings = false }, onLanguageChange = { changeLanguage(it) })
                     }
                 }
             }

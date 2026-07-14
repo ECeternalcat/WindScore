@@ -35,6 +35,7 @@ import com.windscore.ui.components.PillButtonStyle
 import com.windscore.ui.components.PillToggle
 import com.windscore.ui.components.CustomSwitch
 import com.windscore.ui.components.CircularIconButton
+import com.windscore.ui.i18n.strings
 import com.windscore.ui.theme.WindScoreColors
 import com.windscore.ui.theme.WindScoreRounded
 import com.windscore.ui.theme.WindScoreSpacing
@@ -51,6 +52,7 @@ import windscore.composeapp.generated.resources.repeat_thin
 import windscore.composeapp.generated.resources.x_thin
 import windscore.composeapp.generated.resources.speaker_high_thin
 import windscore.composeapp.generated.resources.speaker_slash_thin
+import windscore.composeapp.generated.resources.clock_thin
 
 @Composable
 fun ControlSidebar(
@@ -66,8 +68,6 @@ fun ControlSidebar(
     playbackSpeed: Float,
     onPlaybackSpeedChange: (Float) -> Unit,
     onToggleMidi: () -> Unit,
-    onReset: () -> Unit,
-    onShowToast: (String) -> Unit,
     countdownEnabled: Boolean,
     onCountdownEnabledChange: (Boolean) -> Unit,
     metronomeVol: Int,
@@ -80,8 +80,10 @@ fun ControlSidebar(
     onClearLoop: () -> Unit,
     onTogglePlay: () -> Unit,
     onStopPlay: () -> Unit,
+    activeLoopRange: LongRange? = null,
     modifier: Modifier = Modifier,
 ) {
+    val s = strings()
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -97,7 +99,7 @@ fun ControlSidebar(
             onClick = onToggleMidi,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text(if (running) "断开 MIDI 接入" else "启动 MIDI 接入")
+            Text(if (running) s.disconnectMidi else s.connectMidi)
         }
 
         // Group 1: 模式 (Mode)
@@ -108,15 +110,15 @@ fun ControlSidebar(
                 .padding(WindScoreSpacing.sm),
             verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)
         ) {
-            Text("模式", style = MaterialTheme.typography.labelSmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
+            Text(s.mode, style = MaterialTheme.typography.labelSmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
             Spacer(Modifier.height(2.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)
             ) {
-                PillToggle(practiceMode == PracticeMode.BOTH, { onModeChange(PracticeMode.BOTH) }, "双手", modifier = Modifier.weight(1f))
-                PillToggle(practiceMode == PracticeMode.RIGHT_ONLY, { onModeChange(PracticeMode.RIGHT_ONLY) }, "右手", modifier = Modifier.weight(1f))
-                PillToggle(practiceMode == PracticeMode.LEFT_ONLY, { onModeChange(PracticeMode.LEFT_ONLY) }, "左手", modifier = Modifier.weight(1f))
+                PillToggle(practiceMode == PracticeMode.BOTH, { onModeChange(PracticeMode.BOTH) }, s.bothHands, modifier = Modifier.weight(1f))
+                PillToggle(practiceMode == PracticeMode.RIGHT_ONLY, { onModeChange(PracticeMode.RIGHT_ONLY) }, s.rightHand, modifier = Modifier.weight(1f))
+                PillToggle(practiceMode == PracticeMode.LEFT_ONLY, { onModeChange(PracticeMode.LEFT_ONLY) }, s.leftHand, modifier = Modifier.weight(1f))
             }
         }
 
@@ -134,18 +136,18 @@ fun ControlSidebar(
             ) {
                 // Left: View Mode Group
                 Column(modifier = Modifier.weight(3f)) {
-                    Text("视图", style = MaterialTheme.typography.labelSmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
+                    Text(s.view, style = MaterialTheme.typography.labelSmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
                     Spacer(Modifier.height(4.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)) {
                         CircularIconButton(onClick = { onViewChange(ViewMode.ROLL) }, selected = viewMode == ViewMode.ROLL) {
-                            Icon(painterResource(Res.drawable.piano_keys_thin), "卷帘", Modifier.size(20.dp))
+                            Icon(painterResource(Res.drawable.piano_keys_thin), s.pianoRoll, Modifier.size(20.dp))
                         }
                         if (scoreHasSheet) {
                             CircularIconButton(onClick = { onViewChange(ViewMode.SHEET_KEYBOARD) }, selected = viewMode == ViewMode.SHEET_KEYBOARD) {
-                                Icon(painterResource(Res.drawable.book_open_text_thin), "识谱", Modifier.size(20.dp))
+                                Icon(painterResource(Res.drawable.book_open_text_thin), s.readSheet, Modifier.size(20.dp))
                             }
                             CircularIconButton(onClick = { onViewChange(ViewMode.SHEET_FULL) }, selected = viewMode == ViewMode.SHEET_FULL) {
-                                Icon(painterResource(Res.drawable.music_notes_thin), "看谱", Modifier.size(20.dp))
+                                Icon(painterResource(Res.drawable.music_notes_thin), s.viewSheet, Modifier.size(20.dp))
                             }
                         }
                     }
@@ -153,18 +155,18 @@ fun ControlSidebar(
 
                 // Right: Playback Control Group
                 Column(modifier = Modifier.weight(2f)) {
-                    Text("播放", style = MaterialTheme.typography.labelSmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
+                    Text(s.playback, style = MaterialTheme.typography.labelSmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
                     Spacer(Modifier.height(4.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)) {
                         CircularIconButton(onClick = onTogglePlay, enabled = sheetReady) {
                             Icon(
                                 painterResource(if (isPlaying) Res.drawable.pause_thin else Res.drawable.play_thin),
-                                if (isPlaying) "暂停" else "播放", Modifier.size(20.dp),
+                                if (isPlaying) s.pause else s.play, Modifier.size(20.dp),
                             )
                         }
                         CircularIconButton(onClick = onStopPlay, enabled = sheetReady) {
                             Icon(
-                                painterResource(Res.drawable.stop_thin), "停止", Modifier.size(20.dp),
+                                painterResource(Res.drawable.stop_thin), s.stop, Modifier.size(20.dp),
                             )
                         }
                     }
@@ -185,7 +187,7 @@ fun ControlSidebar(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("速度", style = MaterialTheme.typography.labelSmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
+                Text(s.speed, style = MaterialTheme.typography.labelSmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
                 Text(
                     text = "${(playbackSpeed * 100).toInt()}%",
                     style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.W600),
@@ -215,7 +217,7 @@ fun ControlSidebar(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)
             ) {
-                listOf(0.5f to "x0.5", 1.0f to "原速", 1.5f to "x1.5").forEach { (value, label) ->
+                listOf(0.5f to "x0.5", 1.0f to s.originalSpeed, 1.5f to "x1.5").forEach { (value, label) ->
                     val isSelected = playbackSpeed == value
                     PillToggle(
                         selected = isSelected,
@@ -238,7 +240,7 @@ fun ControlSidebar(
                 .padding(WindScoreSpacing.sm),
             verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)
         ) {
-            Text("循环", style = MaterialTheme.typography.labelSmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
+            Text(s.loop, style = MaterialTheme.typography.labelSmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
             Spacer(Modifier.height(4.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -248,35 +250,32 @@ fun ControlSidebar(
                 // Loop Start
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xxs)) {
                     CircularIconButton(
-                        onClick = {
-                            if (session.isLoopActive) onClearLoop()
-                            onLoopStart()
-                        }, 
-                        selected = pendingLoopStart != null || session.isLoopActive
+                        onClick = onLoopStart,
+                        selected = pendingLoopStart != null || activeLoopRange != null
                     ) {
-                        Icon(painterResource(Res.drawable.repeat_thin), "起点", Modifier.size(20.dp))
+                        Icon(painterResource(Res.drawable.repeat_thin), s.loopStart, Modifier.size(20.dp))
                     }
-                    Text("起点", style = MaterialTheme.typography.bodySmall, color = WindScoreColors.ink)
+                    Text(s.loopStart, style = MaterialTheme.typography.bodySmall, color = WindScoreColors.ink)
                 }
 
                 // Loop End
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xxs)) {
                     CircularIconButton(
-                        onClick = onLoopEnd, 
-                        enabled = pendingLoopStart != null || session.isLoopActive,
-                        selected = session.isLoopActive
+                        onClick = onLoopEnd,
+                        enabled = pendingLoopStart != null || activeLoopRange != null,
+                        selected = activeLoopRange != null
                     ) {
-                        Icon(painterResource(Res.drawable.repeat_thin), "终点", Modifier.size(20.dp))
+                        Icon(painterResource(Res.drawable.repeat_thin), s.loopEnd, Modifier.size(20.dp))
                     }
-                    Text("终点", style = MaterialTheme.typography.bodySmall, color = WindScoreColors.ink)
+                    Text(s.loopEnd, style = MaterialTheme.typography.bodySmall, color = WindScoreColors.ink)
                 }
 
                 // Clear
                 CircularIconButton(
-                    onClick = onClearLoop, 
-                    enabled = session.isLoopActive || pendingLoopStart != null
+                    onClick = onClearLoop,
+                    enabled = activeLoopRange != null || pendingLoopStart != null
                 ) {
-                    Icon(painterResource(Res.drawable.x_thin), "清除", Modifier.size(20.dp))
+                    Icon(painterResource(Res.drawable.x_thin), s.clear, Modifier.size(20.dp))
                 }
             }
         }
@@ -294,12 +293,12 @@ fun ControlSidebar(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("节拍器", style = MaterialTheme.typography.labelSmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
+                Text(s.metronome, style = MaterialTheme.typography.labelSmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)
                 ) {
-                    Text("预备拍", style = MaterialTheme.typography.bodySmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
+                    Text(s.countdownBeat, style = MaterialTheme.typography.bodySmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
                     CustomSwitch(
                         checked = countdownEnabled,
                         onCheckedChange = onCountdownEnabledChange
@@ -318,7 +317,7 @@ fun ControlSidebar(
                     painter = painterResource(
                         if (metronomeVol > 0) Res.drawable.speaker_high_thin else Res.drawable.speaker_slash_thin
                     ),
-                    contentDescription = "节拍器音量",
+                    contentDescription = s.metronomeVolume,
                     modifier = Modifier.size(20.dp).clip(RoundedCornerShape(WindScoreRounded.full))
                         .clickable(onClick = onToggleMute),
                     tint = WindScoreColors.ink.copy(alpha = 0.5f)
@@ -343,27 +342,6 @@ fun ControlSidebar(
                     modifier = Modifier.width(44.dp),
                     textAlign = androidx.compose.ui.text.style.TextAlign.End
                 )
-            }
-        }
-
-        Spacer(Modifier.weight(1f))
-
-        // Bottom: 重新加载 (Reload)
-        PillButton(
-            style = PillButtonStyle.SECONDARY,
-            onClick = onReset,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)
-            ) {
-                Icon(
-                    painter = painterResource(Res.drawable.arrows_counter_clockwise_thin),
-                    contentDescription = "重新加载",
-                    modifier = Modifier.size(16.dp)
-                )
-                Text("重新加载")
             }
         }
     }

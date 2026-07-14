@@ -1,5 +1,6 @@
 package com.windscore.ui
 
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -54,6 +55,7 @@ import com.windscore.ui.components.CustomSwitch
 import com.windscore.ui.components.PillToggle
 import com.windscore.ui.components.CircularIconButton
 import com.windscore.ui.components.pitchName
+import com.windscore.ui.i18n.strings
 import com.windscore.ui.theme.WindScoreColors
 import com.windscore.ui.theme.WindScoreRounded
 import com.windscore.ui.theme.WindScoreSpacing
@@ -72,6 +74,11 @@ import windscore.composeapp.generated.resources.speaker_slash_thin
 import windscore.composeapp.generated.resources.stop_thin
 import windscore.composeapp.generated.resources.repeat_thin
 import windscore.composeapp.generated.resources.x_thin
+import windscore.composeapp.generated.resources.pencil_simple_thin
+enum class SidebarTab { PRACTICE, SCORING }
+
+/** 评分流程的三个子阶段（仅在评分 Tab 内推进）。 */
+enum class ScoringPhase { SETUP, ACTIVE, RESULT }
 
 @Composable
 fun PlayerScreen(
@@ -109,19 +116,27 @@ fun PlayerScreen(
     onStopPlay: () -> Unit,
     onRenderTime: (Double) -> Unit,
     onShowSettings: () -> Unit = {},
+    toastMessage: String? = null,
+    activeLoopRange: LongRange? = null,
+    scoringSession: ScoreSession? = null,
+    scoringPhase: ScoringPhase = ScoringPhase.SETUP,
+    onStartScoring: (PracticeMode) -> Unit = {},
+    onExitScoring: () -> Unit = {},
 ) {
-    var toastMessage by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(toastMessage) {
-        if (toastMessage != null) {
-            delay(2000)
-            toastMessage = null
-        }
-    }
-
     val scope = rememberCoroutineScope()
+    val s = strings()
     var countdownSeconds by remember { mutableStateOf(0) }
     var countdownJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     var metronomePrevVol by remember { mutableStateOf(50) } // 记住静音前音量
+    var sidebarTab by remember { mutableStateOf(SidebarTab.PRACTICE) }
+    var localToastMessage by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(localToastMessage) {
+        if (localToastMessage != null) {
+            delay(2000)
+            localToastMessage = null
+        }
+    }
 
     fun toggleMute() {
         if (metronomeVol > 0) {
@@ -134,28 +149,38 @@ fun PlayerScreen(
 
     val sheetReady = viewMode == ViewMode.ROLL || renderMs != null
 
+    // 评分进行中时主舞台展示评分 Session；否则展示练习 Session
+    val stageSession = scoringSession ?: session
+    val scoringActive = scoringPhase != ScoringPhase.SETUP
+
     var lastHandledSpacePressed by remember { mutableStateOf(spacePressed) }
 
     LaunchedEffect(spacePressed) {
         if (spacePressed > lastHandledSpacePressed && sheetReady) {
             lastHandledSpacePressed = spacePressed
-            if (!isPlaying && countdownEnabled) {
-                if (countdownSeconds == 0) {
-                    countdownJob?.cancel()
-                    countdownJob = scope.launch {
-                        countdownSeconds = 3
-                        while (countdownSeconds > 0) {
-                            delay(1000)
-                            countdownSeconds--
+            if (scoringActive) {
+                // 评分进行中/结算：忽略空格（评分靠实时弹奏，不触发 ScorePlayer）
+            } else if (sidebarTab == SidebarTab.SCORING) {
+                localToastMessage = s.scoringNoPlayToast
+            } else {
+                if (!isPlaying && countdownEnabled) {
+                    if (countdownSeconds == 0) {
+                        countdownJob?.cancel()
+                        countdownJob = scope.launch {
+                            countdownSeconds = 3
+                            while (countdownSeconds > 0) {
+                                delay(1000)
+                                countdownSeconds--
+                            }
+                            onTogglePlay()
                         }
-                        onTogglePlay()
+                    } else {
+                        countdownJob?.cancel()
+                        countdownSeconds = 0
                     }
                 } else {
-                    countdownJob?.cancel()
-                    countdownSeconds = 0
+                    onTogglePlay()
                 }
-            } else {
-                onTogglePlay()
             }
         }
     }
@@ -163,7 +188,7 @@ fun PlayerScreen(
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             PlayerToolbar(
-                title = score.title,
+                title = score.title.ifBlank { s.untitledScore },
                 running = running,
                 isCompact = isCompact,
                 onBack = {
@@ -192,19 +217,27 @@ fun PlayerScreen(
                     onClearLoop = onClearLoop,
                     onTogglePlay = onTogglePlay,
                     onStopPlay = onStopPlay,
+                    activeLoopRange = activeLoopRange,
                 )
                 MainStage(
-                    session = session,
+                    session = stageSession,
                     viewMode = viewMode,
                     playTick = playTick,
                     isPlaying = isPlaying,
                     playingPitches = playingPitches,
-                    onSeek = onSeek,
-                    onStepForward = onStepForward,
-                    onStepBackward = onStepBackward,
+                    pendingLoopStart = pendingLoopStart,
+                    activeLoopRange = activeLoopRange,
+                    onSeek = if (scoringActive) ({ }) else onSeek,
+                    onStepForward = if (scoringActive) ({ }) else onStepForward,
+                    onStepBackward = if (scoringActive) ({ }) else onStepBackward,
                     renderMs = renderMs,
                     isCompact = isCompact,
                     onRenderTime = onRenderTime,
+                    scoringPhase = scoringPhase,
+                    onReturnToPractice = {
+                        onExitScoring()
+                        sidebarTab = SidebarTab.PRACTICE
+                    },
                     modifier = Modifier.weight(1f),
                 )
             } else {
@@ -216,17 +249,24 @@ fun PlayerScreen(
                     horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.md)
                 ) {
                     MainStage(
-                        session = session,
+                        session = stageSession,
                         viewMode = viewMode,
                         playTick = playTick,
                         isPlaying = isPlaying,
                         playingPitches = playingPitches,
-                        onSeek = onSeek,
-                        onStepForward = onStepForward,
-                        onStepBackward = onStepBackward,
+                        pendingLoopStart = pendingLoopStart,
+                        activeLoopRange = activeLoopRange,
+                        onSeek = if (scoringActive) ({ }) else onSeek,
+                        onStepForward = if (scoringActive) ({ }) else onStepForward,
+                        onStepBackward = if (scoringActive) ({ }) else onStepBackward,
                         renderMs = renderMs,
                         isCompact = isCompact,
                         onRenderTime = onRenderTime,
+                        scoringPhase = scoringPhase,
+                        onReturnToPractice = {
+                            onExitScoring()
+                            sidebarTab = SidebarTab.PRACTICE
+                        },
                         modifier = Modifier.weight(1f).fillMaxHeight(),
                     )
                     Column(
@@ -235,65 +275,138 @@ fun PlayerScreen(
                             .fillMaxHeight(),
                         verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.md)
                     ) {
-                        StatusCard(session = session)
-                        ControlSidebar(
-                            session = session,
-                            practiceMode = practiceMode,
-                            viewMode = viewMode,
-                            pendingLoopStart = pendingLoopStart,
-                            scoreHasSheet = score.rawXml != null,
-                            isPlaying = isPlaying,
-                            sheetReady = sheetReady,
-                            running = running,
-                            player = player,
-                            playbackSpeed = playbackSpeed,
-                            onPlaybackSpeedChange = onPlaybackSpeedChange,
-                            onToggleMidi = onToggleMidi,
-                            onReset = onReset,
-                            onShowToast = { toastMessage = it },
-                            countdownEnabled = countdownEnabled,
-                            onCountdownEnabledChange = onCountdownEnabledChange,
-                            metronomeVol = metronomeVol,
-                            onMetronomeVolChange = onMetronomeVolChange,
-                            onToggleMute = ::toggleMute,
-                            onModeChange = onModeChange,
-                            onViewChange = onViewChange,
-                            onLoopStart = onLoopStart,
-                            onLoopEnd = onLoopEnd,
-                            onClearLoop = onClearLoop,
-                            onTogglePlay = {
-                                if (!isPlaying && countdownEnabled) {
-                                    if (countdownSeconds == 0) {
-                                        countdownJob?.cancel()
-                                        countdownJob = scope.launch {
-                                            countdownSeconds = 3
-                                            while (countdownSeconds > 0) {
-                                                delay(1000)
-                                                countdownSeconds--
-                                            }
-                                            onTogglePlay()
+                        Box(
+                            modifier = Modifier.weight(1f).fillMaxWidth()
+                        ) {
+                            Crossfade(targetState = sidebarTab) { tab ->
+                                when (tab) {
+                                    SidebarTab.PRACTICE -> {
+                                        Column(
+                                            modifier = Modifier.fillMaxSize(),
+                                            verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.md)
+                                        ) {
+                                            StatusCard(session = session)
+                                            ControlSidebar(
+                                                session = session,
+                                                practiceMode = practiceMode,
+                                                viewMode = viewMode,
+                                                pendingLoopStart = pendingLoopStart,
+                                                scoreHasSheet = score.rawXml != null,
+                                                isPlaying = isPlaying,
+                                                sheetReady = sheetReady,
+                                                running = running,
+                                                player = player,
+                                                playbackSpeed = playbackSpeed,
+                                                onPlaybackSpeedChange = onPlaybackSpeedChange,
+                                                onToggleMidi = onToggleMidi,
+                                                countdownEnabled = countdownEnabled,
+                                                onCountdownEnabledChange = onCountdownEnabledChange,
+                                                metronomeVol = metronomeVol,
+                                                onMetronomeVolChange = onMetronomeVolChange,
+                                                onToggleMute = ::toggleMute,
+                                                onModeChange = onModeChange,
+                                                onViewChange = onViewChange,
+                                                onLoopStart = onLoopStart,
+                                                onLoopEnd = onLoopEnd,
+                                                onClearLoop = onClearLoop,
+                                                activeLoopRange = activeLoopRange,
+                                                onTogglePlay = {
+                                                    if (!isPlaying && countdownEnabled) {
+                                                        if (countdownSeconds == 0) {
+                                                            countdownJob?.cancel()
+                                                            countdownJob = scope.launch {
+                                                                countdownSeconds = 3
+                                                                while (countdownSeconds > 0) {
+                                                                    delay(1000)
+                                                                    countdownSeconds--
+                                                                }
+                                                                onTogglePlay()
+                                                            }
+                                                        } else {
+                                                            countdownJob?.cancel()
+                                                            countdownSeconds = 0
+                                                        }
+                                                    } else {
+                                                        onTogglePlay()
+                                                    }
+                                                },
+                                                onStopPlay = {
+                                                    countdownJob?.cancel()
+                                                    countdownSeconds = 0
+                                                    onStopPlay()
+                                                },
+                                                modifier = Modifier.weight(1f)
+                                            )
                                         }
-                                    } else {
-                                        countdownJob?.cancel()
-                                        countdownSeconds = 0
                                     }
-                                } else {
-                                    onTogglePlay()
+                                    SidebarTab.SCORING -> {
+                                        Crossfade(targetState = scoringPhase) { phase ->
+                                            when (phase) {
+                                                ScoringPhase.SETUP -> ScoringSetupPanel(
+                                                    scoreHasSheet = score.rawXml != null,
+                                                    viewMode = viewMode,
+                                                    onViewChange = onViewChange,
+                                                    onStartScoring = onStartScoring,
+                                                )
+                                                ScoringPhase.ACTIVE -> ScoringActivePanel(
+                                                    session = scoringSession ?: session,
+                                                    onExit = onExitScoring,
+                                                )
+                                                ScoringPhase.RESULT -> ScoringDonePanel()
+                                            }
+                                        }
+                                    }
                                 }
-                            },
-                            onStopPlay = {
-                                countdownJob?.cancel()
-                                countdownSeconds = 0
-                                onStopPlay()
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.sm)
+                        ) {
+                            PillButton(
+                                onClick = { sidebarTab = SidebarTab.PRACTICE },
+                                enabled = !scoringActive,
+                                style = if (sidebarTab == SidebarTab.PRACTICE) PillButtonStyle.PRIMARY else PillButtonStyle.SECONDARY,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)
+                                ) {
+                                    Icon(
+                                        painter = painterResource(Res.drawable.music_notes_thin),
+                                        contentDescription = s.practice,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(s.practice)
+                                }
+                            }
+                            PillButton(
+                                onClick = { sidebarTab = SidebarTab.SCORING },
+                                enabled = !scoringActive,
+                                style = if (sidebarTab == SidebarTab.SCORING) PillButtonStyle.PRIMARY else PillButtonStyle.SECONDARY,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)
+                                ) {
+                                    Icon(
+                                        painter = painterResource(Res.drawable.pencil_simple_thin),
+                                        contentDescription = s.scoring,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(s.scoring)
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
 
-        toastMessage?.let { msg ->
+        (toastMessage ?: localToastMessage)?.let { msg ->
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -352,6 +465,7 @@ private fun PlayerToolbar(
     onReset: () -> Unit,
     onShowSettings: () -> Unit,
 ) {
+    val s = strings()
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -364,7 +478,7 @@ private fun PlayerToolbar(
             CircularIconButton(onClick = onBack) {
                 Icon(
                     painter = painterResource(Res.drawable.arrow_left_thin),
-                    contentDescription = "返回",
+                    contentDescription = s.back,
                     modifier = Modifier.size(20.dp),
                 )
             }
@@ -382,18 +496,18 @@ private fun PlayerToolbar(
                 CircularIconButton(onClick = onReset) {
                     Icon(
                         painter = painterResource(Res.drawable.arrows_counter_clockwise_thin),
-                        contentDescription = "重置",
+                        contentDescription = s.reset,
                         modifier = Modifier.size(20.dp),
                     )
                 }
                 PillButton(style = if (running) PillButtonStyle.SECONDARY else PillButtonStyle.PRIMARY, onClick = onToggleMidi) {
-                    Text(if (running) "停止 MIDI" else "开始 MIDI")
+                    Text(if (running) s.stopMidi else s.startMidi)
                 }
             }
             CircularIconButton(onClick = onShowSettings) {
                 Icon(
                     painter = painterResource(Res.drawable.gear_six_thin),
-                    contentDescription = "设置",
+                    contentDescription = s.settings,
                     modifier = Modifier.size(20.dp),
                 )
             }
@@ -418,7 +532,9 @@ private fun PlayerControlBar(
     onClearLoop: () -> Unit,
     onTogglePlay: () -> Unit,
     onStopPlay: () -> Unit,
+    activeLoopRange: LongRange? = null,
 ) {
+    val s = strings()
     val barVPad = if (isCompact) WindScoreSpacing.sm else WindScoreSpacing.xs
     val barGap = if (isCompact) WindScoreSpacing.sm else WindScoreSpacing.xs
     Column(
@@ -436,17 +552,17 @@ private fun PlayerControlBar(
                 PillToggle(
                     selected = practiceMode == PracticeMode.BOTH,
                     onClick = { onModeChange(PracticeMode.BOTH) },
-                    label = "双手",
+                    label = s.bothHands,
                 )
                 PillToggle(
                     selected = practiceMode == PracticeMode.RIGHT_ONLY,
                     onClick = { onModeChange(PracticeMode.RIGHT_ONLY) },
-                    label = "右手",
+                    label = s.rightHand,
                 )
                 PillToggle(
                     selected = practiceMode == PracticeMode.LEFT_ONLY,
                     onClick = { onModeChange(PracticeMode.LEFT_ONLY) },
-                    label = "左手",
+                    label = s.leftHand,
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)) {
@@ -456,7 +572,7 @@ private fun PlayerControlBar(
                 ) {
                     Icon(
                         painter = painterResource(Res.drawable.piano_keys_thin),
-                        contentDescription = "卷帘",
+                        contentDescription = s.pianoRoll,
                         modifier = Modifier.size(20.dp),
                     )
                 }
@@ -467,7 +583,7 @@ private fun PlayerControlBar(
                     ) {
                         Icon(
                             painter = painterResource(Res.drawable.book_open_text_thin),
-                            contentDescription = "识谱",
+                            contentDescription = s.readSheet,
                             modifier = Modifier.size(20.dp),
                         )
                     }
@@ -477,7 +593,7 @@ private fun PlayerControlBar(
                     ) {
                         Icon(
                             painter = painterResource(Res.drawable.music_notes_thin),
-                            contentDescription = "看谱",
+                            contentDescription = s.viewSheet,
                             modifier = Modifier.size(20.dp),
                         )
                     }
@@ -497,14 +613,14 @@ private fun PlayerControlBar(
                 CircularIconButton(onClick = onTogglePlay, enabled = sheetReady) {
                     Icon(
                         painter = painterResource(if (isPlaying) Res.drawable.pause_thin else Res.drawable.play_thin),
-                        contentDescription = if (isPlaying) "暂停" else "播放",
+                        contentDescription = if (isPlaying) s.pause else s.play,
                         modifier = Modifier.size(20.dp),
                     )
                 }
                 CircularIconButton(onClick = onStopPlay, enabled = sheetReady) {
                     Icon(
                         painter = painterResource(Res.drawable.stop_thin),
-                        contentDescription = "停止",
+                        contentDescription = s.stop,
                         modifier = Modifier.size(20.dp),
                     )
                 }
@@ -519,37 +635,37 @@ private fun PlayerControlBar(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs),
             ) {
-                CircularIconButton(onClick = onLoopStart, enabled = !session.isLoopActive) {
+                CircularIconButton(onClick = onLoopStart, enabled = activeLoopRange == null) {
                     Icon(
                         painter = painterResource(Res.drawable.repeat_thin),
-                        contentDescription = "设起点",
+                        contentDescription = s.setLoopStart,
                         modifier = Modifier.size(20.dp),
                     )
                 }
-                if (pendingLoopStart != null && !session.isLoopActive) {
+                if (pendingLoopStart != null && activeLoopRange == null) {
                     Text(
-                        "起点 $pendingLoopStart",
+                        s.loopStartLabel(pendingLoopStart),
                         style = MaterialTheme.typography.bodySmall,
                         color = WindScoreColors.ink,
                     )
                 }
-                CircularIconButton(onClick = onLoopEnd, enabled = !session.isLoopActive && pendingLoopStart != null) {
+                CircularIconButton(onClick = onLoopEnd, enabled = activeLoopRange == null && pendingLoopStart != null) {
                     Icon(
                         painter = painterResource(Res.drawable.repeat_thin),
-                        contentDescription = "设终点",
+                        contentDescription = s.setLoopEnd,
                         modifier = Modifier.size(20.dp),
                     )
                 }
-                CircularIconButton(onClick = onClearLoop, enabled = session.isLoopActive) {
+                CircularIconButton(onClick = onClearLoop, enabled = activeLoopRange != null) {
                     Icon(
                         painter = painterResource(Res.drawable.x_thin),
-                        contentDescription = "清除循环",
+                        contentDescription = s.clearLoop,
                         modifier = Modifier.size(20.dp),
                     )
                 }
-                if (session.isLoopActive) {
+                if (activeLoopRange != null) {
                     Text(
-                        "循环 ${session.loopRange.first} ~ ${session.loopRange.last}",
+                        s.loopRangeLabel(activeLoopRange.first, activeLoopRange.last),
                         style = MaterialTheme.typography.bodySmall,
                         color = WindScoreColors.accentMagenta,
                     )
@@ -563,6 +679,7 @@ private fun PlayerControlBar(
 
 @Composable
 private fun StatusLine(session: ScoreSession, viewMode: ViewMode = ViewMode.ROLL, sheetReady: Boolean = true) {
+    val s = strings()
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -570,12 +687,12 @@ private fun StatusLine(session: ScoreSession, viewMode: ViewMode = ViewMode.ROLL
     ) {
         val pending = session.pendingPitches.joinToString { pitchName(it) }
         Text(
-            if (session.finished) "演奏完成 · 准度 ${session.scorePercent()}%" else "该弹: $pending",
+            if (session.finished) s.finishedAccuracy(session.scorePercent()) else s.toPlayPending(pending),
             style = MaterialTheme.typography.bodySmall,
             color = if (session.finished) WindScoreColors.semanticSuccess else WindScoreColors.ink,
         )
         Text(
-            "进度 ${session.progress}/${session.groupCount} · tick ${session.currentTick}/${session.score.totalTicks}",
+            s.progressTick(session.progress, session.groupCount, session.currentTick, session.score.totalTicks),
             style = MaterialTheme.typography.bodySmall,
             color = WindScoreColors.ink,
         )
@@ -589,14 +706,19 @@ private fun MainStage(
     playTick: Long,
     isPlaying: Boolean,
     playingPitches: Set<Int>,
+    pendingLoopStart: Long?,
+    activeLoopRange: LongRange?,
     onSeek: (Long) -> Unit,
     onStepForward: () -> Unit,
     onStepBackward: () -> Unit,
     renderMs: Double?,
     isCompact: Boolean,
     onRenderTime: (Double) -> Unit,
+    scoringPhase: ScoringPhase = ScoringPhase.SETUP,
+    onReturnToPractice: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val s = strings()
     val frameH = if (isCompact) WindScoreSpacing.sm else 0.dp
     val frameV = if (isCompact) WindScoreSpacing.sm else 0.dp
     val innerPadding = if (isCompact) WindScoreSpacing.lg else WindScoreSpacing.sm
@@ -618,7 +740,6 @@ private fun MainStage(
             val activePitches = if (isPlaying) playingPitches else session.heldPitches
             val targetPitches = if (isPlaying) playingPitches else session.pendingPitches
 
-            // 卷帘 — 始终挂载
             PianoRoll(
                 score = session.score,
                 currentTickProvider = { tick },
@@ -629,6 +750,8 @@ private fun MainStage(
                 heldPitchesProvider = { activePitches },
                 pulseIntensityProvider = { session.pulseIntensity },
                 bpmProvider = { session.score.tempo.takeIf { it > 0 } ?: 120 },
+                pendingLoopStart = pendingLoopStart,
+                loopRange = activeLoopRange,
             )
             // 五线谱 — 预渲染快照模式
             if (rawXml != null) {
@@ -674,10 +797,10 @@ private fun MainStage(
                             )
                             Spacer(Modifier.height(WindScoreSpacing.md))
                             val loadingText = when {
-                                loadingSeconds < 10 -> "正在加载乐谱…"
-                                loadingSeconds < 20 -> "加载时间比平时更久，请稍后…"
-                                loadingSeconds < 30 -> "看来还需要一会儿才可以…"
-                                else -> "抱歉，加载可能失败了，建议您附带乐谱文件进行反馈…"
+                                loadingSeconds < 10 -> s.loadingScore
+                                loadingSeconds < 20 -> s.loadingSlow
+                                loadingSeconds < 30 -> s.loadingSlower
+                                else -> s.loadingFailed
                             }
                             Text(
                                 text = loadingText,
@@ -698,6 +821,8 @@ private fun MainStage(
                         onSeek = onSeek,
                         onStepForward = onStepForward,
                         onStepBackward = onStepBackward,
+                        pendingLoopStart = pendingLoopStart,
+                        loopRange = activeLoopRange,
                         modifier = Modifier
                             .fillMaxWidth()
                             .fillMaxHeight(sheetFraction)
@@ -717,12 +842,20 @@ private fun MainStage(
                 pendingPitchesProvider = { targetPitches },
                 heldPitchesProvider = { activePitches },
             )
-            // 结算页
-            if (session.finished) {
+            // 练习结算页（评分结算由下方 overlay 单独处理，避免重复）
+            if (session.finished && scoringPhase != ScoringPhase.RESULT) {
                 ResultScreen(
                     session = session,
                     modifier = Modifier.fillMaxSize(),
                     onReset = { session.reset() },
+                )
+            }
+            // 评分结算覆盖层：覆盖主舞台，显示最终分数 + 回到练习
+            if (scoringPhase == ScoringPhase.RESULT) {
+                ScoringResultOverlay(
+                    session = session,
+                    onReturnToPractice = onReturnToPractice,
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
         }
@@ -731,7 +864,8 @@ private fun MainStage(
 
 @Composable
 private fun StatusCard(session: ScoreSession, modifier: Modifier = Modifier) {
-    val pending = session.pendingPitches.joinToString { pitchName(it) }.ifEmpty { "无" }
+    val s = strings()
+    val pending = session.pendingPitches.joinToString { pitchName(it) }.ifEmpty { s.none }
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -742,7 +876,7 @@ private fun StatusCard(session: ScoreSession, modifier: Modifier = Modifier) {
         verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)
     ) {
         Text(
-            text = "STATUS 实时状态",
+            text = s.statusLabel,
             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.W600, fontSize = 10.sp),
             color = WindScoreColors.ink.copy(alpha = 0.5f)
         )
@@ -752,12 +886,12 @@ private fun StatusCard(session: ScoreSession, modifier: Modifier = Modifier) {
         // 该弹
         Column {
             Text(
-                text = "该弹",
+                text = s.toPlay,
                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
                 color = WindScoreColors.ink.copy(alpha = 0.5f)
             )
             Text(
-                text = if (session.finished) "演奏完成 · 准度 ${session.scorePercent()}%" else pending,
+                text = if (session.finished) s.finishedAccuracy(session.scorePercent()) else pending,
                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.W500),
                 color = if (session.finished) WindScoreColors.semanticSuccess else WindScoreColors.ink,
                 maxLines = 1,
@@ -774,7 +908,7 @@ private fun StatusCard(session: ScoreSession, modifier: Modifier = Modifier) {
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "进度",
+                    text = s.progress,
                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
                     color = WindScoreColors.ink.copy(alpha = 0.5f)
                 )
