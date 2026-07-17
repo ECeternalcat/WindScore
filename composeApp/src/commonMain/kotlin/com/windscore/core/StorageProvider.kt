@@ -1,6 +1,7 @@
 package com.windscore.core
 
 import com.windscore.core.model.Score
+import com.windscore.core.model.ScoreRecord
 
 expect fun getAppStorageDir(): String
 expect fun calculateMd5(text: String): String
@@ -17,3 +18,15 @@ expect fun loadAppLanguage(default: String = "zh"): String
 
 /** 持久化应用语言代码。 */
 expect fun saveAppLanguage(code: String)
+
+/** 当前墙钟时间（epoch 毫秒）。 */
+expect fun nowEpochMillis(): Long
+
+/** 将 epoch 毫秒格式化为本地日期时间字符串（如 "2026/07/15 14:30"）。 */
+expect fun formatDateTime(epochMillis: Long): String
+
+/** 读取某乐谱的评分历史（最新在前）。 */
+expect fun loadScoreHistory(scoreId: String): List<ScoreRecord>
+
+/** 追加一条评分记录并落盘，返回更新后的历史列表（最新在前）。 */
+expect fun appendScoreRecord(scoreId: String, record: ScoreRecord): List<ScoreRecord>

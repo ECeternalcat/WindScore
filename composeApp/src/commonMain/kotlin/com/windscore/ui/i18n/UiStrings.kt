@@ -133,6 +133,14 @@ class UiStrings(
     val stuckHeatmap: String,
     val heatmapHint: String,
     val tryAgain: String,
+    // —— 评分历史 ——
+    val scoreHistory: String,
+    val noHistory: String,
+    val correctLabel: String,
+    val wrongLabel: String,
+    val totalLabel: String,
+    val bestLabel: String,
+    val timesLabel: (count: Int) -> String,
 )
 
 private val ZhStrings = UiStrings(
@@ -227,6 +235,13 @@ private val ZhStrings = UiStrings(
     stuckHeatmap = "卡壳热力图",
     heatmapHint = "颜色越暖表示该处越需要多练",
     tryAgain = "再来一次",
+    scoreHistory = "评分历史",
+    noHistory = "暂无评分记录",
+    correctLabel = "正确",
+    wrongLabel = "错误",
+    totalLabel = "总数",
+    bestLabel = "最佳",
+    timesLabel = { c -> "$c 次" },
 )
 
 private val EnStrings = UiStrings(
@@ -321,6 +336,13 @@ private val EnStrings = UiStrings(
     stuckHeatmap = "Stuck points",
     heatmapHint = "Warmer bars need more practice",
     tryAgain = "Try again",
+    scoreHistory = "Score History",
+    noHistory = "No scoring records",
+    correctLabel = "Correct",
+    wrongLabel = "Wrong",
+    totalLabel = "Total",
+    bestLabel = "Best",
+    timesLabel = { c -> "$c times" },
 )
 
 private val JaStrings = UiStrings(
@@ -415,6 +437,13 @@ private val JaStrings = UiStrings(
     stuckHeatmap = "つまずき箇所",
     heatmapHint = "暖色のバーは重点練習が必要です",
     tryAgain = "もう一度",
+    scoreHistory = "採点履歴",
+    noHistory = "採点履歴はありません",
+    correctLabel = "正解",
+    wrongLabel = "ミス",
+    totalLabel = "合計",
+    bestLabel = "最高",
+    timesLabel = { c -> "$c 回" },
 )
 
 /** 取当前语言的文案表（在 Composable 中读取，语言切换会触发重组）。 */

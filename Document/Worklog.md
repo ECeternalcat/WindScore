@@ -305,9 +305,9 @@ Addressed the second code audit (`Document/Audit_20260714.md`): fixed **9 of 13*
 - `:composeApp:desktopTest` —— **26 tests all PASSED** (added `multiPartTotalTicksReflectsLongestPart`; prior run was 25).
 - `:composeApp:compileKotlinDesktop` (`--rerun-tasks`) and `:composeApp:compileDebugKotlinAndroid` both pass.
 
-## Phase 3 — Playback Speed Control, CBOR Serialization Caching, & UI Refactoring (Completed)
+## Audit Follow-up — Playback Speed, CBOR Cache & UI Refactoring (Completed)
 
-> Addresses the remaining items (M4, L3, L6) from the July 14, 2026 audit.
+> Addresses the remaining items (M4, L3, L6) from the July 14, 2026 audit. (Originally mis-labelled "Phase 3", which collides with the foundational Phase 3 above.)
 
 ### Step 1 — Real-time Playback Speed Control (M4)
 - Unlocked playback speed adjustments during active playback. Users can drag the speed slider or click presets (`x0.5`, `原速`, `x1.5`) in real-time, and the playing loop/synthesizer adapts instantly.
@@ -417,7 +417,7 @@ Addressed the second code audit (`Document/Audit_20260714.md`): fixed **9 of 13*
   - Implemented a theme-aware startup Splash screen in [App.kt](file:///c:/A1/Code/WindScore/composeApp/src/commonMain/kotlin/com/windscore/App.kt) that instantly matches the active light or dark theme background (`WindScoreColors.canvas`).
   - Added a centered classic piano keys icon (`piano_keys_thin`) to mask all underlying JRE/AWT startup window state shifts, layout initialization, and MIDI manager loading processes.
   - Automatically transitions to the main `WelcomeScreen` using a smooth 400ms fade-out animation after exactly 1 second.
-## Phase 7: Global Application Settings & UI Dark Theme
+## Phase 6: Global Application Settings & UI Dark Theme
 - **AppConfig Data Structure**:
   - Defined serializable `AppConfig` class in [AppConfig.kt](file:///c:/A1/Code/WindScore/composeApp/src/commonMain/kotlin/com/windscore/core/model/AppConfig.kt) supporting UI Night Mode (Follow System, Light, Dark), Default View Mode (Piano Roll, Sheet Keyboard, Sheet Full), and Default Pre-beat Countdown seconds.
   - Implemented thread-safe `ConfigStorage` JSON serialization helper in [ConfigStorage.kt](file:///c:/A1/Code/WindScore/composeApp/src/jvmShared/kotlin/com/windscore/core/ConfigStorage.kt) to load/save `app_config.json` inside the platform application storage directory.
@@ -437,7 +437,7 @@ Addressed the second code audit (`Document/Audit_20260714.md`): fixed **9 of 13*
   - Expanded [SettingsScreen](file:///c:/A1/Code/WindScore/composeApp/src/commonMain/kotlin/com/windscore/ui/WelcomeScreen.kt) with card selections for UI Theme, Default View Mode, and Default Pre-beat seconds (0s - 5s).
   - Used scrollable Column layout to fit and display nicely on both desktop dialog windows and mobile screens.
 
-## Phase 6: Concise UI Animations System
+## Phase 7: Concise UI Animations System
 - **Bounce Click Micro-Animation**:
   - Implemented `Modifier.bounceClick` extension in [ModifierExtensions.kt](file:///c:/A1/Code/WindScore/composeApp/src/commonMain/kotlin/com/windscore/ui/components/ModifierExtensions.kt) using Compose spring physics.
   - Applied the bounce click scale-bounce animation to all circular icon buttons, custom switches, and pill button/toggles inside [CustomComponents.kt](file:///c:/A1/Code/WindScore/composeApp/src/commonMain/kotlin/com/windscore/ui/components/CustomComponents.kt) and [PillButtons.kt](file:///c:/A1/Code/WindScore/composeApp/src/commonMain/kotlin/com/windscore/ui/components/PillButtons.kt).
@@ -454,4 +454,107 @@ Addressed the second code audit (`Document/Audit_20260714.md`): fixed **9 of 13*
   - Toggling between `WelcomeScreen` and `PlayerScreen` now fades smoothly instead of instantly jumping.
 - **Slide Transitions**:
   - Animated Toast notification message boxes in [PlayerScreen.kt](file:///c:/A1/Code/WindScore/composeApp/src/commonMain/kotlin/com/windscore/ui/PlayerScreen.kt) to slide up and down dynamically using `AnimatedVisibility`.
-  - Added slide-in-from-bottom and slide-out-to-bottom transitions for the settings drawer screen in [App.kt](file:///c:/A1/Code/WindScore/composeApp/src/commonMain/kotlin/com/windscore/App.kt) using `AnimatedVisibility`.
+  - Added slide-in-from-bottom and slide-out-to-bottom transitions for the settings drawer screen in [App.kt](file:///C:/A1/Code/WindScore/composeApp/src/commonMain/kotlin/com/windscore/App.kt) using `AnimatedVisibility`.
+
+---
+
+## Phase 8 — Scoring System (Completed)
+
+> Implements the "test yourself" capstone: a dedicated scoring flow in the sidebar Scoring tab (previously a placeholder). Reuses `JudgmentEngine`'s pure-accuracy scoring (clean hits / total active notes × 100, time-independent).
+
+### Flow — `ScoringPhase { SETUP, ACTIVE, RESULT }` state machine
+- **SETUP** (`ScoringSetupPanel`): pick scoring range (both/right/left hand → maps to `PracticeMode`) and scoring view; no speed control (accuracy-only). "开始评分" button at the bottom.
+- **ACTIVE** (`ScoringActivePanel`): on start, a fresh `ScoreSession` is created from the beginning, MIDI auto-starts if not running, and MIDI events route to the scoring session (`scoringSession ?: session`). Sidebar shows "请开始演奏" + neutral progress; the bottom 练习/评分 tab buttons are **grayed out**; seek/step interaction on the main stage is disabled. Live play drives the cursor; single-hand modes auto-host the other hand (accompaniment, not scored).
+- **RESULT** (`ScoringResultOverlay`): when all notes are played the session finishes and auto-transitions (after a 1 s delay) to a centered overlay on the main stage showing the final `%` + clean/wrong counts + "回到练习", which tears down the scoring session and returns to the practice tab.
+
+### Key files
+- `ui/ScoringPanel.kt` (new) — `ScoringSetupPanel` / `ScoringActivePanel` / `ScoringDonePanel` / `ScoringResultOverlay`.
+- `ui/PlayerScreen.kt` — `ScoringPhase` enum, params, sidebar `Crossfade`, tab graying, result overlay, interaction lock during scoring.
+- `App.kt` — `scoringSession`/`scoringPhase` state, `startScoring`/`exitScoring`, MIDI routing to the scoring session, auto-finish observer, guarding the practice-sync effect during scoring.
+
+## Phase 9 — Localization (EN / ZH / JA) (Completed)
+
+> Decouples all hardcoded Chinese UI strings and adds an in-app language switcher with three locales.
+
+### i18n system — `ui/i18n/UiStrings.kt`
+- `AppLanguage` enum (EN/ZH/JA with `code` + native display name) and a global Compose-observable `AppStrings.language` state; `@Composable fun strings()` reads it and triggers recomposition on switch.
+- `UiStrings` class with ~110 type-safe properties (lambdas for interpolated strings, e.g. `finishedAccuracy(pct)`); three complete tables `ZhStrings` / `EnStrings` / `JaStrings` — the constructor enforces that every locale supplies every key.
+### Persistence
+- `expect fun loadAppLanguage/saveAppLanguage` → `jvmShared/.../LangStorage.kt` (`lang.txt` in app storage). Loaded on startup (default `zh`), saved on change via `Dispatchers.IO`.
+### Settings UI
+- Language card added to `SettingsScreen` (three pill toggles labelled in each language's native name); threaded through `WelcomeScreen` and `App.kt`.
+### Decoupling
+- Replaced every user-facing Chinese string in `WelcomeScreen`, `PlayerScreen`, `ControlSidebar`, `ScoringPanel`, `ResultScreen`, `App.kt` (toasts), and the desktop/Android file-picker buttons + dialog titles.
+- Title fallback `"未命名乐谱"` removed from the parser/`Score` default → UI shows a localized "Untitled" via `ifBlank`.
+- **Known limitation**: `OsmdHtml.kt` still embeds Chinese diagnostic HUD strings in the generated JS (transient render status); localizing requires parameterizing the JS template — deferred.
+
+## Phase 10 — Scoring History (Completed)
+
+> Makes scoring results persistent and reviewable, closing the practice → score → see-progress loop. Each finished scoring run is recorded per score and browsable in a dedicated window.
+
+### Data & storage
+- `ScoreRecord` model (`@Serializable`: timestamp, percent, cleanHits, totalNotes, wrongPresses, practiceMode).
+- `jvmShared/.../ScoreHistoryStorage.kt` — `kotlinx-serialization-json`, keyed by `history/<scoreId>.json`, newest-first, capped at 50.
+- `DateTimeUtil` + `expect/actual nowEpochMillis()/formatDateTime()` for wall-clock timestamps and `yyyy/MM/dd HH:mm` formatting.
+### UI
+- In `ScoringSetupPanel`, a "评分历史" entry below the start button shows best `%` + attempt count (or the empty hint); clicking opens a **separate window**.
+- `SettingsDialog` generalized with a `title` parameter (reused for the history window — `DialogWindow` on desktop, full-screen sheet on Android).
+- `ScoreHistoryContent`: list where each record shows date/time + mode tag (top) and a large score (body); clicking an item expands to reveal 正确 (clean/total) / 错误 (wrong) / 总数 details.
+### Wiring
+- History loaded in `openScore`; a `ScoreRecord` is appended right after a scoring run finishes (after the 1 s result delay) and the in-memory list refreshed.
+### Key files
+- new: `core/model/ScoreRecord.kt`, `jvmShared/.../DateTimeUtil.kt`, `jvmShared/.../ScoreHistoryStorage.kt`, `ui/ScoreHistoryContent.kt`
+- modified: `core/StorageProvider.kt` (common/desktop/android), `ui/SettingsDialog.kt` (common/desktop/android — `title`), `ui/i18n/UiStrings.kt`, `ui/ScoringPanel.kt`, `ui/PlayerScreen.kt`, `App.kt`
+
+## Phase 11 — Dark-Theme Score Colors & Dedup (Completed)
+
+> Migrates the hardcoded accuracy score colors to the theme system so result/history screens adapt to dark mode, and removes the triple duplication.
+
+- Added `WindScoreColors.scoreClean` / `scoreStuck` getters (green/amber; brighter variants for dark mode) next to the existing `if (isDarkThemeGlobal)` block-color pattern.
+- Removed the duplicated `CLEAN/STUCK` (ResultScreen), `SCORE_CLEAN/SCORE_STUCK` (ScoringPanel), and `SCORE_GOOD/SCORE_WEAK` (ScoreHistoryContent) literals — all three sites + the heatmap `lerp` now read from `WindScoreColors`. Dropped the now-unused `Color` imports.
+- Files: `ui/theme/WindScoreTheme.kt`, `ui/ResultScreen.kt`, `ui/ScoringPanel.kt`, `ui/ScoreHistoryContent.kt`.
+
+## Phase 12 — Score-History Trend UI & Storage Tests (Completed)
+
+> Optimization + test coverage for the persistence layer and the history dialog.
+
+### Trend visualization (`ScoreHistoryContent.kt`)
+- **Sparkline**: a Canvas line chart at the top of the history dialog plotting accuracy over time (oldest→newest, left→right); colored green when the overall trend is improving, amber when declining (reuses `WindScoreColors.scoreClean/scoreStuck`, so dark-theme adaptive). Shown only when ≥ 2 records exist.
+- **Per-item delta**: each record shows a "vs previous attempt" chip next to its score (`+5` green / `-3` amber / `±0` grey); the oldest record has no previous attempt so shows none.
+
+### Storage testability refactor
+- Added an injectable `baseDir: File = File(getAppStorageDir())` parameter to `ScoreHistoryStorage`, `ConfigStorage`, and `LangStorage` load/save methods, so tests run against a throwaway temp dir instead of the user's real `~/.windscore`. Production call sites unchanged (use the default).
+
+### New unit tests (`desktopTest`) — 10 tests
+- `ScoreHistoryStorageTest`: empty-when-missing, append persists newest-first, sorts by timestamp desc, caps at 50, per-score isolation.
+- `ConfigStorageTest`: default-when-missing, save/load round-trip.
+- `LangStorageTest`: default-when-missing, save/load round-trip, blank-content fallback.
+
+## Phase 13 — Middle-C Keyboard Landmark (Completed)
+
+> Helps users map the on-screen keyboard to a real piano.
+
+- Marked **Middle C (MIDI 60 / C4)** on both keyboard renderings — the piano-roll's built-in keyboard strip (`PianoRoll.drawKeyboard`) and the static keyboard in 识谱 / SHEET_KEYBOARD mode (`StaticKeyboard.drawKeyboard`).
+- Middle C is drawn as a prominent magenta dot near the front of the key; every other C (each octave) gets a subtle grey dot for octave orientation. Dots scale with key width (clamped to a minimum) so they stay visible on 88-key widths. Dark-theme adaptive (uses `accentMagenta` + themed `ink`).
+- Files: `ui/PianoRoll.kt`, `ui/StaticKeyboard.kt`.
+
+## Phase 14 — Android Launch Crash Fixes (Completed)
+
+> Two independent crashes that prevented the Android app from launching. Neither was caused by the recent feature work; both were latent and surfaced once testing reached Android.
+
+### A. `AndroidMidiManager` null-cast
+- **Crash**: `getSystemService(MIDI_SERVICE) as MidiManager` threw NPE on devices/emulators that don't provide a MIDI service.
+- **Fix** (`androidMain/.../midi/AndroidMidiManager.kt`): safe-cast `as? MidiManager`; `start()` no-ops (logs and returns) when the system manager is null. App degrades gracefully — no MIDI input, but playback audio and the rest of the UI still work.
+
+### B. SVG icons unsupported on Android
+- **Crash**: `java.lang.IllegalStateException: Android platform doesn't support SVG format.` Compose Multiplatform's resource pipeline can't decode `.svg` on Android; all 21 drawable icons were SVG, so the very first `painterResource` (the splash's `piano_keys_thin`) crashed.
+- **Fix**: rasterized all 21 icons to **transparent-background PNG** (black silhouette; Compose `Icon` recolors via its `tint`/`LocalContentColor` using the bitmap alpha) and removed the SVGs. PNG works on both desktop and Android; the `Res.drawable.*` accessors regenerated by filename stem — **no Kotlin code changes**. Conversion done with `svglib`+`reportlab`+`Pillow` (currentColor → black, white-bg render → alpha mask for anti-aliased transparency).
+- Files: `composeApp/src/commonMain/composeResources/drawable/*.png` (21 files; `.svg` removed).
+
+## Verification status (current)
+- `:composeApp:desktopTest` —— **36 tests all PASSED**.
+- `:composeApp:clean compileKotlinDesktop` + `:composeApp:compileDebugKotlinAndroid` both pass (resources regenerated for PNG).
+
+
+## Known leftovers
+- `OsmdHtml.kt` embedded JS HUD strings still Chinese (see Phase 9 limitation).

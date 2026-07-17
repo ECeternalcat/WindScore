@@ -309,6 +309,25 @@ private fun DrawScope.drawKeyboard(
             )
         }
     }
+    // C 键定位标记：每个八度的 C 用淡点，中央 C（MIDI 60）用品红实心点突出
+    for (pitch in pitchLow..pitchHigh) {
+        if (pitch % 12 != 0) continue
+        val cx = (pitch - pitchLow) * keyWidth + keyWidth / 2f
+        val cy = top + keyboardHeight * 0.86f
+        if (pitch == 60) {
+            drawCircle(
+                color = WindScoreColors.accentMagenta,
+                radius = (keyWidth * 0.17f).coerceAtLeast(3.5f),
+                center = Offset(cx, cy),
+            )
+        } else {
+            drawCircle(
+                color = WindScoreColors.ink.copy(alpha = 0.28f),
+                radius = (keyWidth * 0.1f).coerceAtLeast(2f),
+                center = Offset(cx, cy),
+            )
+        }
+    }
     drawLine(color = WindScoreColors.hairline, start = Offset(0f, top), end = Offset(w, top), strokeWidth = 1f)
 }
 

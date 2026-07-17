@@ -47,13 +47,14 @@ fun setWindowImmersiveDarkMode(window: java.awt.Window, dark: Boolean) {
 actual fun SettingsDialog(
     visible: Boolean,
     onDismiss: () -> Unit,
+    title: String,
     content: @Composable () -> Unit
 ) {
     if (visible) {
         DialogWindow(
             onCloseRequest = onDismiss,
             state = rememberDialogState(size = DpSize(480.dp, 560.dp)),
-            title = "Settings / 设置",
+            title = title,
             resizable = false,
         ) {
             androidx.compose.runtime.LaunchedEffect(com.windscore.ui.theme.isDarkThemeGlobal) {

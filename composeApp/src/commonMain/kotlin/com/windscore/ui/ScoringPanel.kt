@@ -2,6 +2,7 @@ package com.windscore.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,7 +26,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import com.windscore.ViewMode
 import com.windscore.core.engine.ScoreSession
 import com.windscore.core.model.PracticeMode
+import com.windscore.core.model.ScoreRecord
 import com.windscore.ui.components.CircularIconButton
 import com.windscore.ui.components.PillButton
 import com.windscore.ui.components.PillButtonStyle
@@ -44,12 +45,11 @@ import com.windscore.ui.theme.WindScoreSpacing
 import org.jetbrains.compose.resources.painterResource
 import windscore.composeapp.generated.resources.Res
 import windscore.composeapp.generated.resources.book_open_text_thin
+import windscore.composeapp.generated.resources.clock_thin
 import windscore.composeapp.generated.resources.music_notes_thin
 import windscore.composeapp.generated.resources.pencil_simple_thin
 import windscore.composeapp.generated.resources.piano_keys_thin
 
-private val SCORE_CLEAN = Color(0xFF3DBB6C)
-private val SCORE_STUCK = Color(0xFFE0A33A)
 
 /**
  * 评分设置面板：用户选择评分范围（单/双手）与评分视图，点击"开始评分"进入评分。
@@ -61,6 +61,8 @@ fun ScoringSetupPanel(
     viewMode: ViewMode,
     onViewChange: (ViewMode) -> Unit,
     onStartScoring: (PracticeMode) -> Unit,
+    history: List<ScoreRecord>,
+    onShowHistory: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var scoringHand by remember { mutableStateOf(PracticeMode.BOTH) }
@@ -145,6 +147,48 @@ fun ScoringSetupPanel(
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text(s.startScoring, fontWeight = FontWeight.W600)
+        }
+
+        Spacer(Modifier.height(WindScoreSpacing.sm))
+
+        // 评分历史入口
+        Surface(
+            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(WindScoreRounded.md)).clickable(onClick = onShowHistory),
+            color = WindScoreColors.surfaceSoft,
+            shape = RoundedCornerShape(WindScoreRounded.md),
+        ) {
+            Row(
+                modifier = Modifier.padding(WindScoreSpacing.md).fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.sm),
+            ) {
+                Icon(
+                    painter = painterResource(Res.drawable.clock_thin),
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                    tint = WindScoreColors.ink.copy(alpha = 0.6f),
+                )
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        s.scoreHistory,
+                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.W500),
+                        color = WindScoreColors.ink,
+                    )
+                    val subtitle = if (history.isEmpty()) {
+                        s.noHistory
+                    } else {
+                        val best = history.maxOf { it.percent }
+                        "${s.bestLabel} $best% · ${s.timesLabel(history.size)}"
+                    }
+                    Text(
+                        subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = WindScoreColors.ink.copy(alpha = 0.5f),
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                    )
+                }
+            }
         }
     }
 }
@@ -283,7 +327,7 @@ fun ScoringResultOverlay(
                 "$percent%",
                 fontSize = 64.sp,
                 fontWeight = FontWeight.W300,
-                color = if (percent >= 80) SCORE_CLEAN else SCORE_STUCK,
+                color = if (percent >= 80) WindScoreColors.scoreClean else WindScoreColors.scoreStuck,
                 letterSpacing = (-0.96).sp,
             )
             Text(

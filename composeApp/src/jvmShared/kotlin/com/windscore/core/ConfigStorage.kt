@@ -6,16 +6,17 @@ import java.io.File
 
 /**
  * Desktop / Android 共享的全局配置持久化实现。
+ * [baseDir] 仅用于测试注入；生产路径默认为应用存储目录。
  */
 internal object ConfigStorage {
 
-    private val configFile: File get() = File(getAppStorageDir(), "app_config.json")
+    private fun file(baseDir: File) = File(baseDir, "app_config.json")
 
-    fun load(): AppConfig {
-        val file = configFile
+    fun load(baseDir: File = File(getAppStorageDir())): AppConfig {
+        val f = file(baseDir)
         return try {
-            if (file.exists()) {
-                val jsonText = file.readText(Charsets.UTF_8)
+            if (f.exists()) {
+                val jsonText = f.readText(Charsets.UTF_8)
                 Json.decodeFromString(AppConfig.serializer(), jsonText)
             } else {
                 AppConfig()
@@ -26,15 +27,12 @@ internal object ConfigStorage {
         }
     }
 
-    fun save(config: AppConfig) {
+    fun save(config: AppConfig, baseDir: File = File(getAppStorageDir())) {
         try {
-            val dir = File(getAppStorageDir())
-            if (!dir.exists()) {
-                dir.mkdirs()
+            if (!baseDir.exists()) {
+                baseDir.mkdirs()
             }
-            val file = configFile
-            val jsonText = Json.encodeToString(AppConfig.serializer(), config)
-            file.writeText(jsonText, Charsets.UTF_8)
+            file(baseDir).writeText(Json.encodeToString(AppConfig.serializer(), config), Charsets.UTF_8)
         } catch (e: Exception) {
             println("[ConfigStorage] Failed to save config: ${e.message}")
         }

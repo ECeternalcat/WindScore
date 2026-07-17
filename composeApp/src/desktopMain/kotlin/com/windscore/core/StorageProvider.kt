@@ -1,6 +1,7 @@
 package com.windscore.core
 
 import com.windscore.core.model.Score
+import com.windscore.core.model.ScoreRecord
 import java.io.File
 import java.security.MessageDigest
 
@@ -51,3 +52,12 @@ actual fun loadAppLanguage(default: String): String = LangStorage.load(default)
 actual fun saveAppLanguage(code: String) {
     LangStorage.save(code)
 }
+
+actual fun nowEpochMillis(): Long = DateTimeUtil.nowEpochMillis()
+
+actual fun formatDateTime(epochMillis: Long): String = DateTimeUtil.formatDateTime(epochMillis)
+
+actual fun loadScoreHistory(scoreId: String): List<ScoreRecord> = ScoreHistoryStorage.load(scoreId)
+
+actual fun appendScoreRecord(scoreId: String, record: ScoreRecord): List<ScoreRecord> =
+    ScoreHistoryStorage.append(scoreId, record)

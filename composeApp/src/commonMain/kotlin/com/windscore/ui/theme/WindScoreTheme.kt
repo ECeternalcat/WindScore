@@ -73,6 +73,10 @@ object WindScoreColors {
     val accentMagenta = Color(0xFFFF3D8B)
     val semanticSuccess = Color(0xFF1EA64A)
     val overlayScrim = Color(0xFF000000)
+
+    // 准度计分语义色：干净（冷绿）/ 卡壳（暖琥珀，避免红色）。深色模式下提亮以保证对比度。
+    val scoreClean: Color get() = if (isDarkThemeGlobal) Color(0xFF5BD68A) else Color(0xFF3DBB6C)
+    val scoreStuck: Color get() = if (isDarkThemeGlobal) Color(0xFFF0B85A) else Color(0xFFE0A33A)
 }
 
 object WindScoreSpacing {

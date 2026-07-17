@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 actual fun SettingsDialog(
     visible: Boolean,
     onDismiss: () -> Unit,
+    title: String,
     content: @Composable () -> Unit
 ) {
     AnimatedVisibility(

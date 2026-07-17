@@ -11,6 +11,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Alignment
@@ -89,7 +90,7 @@ fun App(
     val recentScores = remember { mutableStateListOf<Score>() }
     val tr = strings()
 
-    var showSplash by remember { mutableStateOf(true) }
+    var showSplash by remember { mutableStateOf(!isCompact) }
     LaunchedEffect(Unit) {
         delay(1000)
         showSplash = false
@@ -109,6 +110,9 @@ fun App(
     // 评分流程状态：scoringSession 非空表示正在评分；MIDI 事件会优先路由给它
     var scoringSession by remember { mutableStateOf<ScoreSession?>(null) }
     var scoringPhase by remember { mutableStateOf(com.windscore.ui.ScoringPhase.SETUP) }
+    // 评分历史（当前乐谱）+ 历史对话框
+    var scoreHistory by remember { mutableStateOf<List<com.windscore.core.model.ScoreRecord>>(emptyList()) }
+    var showHistoryDialog by remember { mutableStateOf(false) }
 
 
 
@@ -298,6 +302,11 @@ fun App(
         scope.launch(kotlinx.coroutines.Dispatchers.IO) {
             com.windscore.core.saveRecentScores(recentScores)
         }
+        // 加载该乐谱的评分历史
+        scoreHistory = emptyList()
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            scoreHistory = com.windscore.core.loadScoreHistory(scoreId)
+        }
     }
 
     fun closeScore() {
@@ -412,6 +421,19 @@ fun App(
                         val sc = scoringSession
                         if (sc != null && sc.finished && scoringPhase == com.windscore.ui.ScoringPhase.ACTIVE) {
                             delay(1000)
+                            // 持久化本次评分记录
+                            val scoreId = s.score.id
+                            val record = com.windscore.core.model.ScoreRecord(
+                                timestamp = com.windscore.core.nowEpochMillis(),
+                                percent = sc.scorePercent(),
+                                cleanHits = sc.cleanHitCount(),
+                                totalNotes = sc.totalActiveNotes(),
+                                wrongPresses = sc.wrongPressCount(),
+                                practiceMode = sc.practiceMode,
+                            )
+                            scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                scoreHistory = com.windscore.core.appendScoreRecord(scoreId, record)
+                            }
                             scoringPhase = com.windscore.ui.ScoringPhase.RESULT
                         }
                     }
@@ -540,6 +562,8 @@ fun App(
                         scoringPhase = scoringPhase,
                         onStartScoring = { startScoring(it) },
                         onExitScoring = { exitScoring() },
+                        scoreHistory = scoreHistory,
+                        onShowHistory = { showHistoryDialog = true },
                         appConfig = appConfig,
                     )
 
@@ -564,6 +588,25 @@ fun App(
                             }
                         }
                     }
+
+                    // 评分历史对话框
+                    SettingsDialog(
+                        visible = showHistoryDialog,
+                        onDismiss = { showHistoryDialog = false },
+                        title = tr.scoreHistory,
+                    ) {
+                        WindScoreTheme(darkTheme = isDarkTheme) {
+                            Surface(
+                                modifier = Modifier.fillMaxSize(),
+                                color = WindScoreColors.canvas,
+                            ) {
+                                com.windscore.ui.ScoreHistoryContent(
+                                    records = scoreHistory,
+                                    onDismiss = { showHistoryDialog = false },
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -576,7 +619,11 @@ fun App(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(WindScoreColors.canvas),
+                        .background(WindScoreColors.canvas)
+                        .clickable(
+                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                            indication = null,
+                        ) { showSplash = false },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(

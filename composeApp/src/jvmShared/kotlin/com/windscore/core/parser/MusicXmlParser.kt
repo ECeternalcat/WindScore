@@ -11,6 +11,14 @@ import javax.xml.parsers.DocumentBuilderFactory
 import kotlin.math.roundToInt
 
 /**
+ * 尽力设置 XML 安全特性；某些平台（如 Android 基于 Expat 的实现）不支持 Xerces 专有 feature，
+ * 此时静默忽略，保证解析仍可进行。
+ */
+private fun javax.xml.parsers.DocumentBuilderFactory.safeSetFeature(name: String, value: Boolean) {
+    runCatching { setFeature(name, value) }
+}
+
+/**
  * MusicXML (.mxl) 降维解析器。
  *
  * 把庞大的 MusicXML 树“降维”成一维的 [NoteEntity] 列表，丢弃五线谱排版信息：
@@ -50,10 +58,10 @@ object MusicXmlParser {
         val factory = DocumentBuilderFactory.newInstance().apply {
             isNamespaceAware = false
             isValidating = false
-            // 抑制 MusicXML DTD 远程下载
-            setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
-            setFeature("http://xml.org/sax/features/external-general-entities", false)
-            setFeature("http://xml.org/sax/features/external-parameter-entities", false)
+            // 抑制 MusicXML DTD 远程下载（不支持的平台静默跳过）
+            safeSetFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
+            safeSetFeature("http://xml.org/sax/features/external-general-entities", false)
+            safeSetFeature("http://xml.org/sax/features/external-parameter-entities", false)
         }
         val doc = factory.newDocumentBuilder().parse(ByteArrayInputStream(xmlBytes))
         doc.documentElement.normalize()
@@ -293,9 +301,9 @@ object MusicXmlParser {
         if (container != null) {
             val factory = DocumentBuilderFactory.newInstance().apply {
                 isValidating = false
-                setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
-                setFeature("http://xml.org/sax/features/external-general-entities", false)
-                setFeature("http://xml.org/sax/features/external-parameter-entities", false)
+                safeSetFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
+                safeSetFeature("http://xml.org/sax/features/external-general-entities", false)
+                safeSetFeature("http://xml.org/sax/features/external-parameter-entities", false)
             }
             runCatching {
                 val doc = factory.newDocumentBuilder().parse(ByteArrayInputStream(container))

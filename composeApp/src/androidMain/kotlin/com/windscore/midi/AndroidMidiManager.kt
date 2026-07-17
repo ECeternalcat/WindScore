@@ -20,7 +20,7 @@ class AndroidMidiManager(context: Context) : MidiManager {
     )
     override val events: Flow<MidiEvent> = _events.asSharedFlow()
 
-    private val sysService = context.getSystemService(Context.MIDI_SERVICE) as android.media.midi.MidiManager
+    private val sysService = context.getSystemService(Context.MIDI_SERVICE) as? android.media.midi.MidiManager
     private val mainHandler = Handler(Looper.getMainLooper())
 
     private val openedDevices = mutableListOf<MidiDevice>()
@@ -107,14 +107,19 @@ class AndroidMidiManager(context: Context) : MidiManager {
     override fun start() {
         if (running) return
         running = true
-        val devices = sysService.devices
+        val mgr = sysService
+        if (mgr == null) {
+            println("[MIDI] 系统未提供 MidiManager（设备不支持 MIDI），跳过 MIDI 接入")
+            return
+        }
+        val devices = mgr.devices
         if (devices.isEmpty()) {
             println("[MIDI] 未发现 MIDI 设备")
             return
         }
         // 打开所有设备并合并事件流（与 Web MIDI 一致；任一设备失效不影响其余）
         for (info in devices) {
-            sysService.openDevice(info, deviceCallback, mainHandler)
+            mgr.openDevice(info, deviceCallback, mainHandler)
         }
     }
 

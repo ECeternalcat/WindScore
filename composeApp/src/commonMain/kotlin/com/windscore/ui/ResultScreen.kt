@@ -17,7 +17,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -29,9 +28,6 @@ import com.windscore.ui.i18n.strings
 import com.windscore.ui.theme.WindScoreColors
 import com.windscore.ui.theme.WindScoreRounded
 import com.windscore.ui.theme.WindScoreSpacing
-
-private val CLEAN = Color(0xFF3DBB6C)   // 干净（冷绿）
-private val STUCK = Color(0xFFE0A33A)   // 卡壳（暖琥珀，避免红色）
 
 /**
  * 结算页（文档 4.3）：
@@ -71,7 +67,7 @@ fun ResultScreen(
                 "$percent%",
                 fontSize = 64.sp,
                 fontWeight = FontWeight.W300,
-                color = if (percent >= 80) CLEAN else STUCK,
+                color = if (percent >= 80) WindScoreColors.scoreClean else WindScoreColors.scoreStuck,
                 letterSpacing = (-0.96).sp,
             )
             Text(
@@ -103,6 +99,8 @@ fun ResultScreen(
 @Composable
 private fun Heatmap(counts: IntArray, modifier: Modifier = Modifier) {
     val maxCount = counts.maxOrNull()?.coerceAtLeast(1) ?: 1
+    val clean = WindScoreColors.scoreClean
+    val stuck = WindScoreColors.scoreStuck
     Canvas(modifier) {
         val w = size.width
         val h = size.height
@@ -110,7 +108,7 @@ private fun Heatmap(counts: IntArray, modifier: Modifier = Modifier) {
         val cellW = w / counts.size
         for (i in counts.indices) {
             val ratio = counts[i].toFloat() / maxCount
-            val color = lerp(CLEAN, STUCK, ratio)
+            val color = lerp(clean, stuck, ratio)
             drawRect(
                 color = color,
                 topLeft = Offset(i * cellW, 0f),
