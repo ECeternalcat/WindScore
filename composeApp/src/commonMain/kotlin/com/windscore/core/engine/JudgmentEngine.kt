@@ -45,6 +45,10 @@ class JudgmentEngine(
 
     private var groupIndex = 0
     private val activeKeys = mutableSetOf<Int>()
+    /** Session-local note hit state; score data remains immutable and shareable. */
+    private val hitNoteIds = mutableSetOf<Int>()
+    /** 当前组激活后新按下的按键；连续同音必须经过松开并重新按下。 */
+    private val freshKeys = mutableSetOf<Int>()
     /** 上次已“到达”（已托管）的组号，避免重复发声。 */
     private var lastArrivedGroupIndex = -1
 
@@ -109,8 +113,12 @@ class JudgmentEngine(
      */
     fun stepForward() {
         if (groupIndex >= groups.size) return
-        val nextIdx = groupIndex + 1
-        val targetTick = if (nextIdx < groups.size) groups[nextIdx].first().startTick else totalTicks
+        val region = playbackRegion()
+        val targetTick = groups.asSequence()
+            .drop(groupIndex + 1)
+            .map { it.first().startTick }
+            .firstOrNull(region::containsNoteAt)
+            ?: region.end
         seekTo(targetTick)
     }
 
@@ -119,8 +127,14 @@ class JudgmentEngine(
      * 落到的组重置为未命中，便于长辈重新练习。
      */
     fun stepBackward() {
-        if (groupIndex <= 0) return
-        seekTo(groups[groupIndex - 1].first().startTick)
+        val region = playbackRegion()
+        val targetTick = groups.asSequence()
+            .take(groupIndex)
+            .map { it.first().startTick }
+            .filter(region::containsNoteAt)
+            .lastOrNull()
+            ?: region.start
+        seekTo(targetTick)
     }
 
     /**
@@ -129,16 +143,15 @@ class JudgmentEngine(
      */
     fun seekTo(targetTick: Long) {
         activeKeys.clear()
+        freshKeys.clear()
         for (i in groupWrongCounts.indices) groupWrongCounts[i] = 0
         currentGroupDirty = false
         wrongPressCount = 0
 
-        val targetIdx = findGroupIndexAtOrAfter(targetTick).let { if (it < 0) groups.size else it }
-        // 标记目标之前的组为已命中，之后的为未命中（单次遍历，无额外分配）
-        for (i in groups.indices) {
-            val isBefore = i < targetIdx
-            groups[i].forEach { it.isHit = isBefore }
-        }
+        val constrainedTick = playbackRegion().constrain(targetTick)
+        val targetIdx = findGroupIndexAtOrAfter(constrainedTick).let { if (it < 0) groups.size else it }
+        hitNoteIds.clear()
+        groups.take(targetIdx).forEach { group -> group.forEach { hitNoteIds.add(it.id) } }
         cleanHitCount = (0 until targetIdx).sumOf { i ->
             groups[i].count { isActiveTrack(it.track) }
         }
@@ -165,12 +178,28 @@ class JudgmentEngine(
     /** 当前物理键盘处于 NoteOn 的音高集合。 */
     fun activeKeys(): Set<Int> = activeKeys.toSet()
 
+    /** Session-local IDs of notes already completed or hosted. */
+    fun hitNoteIds(): Set<Int> = hitNoteIds.toSet()
+
     /** 当前组“需要用户按”的音高（仅练习轨道）。用于 UI 高亮提示。 */
     fun pendingPitches(): Set<Int> =
         groups.getOrNull(groupIndex)
             ?.filter { isActiveTrack(it.track) }
             ?.mapTo(mutableSetOf()) { it.pitch }
             ?: emptySet()
+
+    /** Active-hand pitches in the current timeline group. Never advertises a future group. */
+    fun cuePitches(): Set<Int> = pendingPitches()
+
+    /** Hosted-hand pitches in the current timeline group; empty in both-hands mode. */
+    fun hostedCuePitches(): Set<Int> {
+        if (practiceMode == PracticeMode.BOTH) return emptySet()
+        return groups.getOrNull(groupIndex)
+            ?.asSequence()
+            ?.filterNot { isActiveTrack(it.track) }
+            ?.mapTo(mutableSetOf()) { it.pitch }
+            ?: emptySet()
+    }
 
     /** 该轨道是否由用户练习（true）/系统托管（false）。 */
     fun isActiveTrack(track: TrackType): Boolean = when (practiceMode) {
@@ -181,7 +210,9 @@ class JudgmentEngine(
 
     /** 用户按下某音高。返回本次新到达组应自动托管的音。 */
     fun onNoteOn(pitch: Int): List<NoteEntity> {
-        activeKeys.add(pitch)
+        if (activeKeys.add(pitch)) {
+            freshKeys.add(pitch)
+        }
         recordPress(pitch)
         // 当前为纯托管组时，用户按键不推进，由上层按真实节奏调度 advanceHosted
         val group = groups.getOrNull(groupIndex) ?: return emptyList()
@@ -196,7 +227,8 @@ class JudgmentEngine(
 
     fun reset(): List<NoteEntity> {
         activeKeys.clear()
-        groups.forEach { g -> g.forEach { it.isHit = false } }
+        freshKeys.clear()
+        hitNoteIds.clear()
         for (i in groupWrongCounts.indices) groupWrongCounts[i] = 0
         currentGroupDirty = false
         cleanHitCount = 0
@@ -249,23 +281,24 @@ class JudgmentEngine(
             // 游标落到新组 → 托管该组的非练习轨道音
             if (groupIndex > lastArrivedGroupIndex) {
                 val hosted = group.filter { !isActiveTrack(it.track) }
-                hosted.forEach { it.isHit = true }
+                hosted.forEach { hitNoteIds.add(it.id) }
                 hostedPlayed.addAll(hosted)
                 lastArrivedGroupIndex = groupIndex
             }
             val required = group
                 .filter { isActiveTrack(it.track) }
                 .mapTo(mutableSetOf()) { it.pitch }
-            // 命中条件（文档 2.3.3 / 3.2）：练习轨道音高全部“按在手里”即过；
-            // 一个音只需按一次，无论多长/是否与前一音相邻。多余/错音不影响 containsAll，无视。
-            val satisfied = required.all { it in activeKeys }
+            // 当前组要求音必须仍按下，且是在该组激活后新按下；和弦可分次按齐，重复音必须重新击键。
+            // 多余或错误音不阻止推进，只影响最终准确率。
+            val satisfied = required.all { it in activeKeys && it in freshKeys }
             if (satisfied) {
                 // 准度：该组弹奏期间若未错按，则计入“干净命中”
                 if (!currentGroupDirty) {
                     cleanHitCount += group.count { isActiveTrack(it.track) }
                 }
-                group.forEach { it.isHit = true }
+                group.forEach { hitNoteIds.add(it.id) }
                 groupIndex++
+                freshKeys.clear()
                 currentGroupDirty = false
                 // A/B 循环边界检测：下一组起点已越过循环终点，回卷
                 if (loopEnabled && groupIndex < groups.size && currentTick >= loopEndTick) {
@@ -290,12 +323,11 @@ class JudgmentEngine(
         currentGroupDirty = false
         // 清按键池：循环回卷后要求长辈重新按下，避免因为一直按着导致无限自循环
         activeKeys.clear()
+        freshKeys.clear()
         // 重置循环段内音符为未命中，让长辈重新练习
-        groups.forEach { g ->
-            g.forEach { note ->
-                if (note.startTick in loopStartTick until loopEndTick) {
-                    note.isHit = false
-                }
+        groups.forEach { group ->
+            group.forEach { note ->
+                if (note.startTick in loopStartTick until loopEndTick) hitNoteIds.remove(note.id)
             }
         }
         recomputeCleanHitCount()
@@ -305,6 +337,13 @@ class JudgmentEngine(
     private fun findGroupIndexAtOrAfter(tick: Long): Int =
         groups.indexOfFirst { it.first().startTick >= tick }
 
+    private fun playbackRegion(): PlaybackRegion = PlaybackRegion(
+        scoreStart = 0L,
+        scoreEnd = totalTicks,
+        loopStart = loopStartTick.takeIf { loopEnabled },
+        loopEnd = loopEndTick.takeIf { loopEnabled },
+    )
+
     /** 根据当前各组命中与错按状态，重新计算干净命中数（循环回卷后防止分数虚高）。 */
     private fun recomputeCleanHitCount() {
         cleanHitCount = 0
@@ -312,7 +351,7 @@ class JudgmentEngine(
             val active = group.filter { isActiveTrack(it.track) }
             if (active.isEmpty()) continue
             if (groupWrongCounts[i] > 0) continue
-            if (active.all { it.isHit }) {
+            if (active.all { it.id in hitNoteIds }) {
                 cleanHitCount += active.size
             }
         }

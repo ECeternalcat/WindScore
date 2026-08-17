@@ -4,8 +4,28 @@ import com.windscore.core.model.Fingerprint
 import com.windscore.core.model.Score
 import com.windscore.core.parser.MusicXmlParser
 import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.cbor.Cbor
+import kotlinx.serialization.json.Json
 import java.io.File
+
+/** Versioned on-disk envelope for parsed-score CBOR caches. */
+@Serializable
+internal data class ScoreCacheEnvelope(
+    val schemaVersion: Int,
+    val score: Score,
+) {
+    companion object {
+        const val CURRENT_SCHEMA_VERSION = 1
+    }
+}
+
+@Serializable
+private data class RecentScoreEntry(
+    val title: String,
+    val xmlHash: String,
+)
 
 /**
  * Desktop / Android 共享的最近乐谱持久化实现。
@@ -16,20 +36,28 @@ import java.io.File
 @OptIn(ExperimentalSerializationApi::class)
 internal object RecentsStorage {
 
-    private val scoresDir: File get() = File(getScoresDir())
-    private val recentsFile: File get() = File(getAppStorageDir(), "recents.json")
+    private val json = Json { ignoreUnknownKeys = true }
+    private val recentEntriesSerializer = ListSerializer(RecentScoreEntry.serializer())
 
-    fun save(scores: List<Score>) {
+    private fun scoresDir(baseDir: File) = File(baseDir, "scores")
+    private fun recentsFile(baseDir: File) = File(baseDir, "recents.json")
+
+    fun save(scores: List<Score>, baseDir: File = File(getAppStorageDir())) {
         try {
+            val scoresDir = scoresDir(baseDir)
+            val recentsFile = recentsFile(baseDir)
             if (!scoresDir.exists()) scoresDir.mkdirs()
 
-            // 1. 落地每个乐谱的原始 XML 和 CBOR 缓存
+            // 1. 有原始 XML 时更新落地文件和 CBOR 缓存；轻量条目复用已有文件。
             for (score in scores) {
-                val xml = score.rawXml ?: continue
-                val xmlHash = score.id.takeIf { it.isNotEmpty() } ?: calculateMd5(xml)
+                val xml = score.rawXml
+                val xmlHash = score.id.takeIf { it.isNotEmpty() }
+                    ?: xml?.let(::calculateMd5)
+                    ?: continue
+                if (xml == null) continue
                 val scoreFile = File(scoresDir, "$xmlHash.xml")
                 if (!scoreFile.exists()) {
-                    scoreFile.writeText(xml, Charsets.UTF_8)
+                    scoreFile.atomicWriteText(xml)
                 }
                 
                 val cacheFile = File(scoresDir, "$xmlHash.cache")
@@ -37,47 +65,44 @@ internal object RecentsStorage {
                 val scoreToCache = score.copy(
                     id = xmlHash,
                     fingerprint = fingerprint,
-                    version = Score.CURRENT_VERSION
+                    version = Score.CURRENT_VERSION,
+                    supportsSheetView = true,
                 )
                 try {
-                    val cborBytes = Cbor.encodeToByteArray(Score.serializer(), scoreToCache)
-                    cacheFile.writeBytes(cborBytes)
+                    writeCache(cacheFile, scoreToCache)
                 } catch (e: Exception) {
                     println("[Storage] Failed to cache score: ${e.message}")
                 }
             }
 
-            // 2. 写入 recents.json（使用完整的 JSON 字符串转义）
-            val sb = java.lang.StringBuilder()
-            sb.append("[\n")
-            var first = true
-            for (score in scores) {
-                val xmlHash = score.id.takeIf { it.isNotEmpty() } ?: score.rawXml?.let { calculateMd5(it) } ?: continue
-                if (!first) sb.append(",\n")
-                sb.append("  {\"title\":\"").append(escapeJson(score.title))
-                    .append("\",\"xmlHash\":\"").append(escapeJson(xmlHash))
-                    .append("\"}")
-                first = false
+            // 2. 写入轻量的最近乐谱索引。
+            val recentEntries = scores.mapNotNull { score ->
+                val xmlHash = score.id.takeIf { it.isNotEmpty() }
+                    ?: score.rawXml?.let(::calculateMd5)
+                    ?: return@mapNotNull null
+                RecentScoreEntry(title = score.title, xmlHash = xmlHash)
             }
-            sb.append("\n]")
-
-            recentsFile.writeText(sb.toString(), Charsets.UTF_8)
+            recentsFile.atomicWriteText(json.encodeToString(recentEntriesSerializer, recentEntries))
             println("[Storage] Saved recent scores list successfully.")
         } catch (e: Exception) {
             println("[Storage] Failed to save recent scores: ${e.message}")
         }
     }
 
-    fun load(): List<Score> {
+    fun load(baseDir: File = File(getAppStorageDir())): List<Score> {
         return try {
+            val scoresDir = scoresDir(baseDir)
+            val recentsFile = recentsFile(baseDir)
             if (!recentsFile.exists()) return emptyList()
-            val json = recentsFile.readText(Charsets.UTF_8)
-            val items = parseRecentsJson(json)
+            val items = json.decodeFromString(
+                recentEntriesSerializer,
+                recentsFile.readText(Charsets.UTF_8),
+            )
 
             val result = mutableListOf<Score>()
             for (item in items) {
-                val title = item.first
-                val scoreId = item.second
+                val title = item.title
+                val scoreId = item.xmlHash
                 val xmlFile = File(scoresDir, "$scoreId.xml")
                 val cacheFile = File(scoresDir, "$scoreId.cache")
                 
@@ -87,11 +112,18 @@ internal object RecentsStorage {
                 var cachedScore: Score? = null
                 if (cacheFile.exists()) {
                     try {
-                        val bytes = cacheFile.readBytes()
-                        val score = Cbor.decodeFromByteArray(Score.serializer(), bytes)
+                        val cached = readCache(cacheFile)
+                        val score = cached.score
                         val currentFingerprint = Fingerprint(xmlFile.length(), xmlFile.lastModified())
                         if (score.fingerprint == currentFingerprint && score.version == Score.CURRENT_VERSION) {
-                            cachedScore = score.copy(title = title, rawXml = null)
+                            cachedScore = score.copy(
+                                title = title,
+                                rawXml = null,
+                                supportsSheetView = true,
+                            )
+                            if (cached.isLegacy) {
+                                writeCache(cacheFile, score)
+                            }
                         } else {
                             println("[Storage] Cache fingerprint mismatch for $title, re-parsing...")
                         }
@@ -113,14 +145,14 @@ internal object RecentsStorage {
                         title = title,
                         fingerprint = fingerprint,
                         version = Score.CURRENT_VERSION,
-                        rawXml = null // 列表保持轻量
+                        rawXml = null, // 列表保持轻量
+                        supportsSheetView = true,
                     )
                     result.add(finalScore)
 
                     // 3. 写入缓存文件
                     try {
-                        val cborBytes = Cbor.encodeToByteArray(Score.serializer(), finalScore)
-                        cacheFile.writeBytes(cborBytes)
+                        writeCache(cacheFile, finalScore)
                     } catch (e: Exception) {
                         println("[Storage] Failed to write cache: ${e.message}")
                     }
@@ -134,67 +166,26 @@ internal object RecentsStorage {
         }
     }
 
-    /** 完整的 JSON 字符串转义，避免标题中的换行/制表/反斜杠损坏 recents.json。 */
-    private fun escapeJson(s: String): String = s
-        .replace("\\", "\\\\")
-        .replace("\"", "\\\"")
-        .replace("\n", "\\n")
-        .replace("\r", "\\r")
-        .replace("\t", "\\t")
+    private data class CachedScore(val score: Score, val isLegacy: Boolean)
 
-    /**
-     * 解析 recents.json：数组内每个对象形如 {"title":"...","xmlHash":"..."}。
-     * 手写解析以正确处理转义字符（旧的 [^\"]+ 正则遇到转义引号会截断）。
-     */
-    private fun parseRecentsJson(json: String): List<Pair<String, String>> {
-        val items = mutableListOf<Pair<String, String>>()
-        val titleKey = "\"title\""
-        val hashKey = "\"xmlHash\""
-        var i = 0
-        while (i < json.length) {
-            val titleIdx = json.indexOf(titleKey, i)
-            if (titleIdx < 0) break
-            val titleVal = readStringAfterKey(json, titleIdx + titleKey.length) ?: break
-            val hashIdx = json.indexOf(hashKey, titleVal.second)
-            if (hashIdx < 0) break
-            val hashVal = readStringAfterKey(json, hashIdx + hashKey.length) ?: break
-            items.add(titleVal.first to hashVal.first)
-            i = hashVal.second
-        }
-        return items
-    }
-
-    /** 在 key 之后跳过冒号与空白，读取一个 JSON 字符串字面量，返回 (解码值, 闭引号后下标)。 */
-    private fun readStringAfterKey(json: String, start: Int): Pair<String, Int>? {
-        var p = start
-        while (p < json.length && (json[p] == ':' || json[p].isWhitespace())) p++
-        if (p >= json.length || json[p] != '"') return null
-        return readJsonString(json, p)
-    }
-
-    /** 读取从 openQuoteIndex（指向开引号）开始的 JSON 字符串字面量。 */
-    private fun readJsonString(json: String, openQuoteIndex: Int): Pair<String, Int>? {
-        val sb = StringBuilder()
-        var i = openQuoteIndex + 1
-        while (i < json.length) {
-            val c = json[i]
-            if (c == '\\' && i + 1 < json.length) {
-                when (val n = json[i + 1]) {
-                    '\\' -> sb.append('\\')
-                    '"' -> sb.append('"')
-                    'n' -> sb.append('\n')
-                    'r' -> sb.append('\r')
-                    't' -> sb.append('\t')
-                    else -> { sb.append('\\'); sb.append(n) }
-                }
-                i += 2
-            } else if (c == '"') {
-                return sb.toString() to (i + 1)
-            } else {
-                sb.append(c)
-                i++
+    private fun readCache(cacheFile: File): CachedScore {
+        val bytes = cacheFile.readBytes()
+        val envelope = runCatching {
+            Cbor.decodeFromByteArray(ScoreCacheEnvelope.serializer(), bytes)
+        }.getOrNull()
+        if (envelope != null) {
+            require(envelope.schemaVersion == ScoreCacheEnvelope.CURRENT_SCHEMA_VERSION) {
+                "Unsupported score cache schema ${envelope.schemaVersion}"
             }
+            return CachedScore(envelope.score, isLegacy = false)
         }
-        return null
+        val legacyScore = Cbor.decodeFromByteArray(Score.serializer(), bytes)
+        return CachedScore(legacyScore, isLegacy = true)
     }
+
+    private fun writeCache(cacheFile: File, score: Score) {
+        val envelope = ScoreCacheEnvelope(ScoreCacheEnvelope.CURRENT_SCHEMA_VERSION, score)
+        cacheFile.atomicWriteBytes(Cbor.encodeToByteArray(ScoreCacheEnvelope.serializer(), envelope))
+    }
+
 }

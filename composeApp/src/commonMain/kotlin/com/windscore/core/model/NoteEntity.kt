@@ -1,8 +1,6 @@
 package com.windscore.core.model
 
-import kotlin.concurrent.Volatile
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.Transient
 
 /**
  * 降维后的唯一真理：按时间排序的一维音符单元。
@@ -17,8 +15,4 @@ data class NoteEntity(
     val durationTick: Long,
     /** 指法提示（Phase 3），无指法时为 null。 */
     val fingering: String? = null,
-) {
-    @Volatile
-    @Transient
-    var isHit: Boolean = false
-}
+)

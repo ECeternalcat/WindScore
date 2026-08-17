@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 expect fun SettingsDialog(
     visible: Boolean,
     onDismiss: () -> Unit,
-    title: String = "Settings / 设置",
+    title: String = "Settings",
+    darkTheme: Boolean = false,
     content: @Composable () -> Unit
 )

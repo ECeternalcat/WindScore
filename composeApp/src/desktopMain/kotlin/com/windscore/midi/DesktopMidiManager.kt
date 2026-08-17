@@ -13,12 +13,15 @@ import javax.sound.midi.ShortMessage
 import javax.sound.midi.Synthesizer
 
 class DesktopMidiManager : MidiManager {
-    private val _events = MutableSharedFlow<MidiEvent>(
+    private val eventQueue = MidiEventQueue()
+    override val events: Flow<MidiEvent> = eventQueue.events
+
+    private val _diagnostics = MutableSharedFlow<MidiDiagnostic>(
         replay = 0,
-        extraBufferCapacity = 256,
+        extraBufferCapacity = 16,
         onBufferOverflow = BufferOverflow.DROP_OLDEST,
     )
-    override val events: Flow<MidiEvent> = _events.asSharedFlow()
+    override val diagnostics: Flow<MidiDiagnostic> = _diagnostics.asSharedFlow()
 
     private val openedDevices = mutableListOf<MidiDevice>()
     private val openedTransmitters = mutableListOf<javax.sound.midi.Transmitter>()
@@ -46,6 +49,7 @@ class DesktopMidiManager : MidiManager {
             } catch (e: Exception) {
                 // 例如 Windows Code 10（设备无法启动）的虚设备：连句柄都拿不到，静默跳过
                 println("[MIDI] 跳过无法访问的设备 ${info.name}: ${e.message}")
+                _diagnostics.tryEmit(MidiDiagnostic.DeviceOpenFailed(e))
                 continue
             }
 
@@ -65,11 +69,13 @@ class DesktopMidiManager : MidiManager {
                 // 例如 Windows 设备管理器报 Code 10（设备无法启动）的虚设备：静默跳过，
                 // 继续尝试其余设备（与 Web MIDI 网站一致——监听所有可用输入）。
                 println("[MIDI] 跳过无法打开的设备 ${info.name}: ${e.message}")
+                _diagnostics.tryEmit(MidiDiagnostic.DeviceOpenFailed(e))
             }
         }
 
         if (connected == 0) {
             println("[MIDI] 未发现可用的 MIDI 输入设备")
+            _diagnostics.tryEmit(MidiDiagnostic.NoInputDevice)
         }
     }
 
@@ -78,13 +84,13 @@ class DesktopMidiManager : MidiManager {
             ShortMessage.NOTE_ON -> {
                 val velocity = message.data2
                 if (velocity > 0) {
-                    _events.tryEmit(MidiEvent.NoteOn(message.data1, velocity))
+                    eventQueue.emit(MidiEvent.NoteOn(message.data1, velocity))
                 } else {
-                    _events.tryEmit(MidiEvent.NoteOff(message.data1))
+                    eventQueue.emit(MidiEvent.NoteOff(message.data1))
                 }
             }
             ShortMessage.NOTE_OFF -> {
-                _events.tryEmit(MidiEvent.NoteOff(message.data1))
+                eventQueue.emit(MidiEvent.NoteOff(message.data1))
             }
             // CC / 控制信号一律忽略 (文档 3.3: 硬过滤延音踏板等 CC 信号)
             else -> Unit
@@ -97,5 +103,6 @@ class DesktopMidiManager : MidiManager {
         for (d in openedDevices) runCatching { d.close() }
         openedTransmitters.clear()
         openedDevices.clear()
+        eventQueue.clear()
     }
 }

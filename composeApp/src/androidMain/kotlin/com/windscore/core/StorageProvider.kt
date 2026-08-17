@@ -11,8 +11,11 @@ object AndroidContext {
     var context: Context? = null
 }
 
+internal fun requireAndroidContext(): Context =
+    AndroidContext.context ?: throw IllegalStateException("Android Context not initialized")
+
 actual fun getAppStorageDir(): String {
-    val ctx = AndroidContext.context ?: throw IllegalStateException("Android Context not initialized")
+    val ctx = requireAndroidContext()
     val dir = ctx.filesDir
     if (!dir.exists()) dir.mkdirs()
     return dir.absolutePath

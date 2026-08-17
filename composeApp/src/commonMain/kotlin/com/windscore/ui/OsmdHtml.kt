@@ -12,7 +12,14 @@ package com.windscore.ui
  */
 internal object OsmdHtml {
 
-    fun buildHtml(divisions: Int): String = """
+    fun buildHtml(
+        divisions: Int,
+        loadingText: String,
+        loadingFailedText: String,
+    ): String {
+        val safeLoadingText = escapeJs(loadingText)
+        val safeLoadingFailedText = escapeJs(loadingFailedText)
+        return """
         <!DOCTYPE html>
         <html>
         <head>
@@ -32,7 +39,7 @@ internal object OsmdHtml {
         </head>
         <body>
             <div id="hud"></div>
-            <div id="loading"><div class="spinner"></div><div id="loading-text">正在加载乐谱…</div></div>
+            <div id="loading"><div class="spinner"></div><div id="loading-text">$safeLoadingText</div></div>
             <div id="osmd"></div>
             <div id="err"></div>
             <script>
@@ -316,15 +323,15 @@ internal object OsmdHtml {
 
                 window.onload=function(){
                     try{
-                        setStatus("获取XML");
-                        if(typeof opensheetmusicdisplay==='undefined'){fail('OSMD未加载');return;}
+                        setStatus("fetch XML");
+                        if(typeof opensheetmusicdisplay==='undefined'){fail('$safeLoadingFailedText');return;}
                         var cW=document.getElementById('osmd').clientWidth||1200;
                         var cH=document.getElementById('osmd').clientHeight||700;
                         fetch('score.xml',{cache:'no-store'})
                             .then(function(r){if(!r.ok)throw new Error('HTTP '+r.status);return r.text();})
                             .then(function(rawXml){
                                 var xml=rawXml.replace(/<!DOCTYPE[^>]*>/i,'');
-                                setStatus("创建OSMD");
+                                setStatus("create OSMD");
                                 var osmd=new opensheetmusicdisplay.OpenSheetMusicDisplay('osmd',{
                                     autoResize:false,
                                     drawCursors:true,
@@ -332,14 +339,14 @@ internal object OsmdHtml {
                                     drawPartNames:false
                                 });
                                 window.__osmd=osmd;
-                                setStatus("解析 "+(xml.length/1024).toFixed(0)+"KB");
+                                setStatus("parse "+(xml.length/1024).toFixed(0)+"KB");
                                 var t0=Date.now();
                                 osmd.load(xml).then(function(){
                                     // 两步渲染：OSMD 内部单位与像素的换算因子取决于
                                     // MusicXML 的 <scaling> 设置，无法用固定公式推算。
                                     // 因此先以 zoom=1 渲染一次测量 SVG 实际像素宽度，
                                     // 再算出正确的 zoom 重新渲染使其铺满容器。
-                                    setStatus("测量宽度");
+                                    setStatus("measure");
                                     osmd.Zoom=1.0;
                                     osmd.updateGraphic();
                                     osmd.render();
@@ -352,7 +359,7 @@ internal object OsmdHtml {
                                     if(svgW>10){
                                         var fitZoom=cW/svgW;
                                         fitZoom=Math.max(0.3,Math.min(fitZoom,4.0));
-                                        setStatus("适配 zoom="+fitZoom.toFixed(2));
+                                        setStatus("fit zoom="+fitZoom.toFixed(2));
                                         osmd.Zoom=fitZoom;
                                         osmd.updateGraphic();
                                         osmd.render();
@@ -374,18 +381,26 @@ internal object OsmdHtml {
                                     document.getElementById('loading').style.display='none';
                                     try{osmd.cursor.show();}catch(e){}
                                     buildCursorTimes();
-                                    setStatus("就绪 "+window.__renderTime.toFixed(0)+"ms");
+                                    setStatus("ready "+window.__renderTime.toFixed(0)+"ms");
                                     initInteraction();
                                     // 渲染完成后截图（SVG→PNG）
                                     setTimeout(function(){window.captureSnapshot&&window.captureSnapshot();},100);
                                 }).catch(function(ex){fail(ex&&(ex.message||ex)||ex);});
                             })
-                            .catch(function(ex){fail('XML获取失败: '+(ex&&ex.message||ex));});
+                            .catch(function(ex){fail('$safeLoadingFailedText: '+(ex&&ex.message||ex));});
                     }catch(ex){fail(ex&&(ex.message||ex)||ex);}
                 };
-                setTimeout(function(){if(window.__renderTime<0)fail('超时>'+window.__status);},120000);
+                setTimeout(function(){if(window.__renderTime<0)fail('$safeLoadingFailedText > '+window.__status);},120000);
             </script>
         </body>
         </html>
-    """.trimIndent()
+        """.trimIndent()
+    }
+
+    private fun escapeJs(value: String): String = value
+        .replace("\\", "\\\\")
+        .replace("'", "\\'")
+        .replace("\r", "\\r")
+        .replace("\n", "\\n")
+        .replace("<", "\\x3c")
 }

@@ -17,20 +17,21 @@ import javax.swing.SwingUtilities
 @Composable
 actual fun ScoreFilePickerButton(
     onPicked: (Score) -> Unit,
+    onFailure: (Throwable) -> Unit,
     modifier: Modifier,
     style: PillButtonStyle,
 ) {
-    val openFile = rememberScoreFileOpener(onPicked)
+    val openFile = rememberScoreFileOpener(onPicked, onFailure)
     PillButton(onClick = openFile, modifier = modifier, style = style) {
         androidx.compose.material3.Text(strings().openFile)
     }
 }
 
 @Composable
-actual fun rememberScoreFileOpener(onPicked: (Score) -> Unit): () -> Unit {
+actual fun rememberScoreFileOpener(onPicked: (Score) -> Unit, onFailure: (Throwable) -> Unit): () -> Unit {
     val scope = rememberCoroutineScope()
     val title = strings().openFile
-    return remember(onPicked, title) {
+    return remember(onPicked, onFailure, title) {
         {
             scope.launch(Dispatchers.IO) {
                 // 优先使用 PowerShell 调用现代 Windows 文件对话框（IFileOpenDialog）
@@ -42,7 +43,10 @@ actual fun rememberScoreFileOpener(onPicked: (Score) -> Unit): () -> Unit {
                         val bytes = File(filePath).readBytes()
                         val score = MusicXmlParser.parse(bytes)
                         SwingUtilities.invokeLater { onPicked(score) }
-                    }.onFailure { println("[打开文件] 解析失败: ${it.message}"); it.printStackTrace() }
+                    }.onFailure {
+                        println("[打开文件] 解析失败: ${it.message}")
+                        onFailure(it)
+                    }
                 }
             }
         }

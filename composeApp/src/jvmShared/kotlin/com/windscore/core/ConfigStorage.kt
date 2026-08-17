@@ -32,7 +32,7 @@ internal object ConfigStorage {
             if (!baseDir.exists()) {
                 baseDir.mkdirs()
             }
-            file(baseDir).writeText(Json.encodeToString(AppConfig.serializer(), config), Charsets.UTF_8)
+            file(baseDir).atomicWriteText(Json.encodeToString(AppConfig.serializer(), config))
         } catch (e: Exception) {
             println("[ConfigStorage] Failed to save config: ${e.message}")
         }

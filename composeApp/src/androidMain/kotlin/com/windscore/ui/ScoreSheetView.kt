@@ -9,6 +9,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -24,6 +25,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.ByteArrayInputStream
 import java.io.File
+import java.util.concurrent.atomic.AtomicReference
 
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -40,6 +42,7 @@ actual fun ScoreSheetView(
     onSnapshot: ((SheetSnapshot) -> Unit)?,
 ) {
     val context = LocalContext.current
+    val tr = com.windscore.ui.i18n.strings()
     val snapshotHandler by rememberUpdatedState(onSnapshot)
     val osmdJsBase64 = remember {
         loadOsmdJsBase64(context)
@@ -49,8 +52,12 @@ actual fun ScoreSheetView(
     val osmdJsBytes = remember(osmdJsBase64) {
         if (osmdJsBase64.isNotEmpty()) Base64.decode(osmdJsBase64, Base64.NO_WRAP) else ByteArray(0)
     }
+    val servedOsmdBytes = remember { AtomicReference(osmdJsBytes) }
+    val servedXmlBytes = remember { AtomicReference(rawXml.toByteArray(Charsets.UTF_8)) }
+    servedOsmdBytes.set(osmdJsBytes)
+    servedXmlBytes.set(rawXml.toByteArray(Charsets.UTF_8))
 
-    val webView = remember {
+    val webView = remember(context) {
         WebView(context).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
@@ -63,11 +70,11 @@ actual fun ScoreSheetView(
                     return when {
                         path.contains("osmd.js") -> {
                             WebResourceResponse("application/javascript", "utf-8",
-                                ByteArrayInputStream(osmdJsBytes))
+                                ByteArrayInputStream(servedOsmdBytes.get()))
                         }
                         path.contains("score.xml") -> {
                             WebResourceResponse("application/xml", "utf-8",
-                                ByteArrayInputStream(rawXml.toByteArray(Charsets.UTF_8)))
+                                ByteArrayInputStream(servedXmlBytes.get()))
                         }
                         else -> null
                     }
@@ -75,11 +82,21 @@ actual fun ScoreSheetView(
             }
         }
     }
+    DisposableEffect(webView) {
+        onDispose {
+            webView.stopLoading()
+            webView.webViewClient = WebViewClient()
+            webView.loadUrl("about:blank")
+            webView.clearHistory()
+            webView.removeAllViews()
+            webView.destroy()
+        }
+    }
 
     // 渲染流程：先查缓存 → 命中则直接回传；否则加载 WebView 渲染、截图、回传并写缓存。
     LaunchedEffect(rawXml) {
         val handler = snapshotHandler
-        val htmlText = OsmdHtml.buildHtml(divisions)
+        val htmlText = OsmdHtml.buildHtml(divisions, tr.loadingScore, tr.loadingFailed)
         val xmlHash = calculateMd5(rawXml)
         val htmlHash = calculateMd5(htmlText)
         val cacheKey = "${xmlHash}_$htmlHash"
@@ -244,11 +261,13 @@ private fun saveSnapshotCache(
     steps: List<CursorStep>,
     rawPngBytesList: List<ByteArray>,
 ) {
+    val cacheRoot = cacheDir.parentFile ?: return
+    val tempDir = File(cacheRoot, ".${cacheDir.name}.${System.nanoTime()}.tmp")
     try {
-        if (!cacheDir.exists()) cacheDir.mkdirs()
+        tempDir.mkdirs()
 
         for (i in rawPngBytesList.indices) {
-            File(cacheDir, "chunk_$i.png").writeBytes(rawPngBytesList[i])
+            File(tempDir, "chunk_$i.png").writeBytes(rawPngBytesList[i])
         }
 
         val sb = StringBuilder()
@@ -269,9 +288,22 @@ private fun saveSnapshotCache(
         sb.append("  ]\n")
         sb.append("}")
 
-        File(cacheDir, "meta.json").writeText(sb.toString(), Charsets.UTF_8)
+        File(tempDir, "meta.json").writeText(sb.toString(), Charsets.UTF_8)
+        if (cacheDir.exists()) cacheDir.deleteRecursively()
+        check(tempDir.renameTo(cacheDir)) { "Failed to publish snapshot cache" }
+        trimSnapshotCaches(cacheRoot, cacheDir)
         println("[OSMD] Saved SheetSnapshot cache: ${cacheDir.name}")
     } catch (e: Exception) {
         println("[OSMD] Failed to write cache: ${e.message}")
+    } finally {
+        if (tempDir.exists()) tempDir.deleteRecursively()
     }
+}
+
+private fun trimSnapshotCaches(root: File, current: File) {
+    root.listFiles()
+        ?.filter { it.isDirectory && it != current && !it.name.startsWith(".") }
+        ?.sortedByDescending { it.lastModified() }
+        ?.drop(7)
+        ?.forEach { it.deleteRecursively() }
 }

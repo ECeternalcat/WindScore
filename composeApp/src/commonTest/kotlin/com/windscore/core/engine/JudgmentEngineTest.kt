@@ -31,8 +31,8 @@ class JudgmentEngineTest {
         // 按对：推进到下一组
         engine.onNoteOn(60)
         assertEquals(4L, engine.currentTick)
-        assertTrue(s.notes[0].isHit)
-        assertFalse(s.notes[1].isHit)
+        assertTrue(s.notes[0].id in engine.hitNoteIds())
+        assertFalse(s.notes[1].id in engine.hitNoteIds())
         engine.onNoteOn(62)
         assertEquals(8L, engine.currentTick)
         engine.onNoteOn(64)
@@ -52,7 +52,7 @@ class JudgmentEngineTest {
         assertEquals(0L, engine.currentTick, "还差一个不推进")
         engine.onNoteOn(67)
         assertEquals(4L, engine.currentTick, "三个都按齐才推进")
-        assertTrue(s.notes[0].isHit && s.notes[1].isHit && s.notes[2].isHit)
+        assertTrue(s.notes.take(3).all { it.id in engine.hitNoteIds() })
     }
 
     @Test
@@ -68,16 +68,23 @@ class JudgmentEngineTest {
     }
 
     @Test
-    fun heldKeySatisfiesRepeatedOrLongNotes() {
-        // 文档 2.3.3 / 3.2：只要“按在手里”就算过。一个音只需按一次，无论多长
-        // 或与前一音相邻重复——长按不应被要求按第二下。
+    fun repeatedNotesRequireReleaseAndRepress() {
         val s = score(note(0, 60, 0), note(1, 60, 4), note(2, 60, 8))
         val engine = JudgmentEngine(s)
 
-        // 按下一次 60，一直按住：三组同音应全部自动推进（无需第二下）
         engine.onNoteOn(60)
-        assertTrue(engine.isFinished, "按住一个音应推进全部相邻同音，无需第二下")
-        assertTrue(s.notes.all { it.isHit }, "三个音都应命中")
+        assertEquals(4L, engine.currentTick)
+
+        engine.onNoteOn(60)
+        assertEquals(4L, engine.currentTick, "未松键的重复 NoteOn 不能通过下一组同音")
+
+        engine.onNoteOff(60)
+        engine.onNoteOn(60)
+        assertEquals(8L, engine.currentTick)
+        engine.onNoteOff(60)
+        engine.onNoteOn(60)
+        assertTrue(engine.isFinished)
+        assertTrue(s.notes.all { it.id in engine.hitNoteIds() })
     }
 
     @Test
@@ -103,6 +110,63 @@ class JudgmentEngineTest {
         assertEquals(setOf(72), engine.pendingPitches(), "推进后高亮下一组")
     }
 
+    @Test
+    fun hostedOnlyGroupShowsCurrentHostedHandWithoutAdvertisingFutureNote() {
+        val engine = JudgmentEngine(
+            score(
+                note(0, 60, 0, track = TrackType.RIGHT_HAND),
+                note(1, 48, 4, track = TrackType.LEFT_HAND),
+                note(2, 62, 8, track = TrackType.RIGHT_HAND),
+            ),
+            PracticeMode.RIGHT_ONLY,
+        )
+
+        assertEquals(setOf(60), engine.cuePitches())
+        assertTrue(engine.hostedCuePitches().isEmpty())
+        engine.seekTo(4)
+
+        assertTrue(engine.pendingPitches().isEmpty(), "hosted-only group has no judgment requirement")
+        assertTrue(engine.cuePitches().isEmpty(), "future user notes must not be advertised early")
+        assertEquals(setOf(48), engine.hostedCuePitches(), "hosted hand remains visible in gray")
+    }
+
+    @Test
+    fun currentGroupShowsBothHandsWithHostedHandSeparated() {
+        val groupedScore = score(
+            note(0, 60, 0, track = TrackType.RIGHT_HAND),
+            note(1, 48, 0, track = TrackType.LEFT_HAND),
+            note(2, 62, 4, track = TrackType.RIGHT_HAND),
+        )
+        val engine = JudgmentEngine(
+            groupedScore,
+            PracticeMode.BOTH,
+        )
+
+        assertEquals(setOf(60, 48), engine.cuePitches())
+        assertTrue(engine.hostedCuePitches().isEmpty())
+
+        val rightOnly = JudgmentEngine(groupedScore, PracticeMode.RIGHT_ONLY)
+        assertEquals(setOf(60), rightOnly.cuePitches())
+        assertEquals(setOf(48), rightOnly.hostedCuePitches())
+    }
+
+    @Test
+    fun futureNoteIsNotCuedAndStillRequiresReleaseAndRepress() {
+        val engine = JudgmentEngine(score(note(0, 60, 0), note(1, 62, 4)))
+
+        assertEquals(setOf(60), engine.cuePitches())
+        engine.onNoteOn(62)
+        engine.onNoteOn(60)
+
+        assertEquals(setOf(62), engine.cuePitches())
+        assertEquals(4L, engine.currentTick)
+        engine.onNoteOn(62)
+        assertEquals(4L, engine.currentTick, "a note held before the group cannot satisfy fresh-key judgment")
+        engine.onNoteOff(62)
+        engine.onNoteOn(62)
+        assertTrue(engine.isFinished)
+    }
+
     // ---- Phase 2 Step 2：轨道隔离与自动托管 ----
 
     @Test
@@ -117,8 +181,8 @@ class JudgmentEngineTest {
 
         val hosted = engine.arrive()
         assertEquals(listOf(48), hosted.map { it.pitch }, "组0 左手自动托管")
-        assertTrue(s.notes[1].isHit, "托管音立即标记命中")
-        assertFalse(s.notes[0].isHit, "右手尚未弹，未命中")
+        assertTrue(s.notes[1].id in engine.hitNoteIds(), "托管音立即标记命中")
+        assertFalse(s.notes[0].id in engine.hitNoteIds(), "右手尚未弹，未命中")
         assertEquals(setOf(60), engine.pendingPitches(), "用户只需按右手")
 
         // 只按左手（被托管的那只）不应推进
@@ -127,7 +191,7 @@ class JudgmentEngineTest {
         // 按右手才推进
         engine.onNoteOn(60)
         assertEquals(4L, engine.currentTick)
-        assertTrue(s.notes[0].isHit)
+        assertTrue(s.notes[0].id in engine.hitNoteIds())
     }
 
     @Test
@@ -209,8 +273,21 @@ class JudgmentEngineTest {
         assertEquals(4L, engine.currentTick, "越过循环终点后应回卷到循环起点")
 
         // 循环段内音符应重置为未命中，可再次练习
-        assertFalse(s.notes[1].isHit, "回卷后循环段内音符应重置")
-        assertFalse(s.notes[2].isHit, "回卷后循环段内音符应重置")
+        assertFalse(s.notes[1].id in engine.hitNoteIds(), "回卷后循环段内音符应重置")
+        assertFalse(s.notes[2].id in engine.hitNoteIds(), "回卷后循环段内音符应重置")
+    }
+
+    @Test
+    fun sessionsUsingSameScoreKeepHitStateIsolated() {
+        val sharedScore = score(note(0, 60, 0), note(1, 62, 4))
+        val practice = JudgmentEngine(sharedScore)
+        val scoring = JudgmentEngine(sharedScore)
+
+        practice.onNoteOn(60)
+
+        assertEquals(setOf(0), practice.hitNoteIds())
+        assertTrue(scoring.hitNoteIds().isEmpty())
+        assertEquals(0L, scoring.currentTick)
     }
 
     @Test

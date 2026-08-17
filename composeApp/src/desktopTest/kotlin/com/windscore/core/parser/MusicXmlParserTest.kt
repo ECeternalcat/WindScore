@@ -4,6 +4,7 @@ import com.windscore.core.model.TrackType
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.test.assertFailsWith
 
 class MusicXmlParserTest {
 
@@ -221,5 +222,53 @@ class MusicXmlParserTest {
 
         // P1 = 16 ticks, P2 = 4 ticks. 旧的 bug 会把 totalTicks 覆盖为最后一个 Part 的 4。
         assertEquals(16L, score.totalTicks, "多 Part 乐谱 totalTicks 应取最长 Part（16），而非最后一个 Part（4）")
+    }
+
+    @Test
+    fun rejectsDoctypeBeforeDomParsing() {
+        val xml = """
+            <?xml version="1.0"?>
+            <!DOCTYPE score-partwise [<!ENTITY xxe SYSTEM "file:///etc/passwd">]>
+            <score-partwise><part id="P1"/></score-partwise>
+        """.trimIndent().toByteArray()
+
+        val error = assertFailsWith<IllegalArgumentException> { MusicXmlParser.parseXml(xml) }
+        assertTrue(error.message.orEmpty().contains("DOCTYPE"))
+    }
+
+    @Test
+    fun rejectsOversizedRawInput() {
+        val bytes = ByteArray(MusicXmlParser.MAX_INPUT_BYTES + 1)
+
+        val error = assertFailsWith<IllegalArgumentException> { MusicXmlParser.parse(bytes) }
+        assertTrue(error.message.orEmpty().contains("过大"))
+    }
+
+    @Test
+    fun parsesChordRestBackupForwardAccidentalAndTitlePrecedence() {
+        val xml = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <score-partwise version="3.1">
+              <work><work-title>Work title</work-title></work>
+              <movement-title>Movement title</movement-title>
+              <part id="P1"><measure number="1">
+                <attributes><divisions>4</divisions></attributes>
+                <note><pitch><step>C</step><alter>1</alter><octave>4</octave></pitch><duration>4</duration><staff>1</staff></note>
+                <note><chord/><pitch><step>E</step><octave>4</octave></pitch><duration>4</duration><staff>1</staff></note>
+                <note><rest/><duration>4</duration></note>
+                <backup><duration>8</duration></backup>
+                <note><pitch><step>C</step><octave>3</octave></pitch><duration>4</duration><staff>2</staff></note>
+                <forward><duration>4</duration></forward>
+              </measure></part>
+            </score-partwise>
+        """.trimIndent().toByteArray()
+
+        val score = MusicXmlParser.parseXml(xml)
+
+        assertEquals("Work title", score.title)
+        assertEquals(listOf(48, 61, 64), score.notes.map { it.pitch })
+        assertEquals(listOf(0L, 0L, 0L), score.notes.map { it.startTick })
+        assertEquals(8L, score.totalTicks)
+        assertEquals(TrackType.LEFT_HAND, score.notes.first().track)
     }
 }

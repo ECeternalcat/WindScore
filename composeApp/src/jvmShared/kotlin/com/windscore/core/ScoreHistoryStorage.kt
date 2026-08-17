@@ -40,7 +40,7 @@ internal object ScoreHistoryStorage {
             .take(MAX_RECORDS)
         runCatching {
             if (!dir(baseDir).exists()) dir(baseDir).mkdirs()
-            file(scoreId, baseDir).writeText(json.encodeToString(listSerializer, updated), Charsets.UTF_8)
+            file(scoreId, baseDir).atomicWriteText(json.encodeToString(listSerializer, updated))
         }.onFailure { println("[ScoreHistory] Failed to save history for $scoreId: ${it.message}") }
         return updated
     }

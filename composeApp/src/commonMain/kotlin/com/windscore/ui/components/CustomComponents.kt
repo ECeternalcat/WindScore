@@ -18,6 +18,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -89,6 +92,7 @@ fun CircularIconButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     selected: Boolean = false,
+    testTag: String? = null,
     content: @Composable () -> Unit,
 ) {
     val background = when {
@@ -102,6 +106,8 @@ fun CircularIconButton(
     val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     Box(
         modifier = modifier
+            .then(if (testTag != null) Modifier.testTag(testTag) else Modifier)
+            .semantics { this.selected = selected }
             .bounceClick(interactionSource)
             .size(40.dp)
             .clip(RoundedCornerShape(WindScoreRounded.full))

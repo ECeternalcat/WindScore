@@ -39,7 +39,7 @@ internal object SettingsStorage {
             }
             val file = File(settingsDir, "$scoreId.json")
             val jsonText = Json.encodeToString(ScoreSettings.serializer(), settings)
-            file.writeText(jsonText, Charsets.UTF_8)
+            file.atomicWriteText(jsonText)
         } catch (e: Exception) {
             println("[SettingsStorage] Failed to save settings for $scoreId: ${e.message}")
         }

@@ -14,6 +14,7 @@ actual fun SettingsDialog(
     visible: Boolean,
     onDismiss: () -> Unit,
     title: String,
+    darkTheme: Boolean,
     content: @Composable () -> Unit
 ) {
     AnimatedVisibility(

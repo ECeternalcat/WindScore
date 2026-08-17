@@ -48,6 +48,7 @@ actual fun SettingsDialog(
     visible: Boolean,
     onDismiss: () -> Unit,
     title: String,
+    darkTheme: Boolean,
     content: @Composable () -> Unit
 ) {
     if (visible) {
@@ -57,10 +58,10 @@ actual fun SettingsDialog(
             title = title,
             resizable = false,
         ) {
-            androidx.compose.runtime.LaunchedEffect(com.windscore.ui.theme.isDarkThemeGlobal) {
-                setWindowImmersiveDarkMode(window, com.windscore.ui.theme.isDarkThemeGlobal)
+            androidx.compose.runtime.LaunchedEffect(darkTheme) {
+                setWindowImmersiveDarkMode(window, darkTheme)
             }
-            WindScoreTheme {
+            WindScoreTheme(darkTheme = darkTheme) {
                 Surface(
                     color = WindScoreColors.canvas
                 ) {

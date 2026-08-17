@@ -7,6 +7,7 @@ import com.windscore.core.model.NoteEntity
 import com.windscore.core.model.PracticeMode
 import com.windscore.core.model.Score
 import com.windscore.core.model.TrackType
+import com.windscore.core.traceState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -26,6 +27,7 @@ class ScoreSession(
     private val scope: CoroutineScope,
     practiceMode: PracticeMode = PracticeMode.BOTH,
 ) {
+    internal val traceId: Long = nextTraceId++
     private val engine = JudgmentEngine(score, practiceMode)
     private val sessionScope = CoroutineScope(scope.coroutineContext + SupervisorJob())
 
@@ -69,8 +71,15 @@ class ScoreSession(
     /** 当前循环范围；未启用时返回 [0, totalTicks]。 */
     val loopRange: LongRange get() = engine.currentLoopStart..engine.currentLoopEnd
 
-    /** 当前等待用户按下的音高（仅练习轨道）。 */
-    val pendingPitches: Set<Int> get() = engine.pendingPitches()
+    /** 当前等待用户按下的音高（仅练习轨道）。可观察 State，供 UI 高亮提示稳定重组。 */
+    private val _pendingPitches: MutableState<Set<Int>> = mutableStateOf(engine.pendingPitches())
+    val pendingPitches: Set<Int> get() = _pendingPitches.value
+
+    private val _cuePitches: MutableState<Set<Int>> = mutableStateOf(engine.cuePitches())
+    val cuePitches: Set<Int> get() = _cuePitches.value
+
+    private val _hostedCuePitches: MutableState<Set<Int>> = mutableStateOf(engine.hostedCuePitches())
+    val hostedCuePitches: Set<Int> get() = _hostedCuePitches.value
 
     val activeKeys: Set<Int> get() = engine.activeKeys()
 
@@ -79,6 +88,9 @@ class ScoreSession(
     var heldPitches: Set<Int>
         get() = _heldPitches.value
         private set(value) { _heldPitches.value = value }
+
+    private val _hitNoteIds: MutableState<Set<Int>> = mutableStateOf(emptySet())
+    val hitNoteIds: Set<Int> get() = _hitNoteIds.value
 
     /**
      * 动态节拍脉冲强度（Phase 3 文档 6.4）。
@@ -127,42 +139,57 @@ class ScoreSession(
     private var interactiveStarted = false
 
     fun onNoteOn(pitch: Int) {
+        trace("noteOn($pitch) before")
         interactiveStarted = true
         playHosted(engine.onNoteOn(pitch))
         sync()
+        trace("noteOn($pitch) after")
+        // 用户交互后无条件武装托管推进：覆盖 seek/reset 后停在纯托管组的死锁场景
+        // （该组不调用 step()、progress 不变，sync 内的调度不会触发）。
+        scheduleHostedIfNeeded()
     }
 
     fun onNoteOff(pitch: Int) {
+        trace("noteOff($pitch) before")
         engine.onNoteOff(pitch)
         sync()
+        trace("noteOff($pitch) after")
     }
 
     fun reset(playAudio: Boolean = false) {
+        trace("reset(playAudio=$playAudio) before")
         interactiveStarted = false
         val notes = engine.reset()
         if (playAudio) playHosted(notes)
         sync()
+        trace("reset after")
     }
 
     /** 定点跳转（文档 3.3）。 */
     fun seekTo(tick: Long) {
+        trace("seekTo($tick) before")
         interactiveStarted = false
         engine.seekTo(tick)
         sync()
+        trace("seekTo($tick) after")
     }
 
     /** 微观步进：前进一个音符组（文档 3.3 盲操微调）。 */
     fun stepForward() {
+        trace("stepForward before")
         interactiveStarted = false
         engine.stepForward()
         sync()
+        trace("stepForward after")
     }
 
     /** 微观步进：后退一个音符组（文档 3.3 盲操微调）。 */
     fun stepBackward() {
+        trace("stepBackward before")
         interactiveStarted = false
         engine.stepBackward()
         sync()
+        trace("stepBackward after")
     }
 
     /** 设置 A/B 循环范围；调用后当前进度会调整到循环起点附近。 */
@@ -183,6 +210,10 @@ class ScoreSession(
         progress = engine.progress
         finished = engine.isFinished
         heldPitches = engine.activeKeys()
+        _hitNoteIds.value = engine.hitNoteIds()
+        _pendingPitches.value = engine.pendingPitches()
+        _cuePitches.value = engine.cuePitches()
+        _hostedCuePitches.value = engine.hostedCuePitches()
         // A/B 循环回卷会导致 progress 倒退，此时应重置托管调度基准，避免延迟计算错乱
         if (progress < prevProgress) {
             lastHostedTick = -1
@@ -231,7 +262,16 @@ class ScoreSession(
         }
     }
 
+    private fun trace(action: String) {
+        traceState(
+            "session=$traceId action=$action tick=$currentTick progress=$progress/$groupCount " +
+                "pending=${pendingPitches.sorted()} cue=${cuePitches.sorted()} " +
+                "hostedCue=${hostedCuePitches.sorted()} held=${heldPitches.sorted()} finished=$finished",
+        )
+    }
+
     private companion object {
+        var nextTraceId = 1L
         const val HOSTED_VELOCITY = 80
         const val MIN_TONE_MS = 60L
         const val MAX_TONE_MS = 4000L

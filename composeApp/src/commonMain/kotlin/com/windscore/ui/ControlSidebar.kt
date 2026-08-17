@@ -27,7 +27,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.windscore.ViewMode
-import com.windscore.core.engine.ScorePlayer
 import com.windscore.core.engine.ScoreSession
 import com.windscore.core.model.PracticeMode
 import com.windscore.ui.components.PillButton
@@ -64,7 +63,6 @@ fun ControlSidebar(
     isPlaying: Boolean,
     sheetReady: Boolean,
     running: Boolean,
-    player: ScorePlayer?,
     playbackSpeed: Float,
     onPlaybackSpeedChange: (Float) -> Unit,
     onToggleMidi: () -> Unit,
@@ -139,14 +137,14 @@ fun ControlSidebar(
                     Text(s.view, style = MaterialTheme.typography.labelSmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
                     Spacer(Modifier.height(4.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)) {
-                        CircularIconButton(onClick = { onViewChange(ViewMode.ROLL) }, selected = viewMode == ViewMode.ROLL) {
+                        CircularIconButton(onClick = { onViewChange(ViewMode.ROLL) }, selected = viewMode == ViewMode.ROLL, testTag = "view-roll") {
                             Icon(painterResource(Res.drawable.piano_keys_thin), s.pianoRoll, Modifier.size(20.dp))
                         }
                         if (scoreHasSheet) {
-                            CircularIconButton(onClick = { onViewChange(ViewMode.SHEET_KEYBOARD) }, selected = viewMode == ViewMode.SHEET_KEYBOARD) {
+                            CircularIconButton(onClick = { onViewChange(ViewMode.SHEET_KEYBOARD) }, selected = viewMode == ViewMode.SHEET_KEYBOARD, testTag = "view-sheet-keyboard") {
                                 Icon(painterResource(Res.drawable.book_open_text_thin), s.readSheet, Modifier.size(20.dp))
                             }
-                            CircularIconButton(onClick = { onViewChange(ViewMode.SHEET_FULL) }, selected = viewMode == ViewMode.SHEET_FULL) {
+                            CircularIconButton(onClick = { onViewChange(ViewMode.SHEET_FULL) }, selected = viewMode == ViewMode.SHEET_FULL, testTag = "view-sheet-full") {
                                 Icon(painterResource(Res.drawable.music_notes_thin), s.viewSheet, Modifier.size(20.dp))
                             }
                         }
@@ -201,7 +199,6 @@ fun ControlSidebar(
                 onValueChange = { newValue ->
                     val speedVal = newValue.coerceIn(0.0f, 2.0f)
                     onPlaybackSpeedChange(speedVal)
-                    player?.speedMultiplier = speedVal.toDouble()
                 },
                 valueRange = 0.0f..2.0f,
                 modifier = Modifier.fillMaxWidth().height(24.dp),
@@ -223,7 +220,6 @@ fun ControlSidebar(
                         selected = isSelected,
                         onClick = {
                             onPlaybackSpeedChange(value)
-                            player?.speedMultiplier = value.toDouble()
                         },
                         label = label,
                         modifier = Modifier.weight(1f)
@@ -251,7 +247,8 @@ fun ControlSidebar(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xxs)) {
                     CircularIconButton(
                         onClick = onLoopStart,
-                        selected = pendingLoopStart != null || activeLoopRange != null
+                        selected = pendingLoopStart != null || activeLoopRange != null,
+                        testTag = "loop-start",
                     ) {
                         Icon(painterResource(Res.drawable.repeat_thin), s.loopStart, Modifier.size(20.dp))
                     }
@@ -263,7 +260,8 @@ fun ControlSidebar(
                     CircularIconButton(
                         onClick = onLoopEnd,
                         enabled = pendingLoopStart != null || activeLoopRange != null,
-                        selected = activeLoopRange != null
+                        selected = activeLoopRange != null,
+                        testTag = "loop-end",
                     ) {
                         Icon(painterResource(Res.drawable.repeat_thin), s.loopEnd, Modifier.size(20.dp))
                     }
@@ -273,7 +271,8 @@ fun ControlSidebar(
                 // Clear
                 CircularIconButton(
                     onClick = onClearLoop,
-                    enabled = activeLoopRange != null || pendingLoopStart != null
+                    enabled = activeLoopRange != null || pendingLoopStart != null,
+                    testTag = "loop-clear",
                 ) {
                     Icon(painterResource(Res.drawable.x_thin), s.clear, Modifier.size(20.dp))
                 }

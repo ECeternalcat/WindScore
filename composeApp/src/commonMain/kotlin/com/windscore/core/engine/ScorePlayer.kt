@@ -59,6 +59,12 @@ class ScorePlayer(
     var speedMultiplier: Double = 1.0
 
     var loopRange: LongRange? = null
+        set(value) {
+            val normalized = playbackRegion(value).normalizedLoop()
+            if (field == normalized) return
+            field = normalized
+            seekTo(_tick.value)
+        }
 
     /** Metronome volume (0 to 100). Default is 50. */
     var metronomeVolume: Int = 50
@@ -166,10 +172,24 @@ class ScorePlayer(
     }
 
     fun reset() {
-        _tick.value = 0L
+        val target = playbackRegion().start
+        _tick.value = target
+        localTick = target.toDouble()
         eventIndex = 0
         active.clear()
+        // Rebuild notes already sounding at the loop start without triggering audio.
+        while (eventIndex < events.size && events[eventIndex].tick < target) {
+            val event = events[eventIndex]
+            if (event.on) {
+                active[event.pitch] = (active[event.pitch] ?: 0) + 1
+            } else {
+                val count = (active[event.pitch] ?: 0) - 1
+                if (count <= 0) active.remove(event.pitch) else active[event.pitch] = count
+            }
+            eventIndex++
+        }
         _finished.value = false
+        _playingPitches.value = emptySet()
     }
 
     fun toggle() {
@@ -182,7 +202,7 @@ class ScorePlayer(
         _playing.value = false
         job?.cancel()
         silenceAll()
-        val target = tick.coerceIn(0L, score.totalTicks)
+        val target = playbackRegion().constrain(tick)
         localTick = target.toDouble()
         _tick.value = target
         eventIndex = 0
@@ -207,16 +227,29 @@ class ScorePlayer(
     /** 微观步进：跳到下一个音符的起始 tick（文档 3.3 盲操微调）。 */
     fun stepForward() {
         val current = _tick.value
-        val nextTick = score.notes.firstOrNull { it.startTick > current }?.startTick ?: score.totalTicks
+        val region = playbackRegion()
+        val nextTick = score.notes.firstOrNull {
+            it.startTick > current && region.containsNoteAt(it.startTick)
+        }?.startTick ?: region.end
         seekTo(nextTick)
     }
 
     /** 微观步进：跳到上一个音符的起始 tick（文档 3.3 盲操微调）。 */
     fun stepBackward() {
         val current = _tick.value
-        val prevTick = score.notes.lastOrNull { it.startTick < current }?.startTick ?: 0L
+        val region = playbackRegion()
+        val prevTick = score.notes.lastOrNull {
+            it.startTick < current && region.containsNoteAt(it.startTick)
+        }?.startTick ?: region.start
         seekTo(prevTick)
     }
+
+    private fun playbackRegion(range: LongRange? = loopRange): PlaybackRegion = PlaybackRegion(
+        scoreStart = 0L,
+        scoreEnd = score.totalTicks,
+        loopStart = range?.first,
+        loopEnd = range?.last,
+    )
 
     private fun applyEvent(e: Event) {
         if (e.on) {

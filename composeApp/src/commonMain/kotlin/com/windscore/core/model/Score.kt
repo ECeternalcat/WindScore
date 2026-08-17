@@ -28,6 +28,8 @@ data class Score(
     /** 原始 MusicXML 文本（供 OSMD 看谱模式渲染；解析降维不需要）。 */
     @Transient
     val rawXml: String? = null,
+    /** Whether the score can restore MusicXML-backed sheet views. */
+    val supportsSheetView: Boolean = false,
     /** 乐谱标题，用于乐谱库列表显示。为空时由 UI 层显示本地化的“未命名乐谱”。 */
     val title: String = "",
 ) {

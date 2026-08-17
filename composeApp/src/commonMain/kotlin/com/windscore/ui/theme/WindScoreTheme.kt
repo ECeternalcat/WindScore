@@ -7,6 +7,9 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -26,14 +29,6 @@ import androidx.compose.ui.unit.sp
  * 字体：figmaSans/figmaMono 为专有字体，此处使用系统默认无衬线 + JetBrains Mono 风格回退，
  * 并按 DESIGN.md 的尺寸/字重/字距精确设置 Typography。
  */
-import androidx.compose.ui.graphics.luminance
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.SideEffect
-
-var isDarkThemeGlobal by mutableStateOf(false)
-
 private val LIGHT_PRIMARY = Color(0xFF000000)
 private val LIGHT_ON_PRIMARY = Color(0xFFFFFFFF)
 private val LIGHT_INK = Color(0xFF000000)
@@ -50,33 +45,120 @@ private val DARK_SURFACE_SOFT = Color(0xFF2D2D2D)
 private val DARK_HAIRLINE = Color(0xFF2E2E2E)
 private val DARK_HAIRLINE_SOFT = Color(0xFF242424)
 
+@Immutable
+data class WindScorePalette(
+    val primary: Color,
+    val onPrimary: Color,
+    val ink: Color,
+    val canvas: Color,
+    val inverseCanvas: Color,
+    val inverseInk: Color,
+    val onInverseSoft: Color,
+    val hairline: Color,
+    val hairlineSoft: Color,
+    val surfaceSoft: Color,
+    val blockLime: Color,
+    val blockLilac: Color,
+    val blockCream: Color,
+    val blockPink: Color,
+    val blockMint: Color,
+    val blockCoral: Color,
+    val blockNavy: Color,
+    val accentMagenta: Color,
+    val semanticSuccess: Color,
+    val overlayScrim: Color,
+    val scoreClean: Color,
+    val scoreStuck: Color,
+    val leftNoteUnhit: Color,
+    val rightNoteUnhit: Color,
+)
+
+private val LightWindScorePalette = WindScorePalette(
+    primary = LIGHT_PRIMARY,
+    onPrimary = LIGHT_ON_PRIMARY,
+    ink = LIGHT_INK,
+    canvas = LIGHT_CANVAS,
+    inverseCanvas = DARK_CANVAS,
+    inverseInk = DARK_INK,
+    onInverseSoft = DARK_CANVAS,
+    hairline = LIGHT_HAIRLINE,
+    hairlineSoft = LIGHT_HAIRLINE_SOFT,
+    surfaceSoft = LIGHT_SURFACE_SOFT,
+    blockLime = Color(0xFFDCEEB1),
+    blockLilac = Color(0xFFC5B0F4),
+    blockCream = Color(0xFFF4ECD6),
+    blockPink = Color(0xFFEFD4D4),
+    blockMint = Color(0xFFC8E6CD),
+    blockCoral = Color(0xFFF3C9B6),
+    blockNavy = Color(0xFF1F1D3D),
+    accentMagenta = Color(0xFFFF3D8B),
+    semanticSuccess = Color(0xFF1EA64A),
+    overlayScrim = Color(0xFF000000),
+    scoreClean = Color(0xFF3DBB6C),
+    scoreStuck = Color(0xFFE0A33A),
+    leftNoteUnhit = Color(0xFF9DC9A4),
+    rightNoteUnhit = Color(0xFFD49A7E),
+)
+
+private val DarkWindScorePalette = WindScorePalette(
+    primary = DARK_PRIMARY,
+    onPrimary = DARK_ON_PRIMARY,
+    ink = DARK_INK,
+    canvas = DARK_CANVAS,
+    inverseCanvas = LIGHT_CANVAS,
+    inverseInk = LIGHT_INK,
+    onInverseSoft = LIGHT_CANVAS,
+    hairline = DARK_HAIRLINE,
+    hairlineSoft = DARK_HAIRLINE_SOFT,
+    surfaceSoft = DARK_SURFACE_SOFT,
+    blockLime = Color(0xFF4C523C),
+    blockLilac = Color(0xFF403657),
+    blockCream = Color(0xFF524D41),
+    blockPink = Color(0xFF5E4E4E),
+    blockMint = Color(0xFF3F4D42),
+    blockCoral = Color(0xFF57433B),
+    blockNavy = Color(0xFFDCDCEB),
+    accentMagenta = Color(0xFFFF3D8B),
+    semanticSuccess = Color(0xFF1EA64A),
+    overlayScrim = Color(0xFF000000),
+    scoreClean = Color(0xFF5BD68A),
+    scoreStuck = Color(0xFFF0B85A),
+    leftNoteUnhit = Color(0xFF5D7D62),
+    rightNoteUnhit = Color(0xFF8C6654),
+)
+
+private val LocalWindScoreColors = staticCompositionLocalOf { LightWindScorePalette }
+
+internal fun windScorePalette(darkTheme: Boolean): WindScorePalette =
+    if (darkTheme) DarkWindScorePalette else LightWindScorePalette
+
+@Composable
+fun windScoreColors(): WindScorePalette = LocalWindScoreColors.current
+
+/** Compatibility facade for composables; drawing code captures [windScoreColors] before Canvas. */
 object WindScoreColors {
-    val primary: Color get() = if (isDarkThemeGlobal) DARK_PRIMARY else LIGHT_PRIMARY
-    val onPrimary: Color get() = if (isDarkThemeGlobal) DARK_ON_PRIMARY else LIGHT_ON_PRIMARY
-    val ink: Color get() = if (isDarkThemeGlobal) DARK_INK else LIGHT_INK
-    val canvas: Color get() = if (isDarkThemeGlobal) DARK_CANVAS else LIGHT_CANVAS
-    val inverseCanvas: Color get() = if (isDarkThemeGlobal) LIGHT_CANVAS else DARK_CANVAS
-    val inverseInk: Color get() = if (isDarkThemeGlobal) LIGHT_INK else DARK_INK
-    val onInverseSoft: Color get() = if (isDarkThemeGlobal) LIGHT_CANVAS else DARK_CANVAS
-    val hairline: Color get() = if (isDarkThemeGlobal) DARK_HAIRLINE else LIGHT_HAIRLINE
-    val hairlineSoft: Color get() = if (isDarkThemeGlobal) DARK_HAIRLINE_SOFT else LIGHT_HAIRLINE_SOFT
-    val surfaceSoft: Color get() = if (isDarkThemeGlobal) DARK_SURFACE_SOFT else LIGHT_SURFACE_SOFT
-
-    val blockLime: Color get() = if (isDarkThemeGlobal) Color(0xFF4C523C) else Color(0xFFDCEEB1)
-    val blockLilac: Color get() = if (isDarkThemeGlobal) Color(0xFF403657) else Color(0xFFC5B0F4)
-    val blockCream: Color get() = if (isDarkThemeGlobal) Color(0xFF524D41) else Color(0xFFF4ECD6)
-    val blockPink: Color get() = if (isDarkThemeGlobal) Color(0xFF5E4E4E) else Color(0xFFEFD4D4)
-    val blockMint: Color get() = if (isDarkThemeGlobal) Color(0xFF3F4D42) else Color(0xFFC8E6CD)
-    val blockCoral: Color get() = if (isDarkThemeGlobal) Color(0xFF57433B) else Color(0xFFF3C9B6)
-    val blockNavy: Color get() = if (isDarkThemeGlobal) Color(0xFFDCDCEB) else Color(0xFF1F1D3D)
-
-    val accentMagenta = Color(0xFFFF3D8B)
-    val semanticSuccess = Color(0xFF1EA64A)
-    val overlayScrim = Color(0xFF000000)
-
-    // 准度计分语义色：干净（冷绿）/ 卡壳（暖琥珀，避免红色）。深色模式下提亮以保证对比度。
-    val scoreClean: Color get() = if (isDarkThemeGlobal) Color(0xFF5BD68A) else Color(0xFF3DBB6C)
-    val scoreStuck: Color get() = if (isDarkThemeGlobal) Color(0xFFF0B85A) else Color(0xFFE0A33A)
+    val primary: Color @Composable get() = windScoreColors().primary
+    val onPrimary: Color @Composable get() = windScoreColors().onPrimary
+    val ink: Color @Composable get() = windScoreColors().ink
+    val canvas: Color @Composable get() = windScoreColors().canvas
+    val inverseCanvas: Color @Composable get() = windScoreColors().inverseCanvas
+    val inverseInk: Color @Composable get() = windScoreColors().inverseInk
+    val onInverseSoft: Color @Composable get() = windScoreColors().onInverseSoft
+    val hairline: Color @Composable get() = windScoreColors().hairline
+    val hairlineSoft: Color @Composable get() = windScoreColors().hairlineSoft
+    val surfaceSoft: Color @Composable get() = windScoreColors().surfaceSoft
+    val blockLime: Color @Composable get() = windScoreColors().blockLime
+    val blockLilac: Color @Composable get() = windScoreColors().blockLilac
+    val blockCream: Color @Composable get() = windScoreColors().blockCream
+    val blockPink: Color @Composable get() = windScoreColors().blockPink
+    val blockMint: Color @Composable get() = windScoreColors().blockMint
+    val blockCoral: Color @Composable get() = windScoreColors().blockCoral
+    val blockNavy: Color @Composable get() = windScoreColors().blockNavy
+    val accentMagenta: Color @Composable get() = windScoreColors().accentMagenta
+    val semanticSuccess: Color @Composable get() = windScoreColors().semanticSuccess
+    val overlayScrim: Color @Composable get() = windScoreColors().overlayScrim
+    val scoreClean: Color @Composable get() = windScoreColors().scoreClean
+    val scoreStuck: Color @Composable get() = windScoreColors().scoreStuck
 }
 
 object WindScoreSpacing {
@@ -232,14 +314,14 @@ fun WindScoreTheme(
     darkTheme: Boolean = false,
     content: @Composable () -> Unit,
 ) {
-    SideEffect {
-        isDarkThemeGlobal = darkTheme
-    }
+    val palette = windScorePalette(darkTheme)
     val colorScheme = if (darkTheme) windScoreDarkColors else windScoreLightColors
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = windScoreTypography,
-        shapes = windScoreShapes,
-        content = content,
-    )
+    CompositionLocalProvider(LocalWindScoreColors provides palette) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = windScoreTypography,
+            shapes = windScoreShapes,
+            content = content,
+        )
+    }
 }

@@ -18,14 +18,19 @@ val javafxClassifier: String by lazy {
 
 plugins {
     alias(libs.plugins.kotlin.multiplatform)
-    alias(libs.plugins.android.application)
+    alias(libs.plugins.android.multiplatform.library)
     alias(libs.plugins.compose.multiplatform)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.kotlin.serialization)
 }
 
 kotlin {
-    androidTarget {
+    android {
+        namespace = "com.windscore.shared"
+        compileSdk = 36
+        minSdk = 24
+        androidResources.enable = true
+        withHostTest {}
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_11)
         }
@@ -48,6 +53,11 @@ kotlin {
         val commonTest by getting {
             dependencies {
                 implementation(kotlin("test"))
+            }
+        }
+        val desktopTest by getting {
+            dependencies {
+                implementation(compose.desktop.uiTestJUnit4)
             }
         }
         // jvmShared: desktop 与 android 共享的 JVM 代码（JDK DOM / ZIP 实现的乐谱解析）
@@ -79,24 +89,6 @@ kotlin {
                 implementation("net.java.dev.jna:jna-platform:5.14.0")
             }
         }
-    }
-}
-
-android {
-    namespace = "com.windscore"
-    compileSdk = 36
-
-    defaultConfig {
-        applicationId = "com.windscore"
-        minSdk = 24
-        targetSdk = 36
-        versionCode = 1
-        versionName = "1.0"
-    }
-
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
     }
 }
 

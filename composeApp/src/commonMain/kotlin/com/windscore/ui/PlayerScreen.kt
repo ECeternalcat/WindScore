@@ -11,6 +11,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -35,6 +36,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -47,12 +49,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.runtime.rememberCoroutineScope
 import windscore.composeapp.generated.resources.clock_thin
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.windscore.core.engine.ScorePlayer
 import com.windscore.core.engine.ScoreSession
+import com.windscore.core.engine.ScoringPhase
+import com.windscore.core.traceState
 import com.windscore.core.model.PracticeMode
 import com.windscore.core.model.Score
 import com.windscore.ViewMode
@@ -82,10 +87,10 @@ import windscore.composeapp.generated.resources.stop_thin
 import windscore.composeapp.generated.resources.repeat_thin
 import windscore.composeapp.generated.resources.x_thin
 import windscore.composeapp.generated.resources.pencil_simple_thin
-enum class SidebarTab { PRACTICE, SCORING }
+/** 双指唤出/隐藏控件面板的滑动阈值（像素）。 */
+private const val PANEL_SWIPE_THRESHOLD = 48f
 
-/** 评分流程的三个子阶段（仅在评分 Tab 内推进）。 */
-enum class ScoringPhase { SETUP, ACTIVE, RESULT }
+enum class SidebarTab { PRACTICE, SCORING }
 
 @Composable
 fun PlayerScreen(
@@ -96,7 +101,6 @@ fun PlayerScreen(
     practiceMode: PracticeMode,
     viewMode: ViewMode,
     pendingLoopStart: Long?,
-    player: ScorePlayer?,
     playTick: Long,
     isPlaying: Boolean,
     playingPitches: Set<Int>,
@@ -163,6 +167,47 @@ fun PlayerScreen(
     val stageSession = scoringSession ?: session
     val scoringActive = scoringPhase != ScoringPhase.SETUP
 
+    // Android(compact)：双指下滑唤出控件面板，双指上滑隐藏。
+    // 单指交给内容（移动乐谱/点击光标）；弹琴(MIDI)不影响。
+    var controlsVisible by remember { mutableStateOf(true) }
+    val panelGestureModifier = if (isCompact) {
+        Modifier.pointerInput(Unit) {
+            awaitPointerEventScope {
+                var startY: Float? = null
+                var armed = false // 一次双指手势只触发一次，避免持续滑动反复切换
+                while (true) {
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    val active = event.changes.filter { it.pressed }
+                    if (active.size >= 2) {
+                        // 两指：消费事件，避免 NativeSheetView 的单指拖拽响应
+                        active.forEach { it.consume() }
+                        if (!armed) {
+                            val avgY = active.map { it.position.y }.average().toFloat()
+                            if (startY == null) startY = avgY
+                            val s = startY
+                            if (kotlin.math.abs(avgY - s) >= PANEL_SWIPE_THRESHOLD) {
+                                controlsVisible = avgY - s > 0 // 下滑(dy>0)→显示；上滑→隐藏
+                                armed = true
+                                startY = null
+                            }
+                        }
+                    } else {
+                        startY = null
+                        armed = false
+                    }
+                }
+            }
+        }
+    } else Modifier
+
+    // 双指手势提示：进入乐谱页提示"上滑收起"；收起后提示"下滑显示"（Android 用系统 Toast）
+    if (isCompact) {
+        LaunchedEffect(Unit) { com.windscore.showPlatformToast(s.swipeUpToCollapse) }
+        LaunchedEffect(controlsVisible) {
+            if (!controlsVisible) com.windscore.showPlatformToast(s.swipeDownToExpand)
+        }
+    }
+
     var lastHandledSpacePressed by remember { mutableStateOf(spacePressed) }
 
     LaunchedEffect(spacePressed) {
@@ -195,40 +240,49 @@ fun PlayerScreen(
         }
     }
 
-    Box(Modifier.fillMaxSize()) {
+    Box(Modifier.fillMaxSize().then(panelGestureModifier)) {
         Column(Modifier.fillMaxSize()) {
-            PlayerToolbar(
-                title = score.title.ifBlank { s.untitledScore },
-                running = running,
-                isCompact = isCompact,
-                onBack = {
-                    countdownJob?.cancel()
-                    countdownSeconds = 0
-                    onBack()
-                },
-                onToggleMidi = onToggleMidi,
-                onReset = onReset,
-                onShowSettings = onShowSettings,
-            )
             if (isCompact) {
-                PlayerControlBar(
-                    session = session,
-                    practiceMode = practiceMode,
-                    viewMode = viewMode,
-                    pendingLoopStart = pendingLoopStart,
-                    scoreHasSheet = score.rawXml != null,
-                    isCompact = isCompact,
-                    isPlaying = isPlaying,
-                    sheetReady = sheetReady,
-                    onModeChange = onModeChange,
-                    onViewChange = onViewChange,
-                    onLoopStart = onLoopStart,
-                    onLoopEnd = onLoopEnd,
-                    onClearLoop = onClearLoop,
-                    onTogglePlay = onTogglePlay,
-                    onStopPlay = onStopPlay,
-                    activeLoopRange = activeLoopRange,
-                )
+                // 控件淡入/淡出 + 折叠，隐藏后让乐谱/卷帘占满屏幕
+                AnimatedVisibility(
+                    visible = controlsVisible,
+                    enter = fadeIn(tween(250)) + slideInVertically(tween(250)) { -it },
+                    exit = fadeOut(tween(250)) + slideOutVertically(tween(250)) { -it },
+                ) {
+                    Column {
+                        PlayerToolbar(
+                            title = score.title.ifBlank { s.untitledScore },
+                            running = running,
+                            isCompact = isCompact,
+                            onBack = {
+                                countdownJob?.cancel()
+                                countdownSeconds = 0
+                                onBack()
+                            },
+                            onToggleMidi = onToggleMidi,
+                            onReset = onReset,
+                            onShowSettings = onShowSettings,
+                        )
+                        PlayerControlBar(
+                            session = session,
+                            practiceMode = practiceMode,
+                            viewMode = viewMode,
+                            pendingLoopStart = pendingLoopStart,
+                            scoreHasSheet = score.supportsSheetView,
+                            isCompact = isCompact,
+                            isPlaying = isPlaying,
+                            sheetReady = sheetReady,
+                            onModeChange = onModeChange,
+                            onViewChange = onViewChange,
+                            onLoopStart = onLoopStart,
+                            onLoopEnd = onLoopEnd,
+                            onClearLoop = onClearLoop,
+                            onTogglePlay = onTogglePlay,
+                            onStopPlay = onStopPlay,
+                            activeLoopRange = activeLoopRange,
+                        )
+                    }
+                }
                 MainStage(
                     session = stageSession,
                     viewMode = viewMode,
@@ -251,6 +305,19 @@ fun PlayerScreen(
                     modifier = Modifier.weight(1f),
                 )
             } else {
+                PlayerToolbar(
+                    title = score.title.ifBlank { s.untitledScore },
+                    running = running,
+                    isCompact = isCompact,
+                    onBack = {
+                        countdownJob?.cancel()
+                        countdownSeconds = 0
+                        onBack()
+                    },
+                    onToggleMidi = onToggleMidi,
+                    onReset = onReset,
+                    onShowSettings = onShowSettings,
+                )
                 Row(
                     modifier = Modifier
                         .weight(1f)
@@ -301,11 +368,10 @@ fun PlayerScreen(
                                                 practiceMode = practiceMode,
                                                 viewMode = viewMode,
                                                 pendingLoopStart = pendingLoopStart,
-                                                scoreHasSheet = score.rawXml != null,
+                                                scoreHasSheet = score.supportsSheetView,
                                                 isPlaying = isPlaying,
                                                 sheetReady = sheetReady,
                                                 running = running,
-                                                player = player,
                                                 playbackSpeed = playbackSpeed,
                                                 onPlaybackSpeedChange = onPlaybackSpeedChange,
                                                 onToggleMidi = onToggleMidi,
@@ -353,7 +419,7 @@ fun PlayerScreen(
                                         Crossfade(targetState = scoringPhase) { phase ->
                                             when (phase) {
                                                 ScoringPhase.SETUP -> ScoringSetupPanel(
-                                                    scoreHasSheet = score.rawXml != null,
+                                                    scoreHasSheet = score.supportsSheetView,
                                                     viewMode = viewMode,
                                                     onViewChange = onViewChange,
                                                     onStartScoring = onStartScoring,
@@ -555,145 +621,87 @@ private fun PlayerControlBar(
     activeLoopRange: LongRange? = null,
 ) {
     val s = strings()
-    val barVPad = if (isCompact) WindScoreSpacing.sm else WindScoreSpacing.xs
-    val barGap = if (isCompact) WindScoreSpacing.sm else WindScoreSpacing.xs
+    val labelColor = WindScoreColors.ink.copy(alpha = 0.5f)
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = WindScoreSpacing.lg, vertical = barVPad),
-        verticalArrangement = Arrangement.spacedBy(barGap),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = WindScoreSpacing.lg, vertical = WindScoreSpacing.xs),
+        verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs),
     ) {
+        // 一行带标题的按钮组：每组标题直接对齐到自己的按钮，所有按钮共享同一行
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+            verticalAlignment = Alignment.Top,
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)) {
-                PillToggle(
-                    selected = practiceMode == PracticeMode.BOTH,
-                    onClick = { onModeChange(PracticeMode.BOTH) },
-                    label = s.bothHands,
-                )
-                PillToggle(
-                    selected = practiceMode == PracticeMode.RIGHT_ONLY,
-                    onClick = { onModeChange(PracticeMode.RIGHT_ONLY) },
-                    label = s.rightHand,
-                )
-                PillToggle(
-                    selected = practiceMode == PracticeMode.LEFT_ONLY,
-                    onClick = { onModeChange(PracticeMode.LEFT_ONLY) },
-                    label = s.leftHand,
-                )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)) {
-                CircularIconButton(
-                    onClick = { onViewChange(ViewMode.ROLL) },
-                    selected = viewMode == ViewMode.ROLL,
-                ) {
-                    Icon(
-                        painter = painterResource(Res.drawable.piano_keys_thin),
-                        contentDescription = s.pianoRoll,
-                        modifier = Modifier.size(20.dp),
-                    )
+            // 模式
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(s.mode, style = MaterialTheme.typography.labelSmall, color = labelColor)
+                Row(horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)) {
+                    PillToggle(selected = practiceMode == PracticeMode.BOTH, onClick = { onModeChange(PracticeMode.BOTH) }, label = s.bothHands)
+                    PillToggle(selected = practiceMode == PracticeMode.RIGHT_ONLY, onClick = { onModeChange(PracticeMode.RIGHT_ONLY) }, label = s.rightHand)
+                    PillToggle(selected = practiceMode == PracticeMode.LEFT_ONLY, onClick = { onModeChange(PracticeMode.LEFT_ONLY) }, label = s.leftHand)
                 }
-                if (scoreHasSheet) {
-                    CircularIconButton(
-                        onClick = { onViewChange(ViewMode.SHEET_KEYBOARD) },
-                        selected = viewMode == ViewMode.SHEET_KEYBOARD,
-                    ) {
-                        Icon(
-                            painter = painterResource(Res.drawable.book_open_text_thin),
-                            contentDescription = s.readSheet,
-                            modifier = Modifier.size(20.dp),
-                        )
+            }
+            // 视图
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(s.view, style = MaterialTheme.typography.labelSmall, color = labelColor)
+                Row(horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)) {
+                    CircularIconButton(onClick = { onViewChange(ViewMode.ROLL) }, selected = viewMode == ViewMode.ROLL) {
+                        Icon(painterResource(Res.drawable.piano_keys_thin), s.pianoRoll, Modifier.size(20.dp))
                     }
-                    CircularIconButton(
-                        onClick = { onViewChange(ViewMode.SHEET_FULL) },
-                        selected = viewMode == ViewMode.SHEET_FULL,
-                    ) {
-                        Icon(
-                            painter = painterResource(Res.drawable.music_notes_thin),
-                            contentDescription = s.viewSheet,
-                            modifier = Modifier.size(20.dp),
-                        )
+                    if (scoreHasSheet) {
+                        CircularIconButton(onClick = { onViewChange(ViewMode.SHEET_KEYBOARD) }, selected = viewMode == ViewMode.SHEET_KEYBOARD) {
+                            Icon(painterResource(Res.drawable.book_open_text_thin), s.readSheet, Modifier.size(20.dp))
+                        }
+                        CircularIconButton(onClick = { onViewChange(ViewMode.SHEET_FULL) }, selected = viewMode == ViewMode.SHEET_FULL) {
+                            Icon(painterResource(Res.drawable.music_notes_thin), s.viewSheet, Modifier.size(20.dp))
+                        }
+                    }
+                }
+            }
+            // 播放
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(s.playback, style = MaterialTheme.typography.labelSmall, color = labelColor)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)) {
+                    CircularIconButton(onClick = onTogglePlay, enabled = sheetReady) {
+                        Icon(painterResource(if (isPlaying) Res.drawable.pause_thin else Res.drawable.play_thin), if (isPlaying) s.pause else s.play, Modifier.size(20.dp))
+                    }
+                    CircularIconButton(onClick = onStopPlay, enabled = sheetReady) {
+                        Icon(painterResource(Res.drawable.stop_thin), s.stop, Modifier.size(20.dp))
+                    }
+                    Text("${(session.currentTick * 100 / (session.score.totalTicks.coerceAtLeast(1))).coerceIn(0, 100)}%", style = MaterialTheme.typography.bodySmall, color = WindScoreColors.ink)
+                }
+            }
+            // 循环
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(s.loop, style = MaterialTheme.typography.labelSmall, color = labelColor)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)) {
+                    CircularIconButton(onClick = onLoopStart, enabled = activeLoopRange == null) {
+                        Icon(painterResource(Res.drawable.repeat_thin), s.setLoopStart, Modifier.size(20.dp))
+                    }
+                    CircularIconButton(onClick = onLoopEnd, enabled = activeLoopRange == null && pendingLoopStart != null) {
+                        Icon(painterResource(Res.drawable.repeat_thin), s.setLoopEnd, Modifier.size(20.dp))
+                    }
+                    CircularIconButton(onClick = onClearLoop, enabled = activeLoopRange != null) {
+                        Icon(painterResource(Res.drawable.x_thin), s.clearLoop, Modifier.size(20.dp))
                     }
                 }
             }
         }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs),
-            ) {
-                CircularIconButton(onClick = onTogglePlay, enabled = sheetReady) {
-                    Icon(
-                        painter = painterResource(if (isPlaying) Res.drawable.pause_thin else Res.drawable.play_thin),
-                        contentDescription = if (isPlaying) s.pause else s.play,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-                CircularIconButton(onClick = onStopPlay, enabled = sheetReady) {
-                    Icon(
-                        painter = painterResource(Res.drawable.stop_thin),
-                        contentDescription = s.stop,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-                Text(
-                    "${(session.currentTick * 100 / (session.score.totalTicks.coerceAtLeast(1))).coerceIn(0, 100)}%",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = WindScoreColors.ink,
-                )
-            }
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs),
-            ) {
-                CircularIconButton(onClick = onLoopStart, enabled = activeLoopRange == null) {
-                    Icon(
-                        painter = painterResource(Res.drawable.repeat_thin),
-                        contentDescription = s.setLoopStart,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-                if (pendingLoopStart != null && activeLoopRange == null) {
-                    Text(
-                        s.loopStartLabel(pendingLoopStart),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = WindScoreColors.ink,
-                    )
-                }
-                CircularIconButton(onClick = onLoopEnd, enabled = activeLoopRange == null && pendingLoopStart != null) {
-                    Icon(
-                        painter = painterResource(Res.drawable.repeat_thin),
-                        contentDescription = s.setLoopEnd,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-                CircularIconButton(onClick = onClearLoop, enabled = activeLoopRange != null) {
-                    Icon(
-                        painter = painterResource(Res.drawable.x_thin),
-                        contentDescription = s.clearLoop,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-                if (activeLoopRange != null) {
-                    Text(
-                        s.loopRangeLabel(activeLoopRange.first, activeLoopRange.last),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = WindScoreColors.accentMagenta,
-                    )
-                }
+        // 状态行
+        val pending = session.pendingPitches.joinToString { pitchName(it) }
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.md)) {
+            Text(
+                text = if (session.finished) s.finishedAccuracy(session.scorePercent()) else s.toPlayPending(pending),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (session.finished) WindScoreColors.semanticSuccess else WindScoreColors.ink,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            if (activeLoopRange != null) {
+                Text(s.loopRangeLabel(activeLoopRange.first, activeLoopRange.last), style = MaterialTheme.typography.bodySmall, color = WindScoreColors.accentMagenta, maxLines = 1)
             }
         }
-
-        StatusLine(session, viewMode, sheetReady)
     }
 }
 
@@ -742,7 +750,7 @@ private fun MainStage(
     val frameH = if (isCompact) WindScoreSpacing.sm else 0.dp
     val frameV = if (isCompact) WindScoreSpacing.sm else 0.dp
     val innerPadding = if (isCompact) WindScoreSpacing.lg else WindScoreSpacing.sm
-    val tick = if (isPlaying || playTick > 0) playTick else session.currentTick
+    val tick = if (isPlaying) playTick else session.currentTick
     val showRoll = viewMode == ViewMode.ROLL
     val showSheetKb = viewMode == ViewMode.SHEET_KEYBOARD
     val showSheetFull = viewMode == ViewMode.SHEET_FULL
@@ -758,7 +766,25 @@ private fun MainStage(
         Box(Modifier.fillMaxSize().padding(innerPadding)) {
             val rawXml = session.score.rawXml
             val activePitches = if (isPlaying) playingPitches else session.heldPitches
-            val targetPitches = if (isPlaying) playingPitches else session.pendingPitches
+            val targetPitches = if (isPlaying) playingPitches else session.cuePitches
+            val hostedTargetPitches = if (isPlaying) emptySet() else session.hostedCuePitches
+
+            LaunchedEffect(
+                session.traceId,
+                viewMode,
+                tick,
+                targetPitches,
+                hostedTargetPitches,
+                activePitches,
+            ) {
+                if (viewMode == ViewMode.SHEET_KEYBOARD) {
+                    traceState(
+                        "ui.sheetKeyboard session=${session.traceId} tick=$tick playing=$isPlaying " +
+                            "cue=${targetPitches.sorted()} hostedCue=${hostedTargetPitches.sorted()} " +
+                            "held=${activePitches.sorted()}",
+                    )
+                }
+            }
 
             var sheetSnapshot by remember(rawXml) { mutableStateOf<SheetSnapshot?>(null) }
 
@@ -790,6 +816,7 @@ private fun MainStage(
                                 .clip(RoundedCornerShape(WindScoreRounded.lg)),
                             hostedTrack = session.hostedTrack,
                             heldPitchesProvider = { activePitches },
+                            hitNoteIdsProvider = { session.hitNoteIds },
                             pulseIntensityProvider = { session.pulseIntensity },
                             bpmProvider = { session.score.tempo.takeIf { it > 0 } ?: 120 },
                             pendingLoopStart = pendingLoopStart,
@@ -869,15 +896,16 @@ private fun MainStage(
                 label = "keyboardAlpha"
             )
             if (keyboardAlpha > 0.01f) {
-                StaticKeyboard(
+                PracticeKeyboard(
                     modifier = Modifier.fillMaxWidth().fillMaxHeight(0.28f)
                         .align(Alignment.BottomCenter)
                         .clip(RoundedCornerShape(WindScoreRounded.lg))
                         .alpha(keyboardAlpha),
                     pitchLow = session.score.notes.minOf { it.pitch }.coerceIn(21, 108),
                     pitchHigh = session.score.notes.maxOf { it.pitch }.coerceIn(21, 108),
-                    pendingPitchesProvider = { targetPitches },
-                    heldPitchesProvider = { activePitches },
+                    targetPitches = targetPitches,
+                    hostedPitches = hostedTargetPitches,
+                    heldPitches = activePitches,
                 )
             }
 
@@ -972,7 +1000,7 @@ private fun StatusCard(session: ScoreSession, modifier: Modifier = Modifier) {
         // Linear Progress Bar (长条进度条)
         val progressRatio = (session.currentTick.toFloat() / session.score.totalTicks.coerceAtLeast(1).toFloat()).coerceIn(0f, 1f)
         androidx.compose.material3.LinearProgressIndicator(
-            progress = progressRatio,
+            progress = { progressRatio },
             modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
             color = WindScoreColors.accentMagenta,
             trackColor = WindScoreColors.hairlineSoft

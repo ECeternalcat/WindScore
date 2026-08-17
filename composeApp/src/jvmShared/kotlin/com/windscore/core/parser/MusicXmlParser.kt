@@ -6,6 +6,7 @@ import com.windscore.core.model.TrackType
 import org.w3c.dom.Element
 import org.w3c.dom.Node
 import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.util.zip.ZipInputStream
 import javax.xml.parsers.DocumentBuilderFactory
 import kotlin.math.roundToInt
@@ -17,6 +18,17 @@ import kotlin.math.roundToInt
 private fun javax.xml.parsers.DocumentBuilderFactory.safeSetFeature(name: String, value: Boolean) {
     runCatching { setFeature(name, value) }
 }
+
+private fun secureDocumentBuilderFactory(): DocumentBuilderFactory =
+    DocumentBuilderFactory.newInstance().apply {
+        isNamespaceAware = false
+        isValidating = false
+        safeSetFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
+        safeSetFeature("http://xml.org/sax/features/external-general-entities", false)
+        safeSetFeature("http://xml.org/sax/features/external-parameter-entities", false)
+        runCatching { setAttribute("http://javax.xml.XMLConstants/property/accessExternalDTD", "") }
+        runCatching { setAttribute("http://javax.xml.XMLConstants/property/accessExternalSchema", "") }
+    }
 
 /**
  * MusicXML (.mxl) 降维解析器。
@@ -30,12 +42,18 @@ private fun javax.xml.parsers.DocumentBuilderFactory.safeSetFeature(name: String
  */
 object MusicXmlParser {
 
+    internal const val MAX_INPUT_BYTES = 32 * 1024 * 1024
+    private const val MAX_ZIP_ENTRIES = 256
+    private const val MAX_ZIP_ENTRY_BYTES = 32 * 1024 * 1024
+    private const val MAX_ZIP_TOTAL_BYTES = 64 * 1024 * 1024
+
     private val STEP_OFFSET = mapOf(
         'C' to 0, 'D' to 2, 'E' to 4, 'F' to 5,
         'G' to 7, 'A' to 9, 'B' to 11,
     )
 
     fun parse(mxlBytes: ByteArray): Score {
+        require(mxlBytes.size <= MAX_INPUT_BYTES) { "乐谱文件过大（最大 ${MAX_INPUT_BYTES / 1024 / 1024} MB）" }
         // 同时支持压缩 .mxl（ZIP）与未压缩 .xml
         return if (isZip(mxlBytes)) {
             val files = unzip(mxlBytes)
@@ -55,14 +73,9 @@ object MusicXmlParser {
             (bytes[3].toInt() and 0xFF) == 0x04
 
     fun parseXml(xmlBytes: ByteArray): Score {
-        val factory = DocumentBuilderFactory.newInstance().apply {
-            isNamespaceAware = false
-            isValidating = false
-            // 抑制 MusicXML DTD 远程下载（不支持的平台静默跳过）
-            safeSetFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
-            safeSetFeature("http://xml.org/sax/features/external-general-entities", false)
-            safeSetFeature("http://xml.org/sax/features/external-parameter-entities", false)
-        }
+        require(xmlBytes.size <= MAX_ZIP_ENTRY_BYTES) { "MusicXML 内容过大" }
+        require(hasOnlySafeMusicXmlDoctype(xmlBytes)) { "MusicXML 包含不安全的 DOCTYPE" }
+        val factory = secureDocumentBuilderFactory()
         val doc = factory.newDocumentBuilder().parse(ByteArrayInputStream(xmlBytes))
         doc.documentElement.normalize()
 
@@ -223,6 +236,7 @@ object MusicXmlParser {
             tempo = tempo,
             totalTicks = maxOf(globalMaxTick, maxTick),
             rawXml = xmlText,
+            supportsSheetView = true,
             title = title,
         )
     }
@@ -299,12 +313,10 @@ object MusicXmlParser {
     private fun resolveRootFile(files: Map<String, ByteArray>): String {
         val container = files["META-INF/container.xml"]
         if (container != null) {
-            val factory = DocumentBuilderFactory.newInstance().apply {
-                isValidating = false
-                safeSetFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false)
-                safeSetFeature("http://xml.org/sax/features/external-general-entities", false)
-                safeSetFeature("http://xml.org/sax/features/external-parameter-entities", false)
+            require(hasOnlySafeMusicXmlDoctype(container, allowContainerWithoutScoreRoot = true)) {
+                "MXL container.xml 包含不安全的 DOCTYPE"
             }
+            val factory = secureDocumentBuilderFactory()
             runCatching {
                 val doc = factory.newDocumentBuilder().parse(ByteArrayInputStream(container))
                 val roots = doc.getElementsByTagName("rootfile")
@@ -319,15 +331,57 @@ object MusicXmlParser {
 
     private fun unzip(data: ByteArray): Map<String, ByteArray> {
         val result = mutableMapOf<String, ByteArray>()
+        var entryCount = 0
+        var totalBytes = 0
         ZipInputStream(ByteArrayInputStream(data)).use { zis ->
             var entry = zis.nextEntry
             while (entry != null) {
                 if (!entry.isDirectory) {
-                    result[entry.name] = zis.readBytes()
+                    entryCount++
+                    require(entryCount <= MAX_ZIP_ENTRIES) { "MXL 条目过多" }
+                    val bytes = zis.readBytesBounded(MAX_ZIP_ENTRY_BYTES)
+                    totalBytes += bytes.size
+                    require(totalBytes <= MAX_ZIP_TOTAL_BYTES) { "MXL 解压后内容过大" }
+                    result[entry.name] = bytes
                 }
                 entry = zis.nextEntry
             }
         }
         return result
     }
+
+    private fun hasOnlySafeMusicXmlDoctype(
+        bytes: ByteArray,
+        allowContainerWithoutScoreRoot: Boolean = false,
+    ): Boolean {
+        val header = bytes.copyOfRange(0, minOf(bytes.size, XML_HEADER_SCAN_BYTES)).toString(Charsets.UTF_8)
+        val start = header.indexOf("<!DOCTYPE", ignoreCase = true)
+        if (start < 0) return true
+        val end = header.indexOf('>', startIndex = start)
+        if (end < 0) return false
+        val declaration = header.substring(start, end + 1)
+        if ('[' in declaration || declaration.contains("<!ENTITY", ignoreCase = true)) return false
+        if (allowContainerWithoutScoreRoot) return false
+        return SAFE_MUSIC_XML_DOCTYPE.matches(declaration)
+    }
+
+    private fun ZipInputStream.readBytesBounded(limit: Int): ByteArray {
+        val output = ByteArrayOutputStream(minOf(8192, limit))
+        val buffer = ByteArray(8192)
+        var total = 0
+        while (true) {
+            val read = read(buffer)
+            if (read < 0) break
+            total += read
+            require(total <= limit) { "MXL 单个条目解压后过大" }
+            output.write(buffer, 0, read)
+        }
+        return output.toByteArray()
+    }
+
+    private const val XML_HEADER_SCAN_BYTES = 16 * 1024
+    private val SAFE_MUSIC_XML_DOCTYPE = Regex(
+        pattern = """<!DOCTYPE\s+(score-partwise|score-timewise)\s+(PUBLIC\s+[^>]+|SYSTEM\s+[^>]+)>""",
+        option = RegexOption.IGNORE_CASE,
+    )
 }

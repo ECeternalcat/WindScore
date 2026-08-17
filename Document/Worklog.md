@@ -558,3 +558,287 @@ Addressed the second code audit (`Document/Audit_20260714.md`): fixed **9 of 13*
 
 ## Known leftovers
 - `OsmdHtml.kt` embedded JS HUD strings still Chinese (see Phase 9 limitation).
+
+---
+
+## Phase 15 — Audit Remediation and Theme Context (2026-07-22)
+
+### Code audit
+- Reviewed Android input/rendering, parser safety, persistence, identity, testing, build structure, and UI theme risks; the resulting current priorities are maintained in `TECHNICAL_ROADMAP.md`.
+- Fixed A01-A15 and A17. A16 is now also fixed: theme colors are immutable `WindScorePalette` values provided through a `CompositionLocal`; Desktop title-bar dark mode is driven by an explicit resolved boolean instead of process-global state.
+- Settings/About/license labels and dialog titles now come from the typed EN/ZH/JA `UiStrings` tables. OSMD loading/error messages use localized inputs while technical HUD statuses remain language-neutral.
+
+### Reliability fixes
+- Android MIDI now preserves running status and split messages per output port, handles hot-plug/remove events, rejects stale asynchronous opens, and closes detached devices.
+- Android WebView score data updates through current references and is explicitly stopped, cleared, and destroyed on disposal.
+- Android file import moves reading and MusicXML parsing to `Dispatchers.IO`.
+- MusicXML/MXL parsing now bounds raw input, ZIP entry count/size/total expansion, rejects unsafe DOCTYPE/internal entities, and disables external resource access where supported.
+- Recent scores use stable `Score.id` identity; Compose state updates stay on the main scope; persistence uses atomic writes and bounded OSMD snapshot caches.
+- Added direct tests for MIDI parsing, parser safety/time-axis branches, atomic writes, application state, ScorePlayer, and ScoreSession lifecycle behavior.
+
+### Android/KMP build migration
+- Extracted the Android entry point into the new `androidApp` module.
+- Migrated `composeApp` to the AGP 9 Android-KMP library plugin and removed the obsolete KMP/Application mixed-module configuration.
+- Desktop keep-awake now uses Windows `SetThreadExecutionState` through JNA instead of injecting a synthetic keyboard event.
+
+### Verification
+- `:composeApp:desktopTest --rerun-tasks`: 50 tests passed, including the A16 palette regression test and the historical-score sheet restoration regression test.
+- `:composeApp:compileKotlinDesktop`: passed.
+- `:androidApp:compileDebugKotlin`: passed.
+- `:androidApp:assembleDebug`: passed; APK contains `libmidi.so` for arm64-v8a, armeabi-v7a, x86, and x86_64.
+
+### Bug fix — sheet buttons disappear after reopening a historical score
+- Symptom: an imported score showed Roll, Read Sheet, and Full Sheet controls on first open, but after leaving and reopening it from Recent Scores only Roll remained.
+- Root cause: `App.openScore()` inserted a lightweight recent entry with `rawXml = null` and then passed that lightweight list to `saveRecentScores()`. `RecentsStorage.save()` correctly skips entries without raw XML, so the original MusicXML was never persisted. After reopening, the CBOR score still had notes but no `rawXml`; `PlayerScreen` therefore evaluated `score.rawXml != null` as false and hid the two sheet buttons.
+- Fix: keep the in-memory recent list lightweight, but create the persistence snapshot with the currently opened `finalScore` (including `rawXml`) for the matching `Score.id`. This preserves lazy list memory usage while ensuring sheet mode can be restored from history.
+- Added `RecentsStorageTest.savingFullScoreMakesItAvailableForSheetModeAfterReload` and injected a test `baseDir` into `RecentsStorage` to lock the XML landing-file contract.
+
+### Bug fix — stopping playback escaped the active loop
+- Symptom: with A/B loop enabled, pressing the playback stop button moved the cursor/progress to tick 0. Playback then appeared to escape the loop until it reached the loop boundary and snapped back.
+- Root cause: `ScorePlayer.stop()` called `reset()`, and `reset()` always assigned `_tick = 0L` without considering `loopRange`.
+- Fix: `ScorePlayer.reset()` now targets `loopRange.first` when a loop is active, rebuilds pre-loop-start active-note state silently, and keeps the normal tick-0 behavior when no loop is configured. This applies to both the stop button and any playback reset path.
+- Added regression test `ScorePlaybackTest.stoppingWithLoopActiveReturnsToLoopStart`.
+
+## Documentation Index
+
+- `Document/Worklog.md`: chronological implementation and verification history.
+- `Document/TECHNICAL_ROADMAP.md`: current architecture assessment and forward-looking engineering roadmap.
+- `Document/DESIGN.md`: visual design system and UI direction.
+
+---
+
+## Priority 1 Correctness Remediation (2026-07-22)
+
+### Playback region invariant
+- Added the pure Kotlin `PlaybackRegion` model as the shared score/loop boundary definition.
+- `ScorePlayer` and `JudgmentEngine` now constrain reset, seek, step-forward and step-backward operations to the active loop.
+- Changing a player's loop range immediately normalizes its current position.
+- Added playback and practice-session regression tests for seeks and steps outside an active loop.
+
+### Repeated-note behavior
+- Restored per-group `freshKeys` tracking in `JudgmentEngine`.
+- A held key can no longer pass consecutive repeated notes; the key must be released and pressed again.
+- Chords retain natural staggered input because fresh keys accumulate within the current group.
+- Seek, reset and loop snapback clear fresh-key state.
+
+### Sheet capability and historical restoration
+- Added serialized `Score.supportsSheetView`; `PlayerScreen` no longer uses `rawXml` presence to decide which views exist.
+- Recent-score CBOR entries retain sheet capability while keeping `rawXml` out of the in-memory list.
+- Opening a score now restores XML, per-score settings and scoring history on `Dispatchers.IO`.
+- A generation token rejects stale results from superseded open requests; back navigation cancels the active request.
+- A blocking loading overlay prevents conflicting library actions, and restoration failures remain on the library screen with localized feedback.
+
+### Verification
+- `:composeApp:desktopTest --rerun-tasks`: 54 tests passed.
+- `:composeApp:compileKotlinDesktop`: passed.
+- `:androidApp:compileDebugKotlin`: passed.
+- `:androidApp:assembleDebug`: passed.
+- APK contains `libmidi.so` for arm64-v8a, armeabi-v7a, x86 and x86_64.
+
+---
+
+## ScoreLibraryController Extraction (2026-07-22)
+
+### State ownership
+- Added `ScoreLibraryController` with `StateFlow` state for recent scores, opening status, opened-score results, score history and loading errors.
+- Moved recent-score initialization, asynchronous XML/settings/history restoration, request generation cancellation, rename, delete and history append operations out of `App.kt`.
+- Added `ScoreLibraryDataSource` injection so controller behavior can be tested without touching platform storage.
+- `App.kt` remains responsible only for converting an opened score into playback/practice state.
+
+### Persistence correction
+- Recent-list mutations can contain lightweight entries without `rawXml`; `RecentsStorage` now preserves their existing XML/cache identity instead of silently dropping them from `recents.json`.
+
+### Verification
+- `ScoreLibraryControllerTest`: open restoration, stale request rejection, rename and delete behavior.
+- `:composeApp:desktopTest --rerun-tasks`: 58 tests passed.
+- Desktop compilation passed.
+- `:androidApp:compileDebugKotlin` and `:androidApp:assembleDebug` passed.
+
+---
+
+## PlaybackController Extraction (2026-07-22)
+
+### Playback ownership
+- Added `PlaybackController` and immutable `PlaybackState` exposed through `StateFlow`.
+- The controller now owns `ScorePlayer` lifecycle, tick/playing/pitch collection, speed, metronome volume, loop range, seek, step, reset, play, stop and practice-session synchronization.
+- `ScorePlayer` is no longer referenced by `App.kt`, `PlayerScreen` or `ControlSidebar`.
+- Removed direct speed mutation from the sidebar; UI interactions now submit controller events.
+- Playback disables hosted scheduling while active and restores it after pause/stop; scoring can explicitly suspend practice synchronization.
+- Loop creation, adjustment and clearing now align playback and practice timelines through one controller path.
+
+### State cleanup
+- Playback speed and metronome volume are no longer duplicated as Compose state in `App.kt`; `PlaybackState` is their single owner.
+- Closing playback restores default practice synchronization so a scoring session cannot affect the next opened score.
+
+### Verification
+- Added `PlaybackControllerTest` for restored parameters, loop/seek/step alignment and hosted scheduling transitions.
+- `:composeApp:desktopTest --rerun-tasks`: 61 tests passed.
+- Desktop and Android compilation passed; Android APK assembly passed.
+
+---
+
+## PracticeController Extraction (2026-07-22)
+
+### Practice ownership
+- Added `PracticeController` and `PracticeState` for the current score, practice mode and owned `ScoreSession`.
+- Moved practice-session creation, mode switching, MIDI input routing, position/loop restoration and session disposal out of `App.kt`.
+- Mode changes create one replacement session while preserving the current tick and active loop; the replaced session is closed immediately.
+- `PlaybackController.attachSession()` switches playback synchronization to the replacement practice session without rebuilding the player.
+
+### State cleanup
+- `App.kt` no longer owns duplicate `session`, `practiceMode` or active-loop state.
+- The active loop is read from `PlaybackState`; only the incomplete A-point selection remains UI-local.
+- Direct `ScoreSession` construction in `App.kt` is now limited to scoring and is the next extraction target.
+
+### Verification
+- Added `PracticeControllerTest` for mode replacement/restoration, MIDI event routing and lifecycle cleanup.
+- `:composeApp:desktopTest --rerun-tasks`: 64 tests passed.
+- Desktop and Android compilation passed; Android APK assembly passed.
+
+---
+
+## ScoringController Extraction (2026-07-22)
+
+### Scoring ownership
+- Added `ScoringController`, `ScoringState` and core `ScoringPhase` for the scoring Session and SETUP/ACTIVE/RESULT lifecycle.
+- Moved scoring-session creation, MIDI routing, replacement, completion monitoring, one-second result delay, `ScoreRecord` creation and cleanup out of `App.kt`.
+- Completion is monitored by the controller instead of a UI `LaunchedEffect`, so hosted-only completion does not depend on a subsequent recomposition or MIDI event.
+- Score records are emitted once through a callback to `ScoreLibraryController`, preserving history persistence ownership.
+- `PlayerScreen` now imports the core scoring phase instead of defining a UI-owned business enum.
+
+### Verification
+- Added `ScoringControllerTest` for successful completion/record creation, cancellation before result and Session replacement.
+- `:composeApp:desktopTest --rerun-tasks`: 67 tests passed.
+- Desktop and Android compilation passed; Android APK assembly passed.
+
+---
+
+## AppSettingsController Extraction (2026-07-22)
+
+### Settings ownership
+- Added `AppSettingsController`, `AppSettingsState` and an injectable `AppSettingsDataSource`.
+- Moved global config and language initialization/update persistence out of `App.kt`.
+- Moved per-score settings restoration, debounce scheduling, playback write suppression and immediate close-time saving out of `App.kt`.
+- `ScoreLibraryController` no longer loads per-score settings; score/history restoration and settings restoration now have separate ownership and are coordinated before the player page is committed.
+- The loading overlay remains visible through both asynchronous stages, and back navigation cancels both requests.
+
+### Concurrency correctness
+- Debounced and immediate settings writes use a generation plus `Mutex`, ensuring the latest user intent wins and an old debounce cannot overwrite the final close-time snapshot.
+- Recent-list initialization and persistence use corresponding generation/serialization guards, preventing late initialization or older rename/delete writes from replacing newer state.
+- IO dispatchers are injectable for deterministic controller tests while production continues to use `Dispatchers.IO`.
+
+### Verification
+- Added `AppSettingsControllerTest` for initialization/global updates, stale score-settings rejection, playback write suppression, debounce cancellation and immediate final save.
+- `:composeApp:desktopTest --rerun-tasks`: 70 tests passed.
+- Desktop and Android compilation passed; Android APK assembly passed.
+
+---
+
+## Immutable Score Data and Runtime Hit State (2026-07-22)
+
+### Data model
+- Removed mutable `NoteEntity.isHit`; `NoteEntity` is now immutable serialized score data.
+- `JudgmentEngine` owns a session-local `hitNoteIds` set for completed and hosted notes.
+- `ScoreSession` exposes the current hit-ID snapshot for Compose rendering without sharing runtime state through `Score`.
+- `PianoRoll` receives a hit-ID provider and no longer reads mutable fields from score notes.
+
+### Isolation
+- Seek, reset and loop snapback update only the owning engine's hit set.
+- Added a regression test proving two `JudgmentEngine` instances using the same `Score` keep independent hit state.
+- Existing practice, scoring, loop, hosted-track and history behavior remains unchanged.
+
+### Verification
+- `NoteEntity.isHit` has no remaining source references.
+- `:composeApp:desktopTest --rerun-tasks`: 71 tests passed.
+- Desktop and Android compilation passed; Android APK assembly passed.
+
+---
+
+## Versioned Score Cache and Typed Recent Index (2026-07-22)
+
+### Cache schema
+- Added a versioned `ScoreCacheEnvelope` around parsed-score CBOR cache files.
+- Existing bare `Score` CBOR cache files are decoded as legacy data and rewritten in the current envelope format.
+- Unknown future schema versions are rejected, then recovered by parsing the persisted MusicXML and writing a current cache.
+- Added regression coverage for both legacy-cache migration and unknown-schema recovery.
+
+### Recent-score index
+- Replaced manual `recents.json` string escaping and parsing with `kotlinx.serialization` typed entries.
+- Kept the persisted `title` and `xmlHash` field names, so existing recent-index files remain readable.
+- Added a title round-trip test covering quotes, backslashes, newlines and tabs.
+
+### Verification
+- `:composeApp:desktopTest --rerun-tasks`: 74 tests passed.
+- `:composeApp:compileKotlinDesktop`: passed.
+- `:androidApp:compileDebugKotlin`: passed.
+- `:androidApp:assembleDebug`: passed.
+
+---
+
+## Historical Reopen and Loop Control UI Coverage (2026-07-22)
+
+### UI test infrastructure
+- Added the Compose Desktop UI test dependency and a `ControlSidebarUiTest` suite.
+- Added stable semantics tags for restored view controls and loop start/end/clear controls.
+- Tests verify that a reopened score renders its restored sheet view selection and complete loop state, then updates controls after clearing the loop.
+- Tests also verify that an incomplete persisted loop start enables selecting the loop end after reopening.
+
+### Restoration correction
+- Restored loop setup phase now becomes `WAITING_FOR_END` when persisted settings contain a loop start without an end.
+- This fixes the previous path where a reopened pending A point was displayed but the next stage click sought instead of completing the loop.
+
+### Verification
+- `:composeApp:desktopTest --rerun-tasks`: 77 tests passed.
+- `:composeApp:compileKotlinDesktop`: passed.
+- `:androidApp:compileDebugKotlin`: passed.
+- `:androidApp:assembleDebug`: passed.
+
+---
+
+## Recoverable Failure Diagnostics (2026-07-22)
+
+### Diagnostics channel
+- Added a buffered `DiagnosticController` for transient recoverable failures across import, library storage, settings and MIDI boundaries.
+- Added localized Chinese, English and Japanese diagnostics rendered as a root-level in-app toast, so welcome-screen and player-screen failures share the same visible behavior.
+
+### Storage and settings
+- `ScoreLibraryController` reports failed recent-list loading, score opening, history writes and recent-score persistence without reporting normal coroutine cancellation.
+- `AppSettingsController` reports load/save failures and supplies default score settings after a failed restoration, preventing the score-opening overlay from waiting indefinitely.
+- Added regression tests for diagnostic delivery, failed score opening and failed settings restoration.
+
+### Import and MIDI
+- File picker APIs now distinguish user cancellation from picker/read/parse failure; failures report through the shared diagnostics channel.
+- Desktop and Android MIDI managers expose unsupported service, no input device, device open failure and disconnect events.
+- MIDI start/runtime exceptions now reset the requested running state and show a localized diagnostic instead of leaving the UI in a false connected state.
+
+### Verification
+- `:composeApp:desktopTest --rerun-tasks`: 80 tests passed.
+- `:composeApp:compileKotlinDesktop`: passed.
+- `:androidApp:compileDebugKotlin`: passed.
+- `:androidApp:assembleDebug`: passed.
+
+---
+
+## Android USB-MIDI Fallback and Practice Keyboard (2026-07-31)
+
+### USB-MIDI fallback
+- Added a raw Android USB Host fallback for devices whose ROM does not provide `android.media.midi.MidiManager`.
+- The standard Android MIDI service remains the primary path; fallback claims USB Audio/MIDIStreaming 1.0 bulk input endpoints only when the service is unavailable.
+- Added permission handling, hot-plug lifecycle, USB-MIDI event-packet decoding, virtual-cable state isolation and non-dropping MIDI event delivery.
+- Real-device fallback input was confirmed by the user on a device without the standard MIDI service.
+
+### Mode-two diagnosis
+- Structured `WindScore-State` logs proved the practice session did not reset and USB NoteOn/NoteOff events reached transport, queue, App and session layers in order.
+- Apparent disappearing cues matched hosted-only timeline groups where the active-hand cue was empty.
+- A later apparent single-note cue was actually a three-note target `[73, 77, 80]`; the two black-key targets were visually too weak in the old equal-width chromatic keyboard.
+
+### Practice keyboard
+- Replaced `StaticKeyboard` with `PracticeKeyboard` using real piano geometry: equal-width white keys and overlaid black keys.
+- The component uses an independent neutral keyboard palette rather than inheriting the page background.
+- Active targets use a strong magenta key treatment plus a top marker on both white and black keys; hosted targets are gray; held notes are green.
+- Score pitch ranges expand to stable C-B octave boundaries, avoiding arbitrary narrow chromatic layouts.
+- Added geometry, range, chord visibility and visual-state priority tests.
+
+### Verification
+- `:composeApp:desktopTest --rerun-tasks`: 93 tests passed.
+- Android compilation and packaging were intentionally left to the user because Gradle Android builds stall in the shared terminal environment.

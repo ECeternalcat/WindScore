@@ -19,21 +19,8 @@ import com.windscore.core.model.NoteEntity
 import com.windscore.core.model.Score
 import com.windscore.core.model.TrackType
 
-import com.windscore.ui.theme.WindScoreColors
-
-// 左手：薄荷绿（冷 pastel）
-private val LEFT_HIT get() = WindScoreColors.blockMint
-private val LEFT_UNHIT get() = if (com.windscore.ui.theme.isDarkThemeGlobal) Color(0xFF5D7D62) else Color(0xFF9DC9A4)
-// 右手：珊瑚橙（暖 pastel）
-private val RIGHT_HIT get() = WindScoreColors.blockCoral
-private val RIGHT_UNHIT get() = if (com.windscore.ui.theme.isDarkThemeGlobal) Color(0xFF8C6654) else Color(0xFFD49A7E)
-
-private val BG_TOP get() = WindScoreColors.canvas
-private val BG_BOTTOM get() = WindScoreColors.surfaceSoft
-private val HIT_LINE get() = WindScoreColors.ink
-private val WHITE_KEY get() = WindScoreColors.canvas
-private val BLACK_KEY get() = WindScoreColors.inverseCanvas
-private val GRID get() = WindScoreColors.hairline.copy(alpha = 0.5f)
+import com.windscore.ui.theme.WindScorePalette
+import com.windscore.ui.theme.windScoreColors
 
 private val BLACK_KEY_OFFSETS = setOf(1, 3, 6, 8, 10)
 
@@ -60,6 +47,7 @@ fun PianoRoll(
     lookaheadBeats: Float = 4f,
     hostedTrack: TrackType? = null,
     heldPitchesProvider: () -> Set<Int> = { emptySet() },
+    hitNoteIdsProvider: () -> Set<Int> = { emptySet() },
     pulseIntensityProvider: () -> Float = { 0.15f },
     bpmProvider: () -> Int = { 120 },
     pendingLoopStart: Long? = null,
@@ -75,12 +63,14 @@ fun PianoRoll(
     val pitchLow = (pitchMin - 2).coerceIn(21, 108)
     val pitchHigh = (pitchMax + 2).coerceIn(21, 108)
     val textMeasurer = rememberTextMeasurer()
+    val colors = windScoreColors()
 
     Canvas(modifier.fillMaxSize()) {
         val w = size.width
         val h = size.height
         val tick = currentTickProvider()
         val held = heldPitchesProvider()
+        val hitNoteIds = hitNoteIdsProvider()
 
         val keyCount = (pitchHigh - pitchLow + 1).toFloat()
         val keyWidth = w / keyCount
@@ -90,21 +80,22 @@ fun PianoRoll(
         val windowTicks = (lookaheadBeats * score.divisions).coerceAtLeast(1f)
         val ppt = rollHeight / windowTicks // pixels per tick
 
-        drawBackground(h, pulseIntensityProvider(), bpmProvider())
-        drawBeatGrid(score, tick, ppt, hitLineY, w)
-        drawNotes(score.notes, tick, ppt, hitLineY, pitchLow, keyWidth, h, hostedTrack, textMeasurer)
-        drawHitLine(hitLineY, w)
+        drawBackground(h, pulseIntensityProvider(), bpmProvider(), colors)
+        drawBeatGrid(score, tick, ppt, hitLineY, w, colors)
+        drawOctaveGuides(pitchLow, pitchHigh, keyWidth, hitLineY, colors)
+        drawNotes(score.notes, hitNoteIds, tick, ppt, hitLineY, pitchLow, keyWidth, h, hostedTrack, textMeasurer, colors)
+        drawHitLine(hitLineY, w, colors)
         drawLoopCursors(tick, ppt, hitLineY, w, h, pendingLoopStart, loopRange)
-        drawHeldFeedback(held, pitchLow, keyWidth, hitLineY, keyboardHeight)
-        drawKeyboard(pitchLow, pitchHigh, keyWidth, hitLineY, keyboardHeight, w, held)
+        drawHeldFeedback(held, pitchLow, keyWidth, hitLineY, keyboardHeight, colors)
+        drawKeyboard(pitchLow, pitchHigh, keyWidth, hitLineY, keyboardHeight, w, held, colors)
     }
 }
 
-private fun DrawScope.drawBackground(h: Float, pulseIntensity: Float, bpm: Int) {
-    drawRect(BG_TOP, Offset.Zero, Size(size.width, h))
+private fun DrawScope.drawBackground(h: Float, pulseIntensity: Float, bpm: Int, colors: WindScorePalette) {
+    drawRect(colors.canvas, Offset.Zero, Size(size.width, h))
     // 顶部到底部的轻微渐变（用 surface-soft 叠加近似）
     drawRect(
-        color = BG_BOTTOM.copy(alpha = 0.5f),
+        color = colors.surfaceSoft.copy(alpha = 0.5f),
         topLeft = Offset(0f, h * 0.4f),
         size = Size(size.width, h * 0.6f),
     )
@@ -118,7 +109,7 @@ private fun DrawScope.drawBackground(h: Float, pulseIntensity: Float, bpm: Int) 
         if (bandAlpha > 0.01f) {
             val bandH = h * 0.08f
             drawRect(
-                color = WindScoreColors.blockLilac.copy(alpha = bandAlpha),
+                color = colors.blockLilac.copy(alpha = bandAlpha),
                 topLeft = Offset(0f, h * 0.35f),
                 size = Size(size.width, bandH),
             )
@@ -132,6 +123,7 @@ private fun DrawScope.drawBeatGrid(
     ppt: Float,
     hitLineY: Float,
     w: Float,
+    colors: WindScorePalette,
 ) {
     val beatsPerWindow = (hitLineY / ppt / score.divisions).toInt() + 2
     val currentBeat = (tick / score.divisions).toInt()
@@ -141,7 +133,7 @@ private fun DrawScope.drawBeatGrid(
         val y = hitLineY + (tick - beatTick) * ppt
         if (y in 0f..hitLineY) {
             drawLine(
-                color = GRID,
+                color = colors.hairline.copy(alpha = 0.5f),
                 start = Offset(0f, y),
                 end = Offset(w, y),
                 strokeWidth = if (beat % 4 == 0) 1.5f else 0.8f,
@@ -150,9 +142,29 @@ private fun DrawScope.drawBeatGrid(
     }
 }
 
-private fun DrawScope.drawHitLine(hitLineY: Float, w: Float) {
+private fun DrawScope.drawOctaveGuides(
+    pitchLow: Int,
+    pitchHigh: Int,
+    keyWidth: Float,
+    hitLineY: Float,
+    colors: WindScorePalette,
+) {
+    for (pitch in pitchLow..pitchHigh) {
+        if (pitch % 12 != 0) continue
+        val x = (pitch - pitchLow) * keyWidth
+        val isMiddleC = pitch == 60
+        drawLine(
+            color = if (isMiddleC) colors.accentMagenta.copy(alpha = 0.3f) else colors.hairline,
+            start = Offset(x, 0f),
+            end = Offset(x, hitLineY),
+            strokeWidth = if (isMiddleC) 1.5f else 0.8f,
+        )
+    }
+}
+
+private fun DrawScope.drawHitLine(hitLineY: Float, w: Float, colors: WindScorePalette) {
     drawLine(
-        color = HIT_LINE.copy(alpha = 0.85f),
+        color = colors.ink.copy(alpha = 0.85f),
         start = Offset(0f, hitLineY),
         end = Offset(w, hitLineY),
         strokeWidth = 2f,
@@ -207,6 +219,7 @@ private fun DrawScope.drawLoopCursors(
 
 private fun DrawScope.drawNotes(
     notes: List<NoteEntity>,
+    hitNoteIds: Set<Int>,
     tick: Long,
     ppt: Float,
     hitLineY: Float,
@@ -215,6 +228,7 @@ private fun DrawScope.drawNotes(
     canvasH: Float,
     hostedTrack: TrackType?,
     textMeasurer: TextMeasurer,
+    colors: WindScorePalette,
 ) {
     val h = canvasH
     val gap = (keyWidth * 0.12f).coerceAtLeast(1f)
@@ -229,16 +243,17 @@ private fun DrawScope.drawNotes(
         val x = (note.pitch - pitchLow) * keyWidth + gap
         val clampedTop = topY.coerceAtLeast(0f)
         val clampedBottom = bottomY.coerceAtMost(h)
-        val isCurrent = note.startTick == tick && !note.isHit
+        val isHit = note.id in hitNoteIds
+        val isCurrent = note.startTick == tick && !isHit
         // 托管轨道视觉弱化至 0.3 透明度（文档 4.2）
         val dim = note.track == hostedTrack
-        var color = colorFor(note, isCurrent)
+        var color = colorFor(note, isHit, isCurrent, colors)
         if (dim) color = color.copy(alpha = color.alpha * 0.3f)
 
-        // 当前待弹组：先描一圈高亮，提示“现在该弹”
+        // 当前待弹组：品红底框（比音符大一圈），浅色/深色主题下均高对比醒目
         if (isCurrent && !dim) {
             drawRoundRect(
-                color = Color.White.copy(alpha = 0.85f),
+                color = colors.accentMagenta,
                 topLeft = Offset(x - gap, clampedTop),
                 size = Size(noteW + gap * 2, (clampedBottom - clampedTop).coerceAtLeast(2f)),
                 cornerRadius = radius,
@@ -278,23 +293,24 @@ private fun DrawScope.drawKeyboard(
     keyboardHeight: Float,
     w: Float,
     held: Set<Int>,
+    colors: WindScorePalette,
 ) {
     if (keyboardHeight <= 0f) return
     val top = hitLineY
-    drawRect(WindScoreColors.surfaceSoft, Offset(0f, top), Size(w, keyboardHeight))
+    drawRect(colors.surfaceSoft, Offset(0f, top), Size(w, keyboardHeight))
     for (pitch in pitchLow..pitchHigh) {
         val x = (pitch - pitchLow) * keyWidth
         val isBlack = pitch % 12 in BLACK_KEY_OFFSETS
         val isHeld = pitch in held
         if (isBlack) {
             drawRect(
-                color = if (isHeld) WindScoreColors.blockLilac else BLACK_KEY,
+                color = if (isHeld) colors.blockLilac else colors.inverseCanvas,
                 topLeft = Offset(x + keyWidth * 0.2f, top),
                 size = Size(keyWidth * 0.6f, keyboardHeight),
             )
         } else {
             drawRect(
-                color = if (isHeld) WindScoreColors.blockLilac.copy(alpha = 0.5f) else WHITE_KEY,
+                color = if (isHeld) colors.blockLilac.copy(alpha = 0.5f) else colors.canvas,
                 topLeft = Offset(x + keyWidth * 0.05f, top),
                 size = Size(keyWidth * 0.9f, keyboardHeight),
             )
@@ -302,7 +318,7 @@ private fun DrawScope.drawKeyboard(
         // 白键之间细线
         if (!isBlack) {
             drawLine(
-                color = WindScoreColors.hairline,
+                color = colors.hairline,
                 start = Offset(x, top),
                 end = Offset(x, top + keyboardHeight),
                 strokeWidth = 0.8f,
@@ -316,19 +332,19 @@ private fun DrawScope.drawKeyboard(
         val cy = top + keyboardHeight * 0.86f
         if (pitch == 60) {
             drawCircle(
-                color = WindScoreColors.accentMagenta,
+                color = colors.accentMagenta,
                 radius = (keyWidth * 0.17f).coerceAtLeast(3.5f),
                 center = Offset(cx, cy),
             )
         } else {
             drawCircle(
-                color = WindScoreColors.ink.copy(alpha = 0.28f),
+                color = colors.ink.copy(alpha = 0.28f),
                 radius = (keyWidth * 0.1f).coerceAtLeast(2f),
                 center = Offset(cx, cy),
             )
         }
     }
-    drawLine(color = WindScoreColors.hairline, start = Offset(0f, top), end = Offset(w, top), strokeWidth = 1f)
+    drawLine(color = colors.hairline, start = Offset(0f, top), end = Offset(w, top), strokeWidth = 1f)
 }
 
 /**
@@ -341,6 +357,7 @@ private fun DrawScope.drawHeldFeedback(
     keyWidth: Float,
     hitLineY: Float,
     keyboardHeight: Float,
+    colors: WindScorePalette,
 ) {
     if (held.isEmpty()) return
     val blockH = (keyboardHeight * 1.6f).coerceAtLeast(28f)
@@ -351,7 +368,7 @@ private fun DrawScope.drawHeldFeedback(
         val w = keyWidth * 0.8f
         // 从判定线向上的发光块
         drawRoundRect(
-            color = WindScoreColors.accentMagenta.copy(alpha = 0.35f),
+            color = colors.accentMagenta.copy(alpha = 0.35f),
             topLeft = Offset(x, hitLineY - blockH),
             size = Size(w, blockH),
             cornerRadius = androidx.compose.ui.geometry.CornerRadius(keyWidth * 0.18f, keyWidth * 0.18f),
@@ -359,19 +376,12 @@ private fun DrawScope.drawHeldFeedback(
     }
 }
 
-private fun colorFor(note: NoteEntity, isCurrent: Boolean): Color = when {
-    note.isHit -> when (note.track) {
-        TrackType.RIGHT_HAND -> RIGHT_HIT
-        TrackType.LEFT_HAND -> LEFT_HIT
-    }
-    isCurrent -> when (note.track) {
-        // 当前待弹组用高饱和度
-        TrackType.RIGHT_HAND -> RIGHT_HIT.copy(alpha = 0.95f)
-        TrackType.LEFT_HAND -> LEFT_HIT.copy(alpha = 0.95f)
-    }
+private fun colorFor(note: NoteEntity, isHit: Boolean, isCurrent: Boolean, colors: WindScorePalette): Color = when {
+    // 已命中：中性灰幽灵，降低视觉优先级，明确传达"已过"
+    isHit -> colors.ink.copy(alpha = 0.22f)
+    // 未命中：按轨道着色——目标满饱和，未来半透明（配合品红描边形成强弱对比）
     else -> when (note.track) {
-        // 未来音符用低饱和度
-        TrackType.RIGHT_HAND -> RIGHT_UNHIT
-        TrackType.LEFT_HAND -> LEFT_UNHIT
-    }
+        TrackType.RIGHT_HAND -> colors.rightNoteUnhit
+        TrackType.LEFT_HAND -> colors.leftNoteUnhit
+    }.let { if (isCurrent) it else it.copy(alpha = 0.4f) }
 }

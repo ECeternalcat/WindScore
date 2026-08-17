@@ -40,6 +40,10 @@ fun NativeSheetView(
     loopRange: LongRange? = null,
     modifier: Modifier = Modifier,
 ) {
+    if (!snapshot.hasValidGeometry) {
+        Canvas(modifier.fillMaxSize()) {}
+        return
+    }
     var scrollY by remember { mutableFloatStateOf(0f) }
     var canvasSize by remember { mutableStateOf(IntSize.Zero) }
 

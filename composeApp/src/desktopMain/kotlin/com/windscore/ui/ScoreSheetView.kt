@@ -53,6 +53,7 @@ actual fun ScoreSheetView(
     onStepBackward: () -> Unit,
     onSnapshot: ((SheetSnapshot) -> Unit)?,
 ) {
+    val tr = com.windscore.ui.i18n.strings()
     var state by remember { mutableStateOf<LoadState>(LoadState.Loading) }
     val webViewRef = remember { java.util.concurrent.atomic.AtomicReference<WebView?>(null) }
     val tickProvider by rememberUpdatedState(currentTickProvider)
@@ -66,7 +67,7 @@ actual fun ScoreSheetView(
         val osmdJsBytes = Thread.currentThread().contextClassLoader
             ?.getResourceAsStream("opensheetmusicdisplay.min.js")
             ?.use { it.readBytes() } ?: ByteArray(0)
-        val data = SheetServerData(osmdJsBytes, rawXml, OsmdHtml.buildHtml(divisions))
+        val data = SheetServerData(osmdJsBytes, rawXml, OsmdHtml.buildHtml(divisions, tr.loadingScore, tr.loadingFailed))
         val srv = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
         srv.createContext("/osmd.js") { ex ->
             ex.responseHeaders["Content-Type"] = "application/javascript"
@@ -93,7 +94,9 @@ actual fun ScoreSheetView(
     val port = serverInfo.second.address.port
 
     LaunchedEffect(rawXml) { serverData.xml = rawXml }
-    LaunchedEffect(divisions) { serverData.html = OsmdHtml.buildHtml(divisions) }
+    LaunchedEffect(divisions, tr.loadingScore, tr.loadingFailed) {
+        serverData.html = OsmdHtml.buildHtml(divisions, tr.loadingScore, tr.loadingFailed)
+    }
 
     DisposableEffect(Unit) {
         onDispose { try { serverInfo.second.stop(0) } catch (_: Exception) {} }
@@ -143,7 +146,7 @@ actual fun ScoreSheetView(
 
             // Check cache
             val xmlHash = com.windscore.core.calculateMd5(rawXml)
-            val htmlText = OsmdHtml.buildHtml(divisions)
+            val htmlText = OsmdHtml.buildHtml(divisions, tr.loadingScore, tr.loadingFailed)
             val htmlHash = com.windscore.core.calculateMd5(htmlText)
             val cacheKey = "${xmlHash}_$htmlHash"
             val cacheDir = File(com.windscore.core.getCacheDir(), cacheKey)
@@ -175,7 +178,7 @@ actual fun ScoreSheetView(
             if (initFailed.get() || wv == null) return@withContext
             val webView = wv // 定义只读 val 避免闭包内 Smart Cast 失败
 
-            serverData.html = OsmdHtml.buildHtml(divisions)
+            serverData.html = OsmdHtml.buildHtml(divisions, tr.loadingScore, tr.loadingFailed)
             serverData.xml = rawXml
 
             Platform.runLater { runCatching { webView.engine.load("http://127.0.0.1:$port/index.html") } }
@@ -347,15 +350,13 @@ private fun parseCursorSteps(posJson: String, timesJson: String, divisions: Int)
 }
 
 private fun <T> runLaterAndGet(block: () -> T): T {
-    val latch = java.util.concurrent.CountDownLatch(1)
-    @Suppress("UNCHECKED_CAST")
-    val result = arrayOfNulls<Any>(1)
+    val result = java.util.concurrent.CompletableFuture<T>()
     Platform.runLater {
-        runCatching { result[0] = block() }
-        latch.countDown()
+        runCatching(block)
+            .onSuccess(result::complete)
+            .onFailure(result::completeExceptionally)
     }
-    latch.await(3, java.util.concurrent.TimeUnit.SECONDS)
-    return result[0] as T
+    return result.get(3, java.util.concurrent.TimeUnit.SECONDS)
 }
 
 private fun parseSnapshotCache(cacheDir: java.io.File, json: String): SheetSnapshot? {
@@ -399,12 +400,14 @@ private fun saveSnapshotCache(
     steps: List<CursorStep>,
     rawPngBytesList: List<ByteArray>
 ) {
+    val cacheRoot = cacheDir.parentFile ?: return
+    val tempDir = java.io.File(cacheRoot, ".${cacheDir.name}.${System.nanoTime()}.tmp")
     try {
-        if (!cacheDir.exists()) cacheDir.mkdirs()
+        tempDir.mkdirs()
         
         // Write chunks
         for (i in rawPngBytesList.indices) {
-            val chunkFile = java.io.File(cacheDir, "chunk_$i.png")
+            val chunkFile = java.io.File(tempDir, "chunk_$i.png")
             chunkFile.writeBytes(rawPngBytesList[i])
         }
         
@@ -427,10 +430,23 @@ private fun saveSnapshotCache(
         sb.append("  ]\n")
         sb.append("}")
         
-        val metaFile = java.io.File(cacheDir, "meta.json")
+        val metaFile = java.io.File(tempDir, "meta.json")
         metaFile.writeText(sb.toString(), Charsets.UTF_8)
+        if (cacheDir.exists()) cacheDir.deleteRecursively()
+        check(tempDir.renameTo(cacheDir)) { "Failed to publish snapshot cache" }
+        trimSnapshotCaches(cacheRoot, cacheDir)
         println("[OSMD] Saved SheetSnapshot cache to disk: ${cacheDir.name}")
     } catch (e: Exception) {
         println("[OSMD] Failed to write cache: ${e.message}")
+    } finally {
+        if (tempDir.exists()) tempDir.deleteRecursively()
     }
+}
+
+private fun trimSnapshotCaches(root: java.io.File, current: java.io.File) {
+    root.listFiles()
+        ?.filter { it.isDirectory && it != current && !it.name.startsWith(".") }
+        ?.sortedByDescending { it.lastModified() }
+        ?.drop(7)
+        ?.forEach { it.deleteRecursively() }
 }

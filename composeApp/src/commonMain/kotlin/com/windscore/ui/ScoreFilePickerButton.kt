@@ -8,6 +8,7 @@ import com.windscore.ui.components.PillButtonStyle
 @Composable
 expect fun ScoreFilePickerButton(
     onPicked: (Score) -> Unit,
+    onFailure: (Throwable) -> Unit = {},
     modifier: Modifier = Modifier,
     style: PillButtonStyle = PillButtonStyle.SECONDARY,
 )
@@ -17,6 +18,8 @@ expect fun ScoreFilePickerButton(
  * 用于自定义 UI 中触发文件选择（与 ActionButton.onClick 无缝对接）。
  */
 @Composable
-expect fun rememberScoreFileOpener(onPicked: (Score) -> Unit): () -> Unit
-
+expect fun rememberScoreFileOpener(
+    onPicked: (Score) -> Unit,
+    onFailure: (Throwable) -> Unit = {},
+): () -> Unit
 

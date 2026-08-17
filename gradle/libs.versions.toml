@@ -1,7 +1,7 @@
 [versions]
 kotlin = "2.3.10"
 compose-multiplatform = "1.11.1"
-agp = "9.2.1"
+agp = "9.3.1"
 coroutines = "1.10.2"
 androidx-activity = "1.9.3"
 androidx-core = "1.16.0"
@@ -21,4 +21,5 @@ kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref 
 compose-multiplatform = { id = "org.jetbrains.compose", version.ref = "compose-multiplatform" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 android-application = { id = "com.android.application", version.ref = "agp" }
+android-multiplatform-library = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

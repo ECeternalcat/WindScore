@@ -86,6 +86,7 @@ fun WelcomeScreen(
     isCompact: Boolean,
     recentScores: List<Score>,
     onScoreClick: (Score) -> Unit,
+    onImportFailure: (Throwable) -> Unit = {},
     onRename: (Score, String) -> Unit,
     onDelete: (Score) -> Unit,
     onLanguageChange: (AppLanguage) -> Unit = {},
@@ -95,6 +96,9 @@ fun WelcomeScreen(
     var showSettings by remember { mutableStateOf(false) }
     val focusManager = LocalFocusManager.current
     val s = strings()
+
+    // 设置弹窗打开时，返回键关闭弹窗（否则交由 App 层处理返回）
+    com.windscore.PlatformBackHandler(enabled = showSettings) { showSettings = false }
 
     // 弹窗状态
     var pendingDelete by remember { mutableStateOf<Score?>(null) }
@@ -121,6 +125,7 @@ fun WelcomeScreen(
             ScoreListBody(
                 recentScores = recentScores,
                 onScoreClick = onScoreClick,
+                onImportFailure = onImportFailure,
                 onShowSettings = { showSettings = true },
                 onRename = { renamingScore = it; renameInput = it.title },
                 onDelete = { pendingDelete = it },
@@ -130,6 +135,7 @@ fun WelcomeScreen(
             DesktopWelcomeBody(
                 recentScores = recentScores,
                 onPickFile = onScoreClick,
+                onImportFailure = onImportFailure,
                 onShowSettings = { showSettings = true },
                 onRename = { renamingScore = it; renameInput = it.title },
                 onDelete = { pendingDelete = it },
@@ -140,20 +146,20 @@ fun WelcomeScreen(
 
     SettingsDialog(
         visible = showSettings,
-        onDismiss = { showSettings = false }
+        onDismiss = { showSettings = false },
+        title = s.settings,
+        darkTheme = isDarkTheme,
     ) {
-        WindScoreTheme(darkTheme = isDarkTheme) {
-            Surface(
-                modifier = Modifier.fillMaxSize(),
-                color = WindScoreColors.canvas,
-            ) {
-                SettingsScreen(
-                    onBack = { showSettings = false },
-                    onLanguageChange = onLanguageChange,
-                    config = config,
-                    onConfigChange = onConfigChange
-                )
-            }
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = WindScoreColors.canvas,
+        ) {
+            SettingsScreen(
+                onBack = { showSettings = false },
+                onLanguageChange = onLanguageChange,
+                config = config,
+                onConfigChange = onConfigChange
+            )
         }
     }
 
@@ -234,6 +240,7 @@ private fun WelcomeTopBar() {
 private fun DesktopWelcomeBody(
     recentScores: List<Score>,
     onPickFile: (Score) -> Unit,
+    onImportFailure: (Throwable) -> Unit,
     onShowSettings: () -> Unit,
     onRename: (Score) -> Unit,
     onDelete: (Score) -> Unit,
@@ -245,6 +252,7 @@ private fun DesktopWelcomeBody(
     ) {
         ActionCard(
             onPickFile = onPickFile,
+            onImportFailure = onImportFailure,
             onShowSettings = onShowSettings,
             modifier = Modifier.weight(1f).fillMaxHeight(),
         )
@@ -261,6 +269,7 @@ private fun DesktopWelcomeBody(
 @Composable
 private fun ActionCard(
     onPickFile: (Score) -> Unit,
+    onImportFailure: (Throwable) -> Unit,
     onShowSettings: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -275,7 +284,7 @@ private fun ActionCard(
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            val openFile = rememberScoreFileOpener(onPickFile)
+            val openFile = rememberScoreFileOpener(onPickFile, onImportFailure)
             ActionButton(icon = Res.drawable.folder_open_thin, label = s.openFile, onClick = openFile)
             Spacer(Modifier.width(WindScoreSpacing.xxl))
             ActionButton(icon = Res.drawable.gear_six_thin, label = s.settings, onClick = onShowSettings)
@@ -309,23 +318,13 @@ fun SettingsScreen(
     onConfigChange: (AppConfig) -> Unit = {}
 ) {
     val s = strings()
-    val isZh = AppStrings.language == AppLanguage.CHINESE
-    val isJa = AppStrings.language == AppLanguage.JAPANESE
 
     var subScreen by remember { mutableStateOf(SettingsSubScreen.MAIN) }
 
     if (subScreen == SettingsSubScreen.MAIN) {
-        val themeLabel = if (isZh) "界面主题" else if (isJa) "UIテーマ" else "UI Theme"
-        val followSystemLabel = if (isZh) "跟随系统" else if (isJa) "系统" else "System"
-        val lightLabel = if (isZh) "浅色" else if (isJa) "ライト" else "Light"
-        val darkLabel = if (isZh) "深色" else if (isJa) "ダーク" else "Dark"
-
-        val defaultViewLabel = if (isZh) "默认视图" else if (isJa) "デフォルトビュー" else "Default View"
         val viewRollLabel = s.pianoRoll
         val viewSheetKbLabel = s.readSheet
         val viewSheetFullLabel = s.viewSheet
-
-        val defaultPreBeatLabel = if (isZh) "默认预备拍" else if (isJa) "デフォルトカウント" else "Default Pre-beat"
 
         Column(modifier = modifier.fillMaxSize().padding(WindScoreSpacing.xxl)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -395,13 +394,13 @@ fun SettingsScreen(
                                 Text("🌓", style = MaterialTheme.typography.titleMedium, color = WindScoreColors.ink)
                             }
                             Spacer(Modifier.width(WindScoreSpacing.md))
-                            Text(themeLabel, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.W500), color = WindScoreColors.ink)
+                            Text(s.uiTheme, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.W500), color = WindScoreColors.ink)
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)) {
                             listOf(
-                                ThemeMode.FOLLOW_SYSTEM to followSystemLabel,
-                                ThemeMode.LIGHT to lightLabel,
-                                ThemeMode.DARK to darkLabel
+                                ThemeMode.FOLLOW_SYSTEM to s.followSystem,
+                                ThemeMode.LIGHT to s.lightTheme,
+                                ThemeMode.DARK to s.darkTheme
                             ).forEach { (mode, label) ->
                                 PillToggle(
                                     selected = config.themeMode == mode,
@@ -432,7 +431,7 @@ fun SettingsScreen(
                                 Icon(painterResource(Res.drawable.music_notes_thin), null, Modifier.size(20.dp), WindScoreColors.ink)
                             }
                             Spacer(Modifier.width(WindScoreSpacing.md))
-                            Text(defaultViewLabel, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.W500), color = WindScoreColors.ink)
+                            Text(s.defaultView, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.W500), color = WindScoreColors.ink)
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)) {
                             listOf(
@@ -469,7 +468,7 @@ fun SettingsScreen(
                                 Icon(painterResource(Res.drawable.clock_thin), null, Modifier.size(20.dp), WindScoreColors.ink)
                             }
                             Spacer(Modifier.width(WindScoreSpacing.md))
-                            Text(defaultPreBeatLabel, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.W500), color = WindScoreColors.ink)
+                            Text(s.defaultPreBeat, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.W500), color = WindScoreColors.ink)
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)) {
                             listOf(0, 1, 2, 3, 4, 5).forEach { seconds ->
@@ -520,8 +519,8 @@ fun SettingsScreen(
                         }
                         Spacer(Modifier.width(WindScoreSpacing.md))
                         Column(Modifier.weight(1f)) {
-                            Text(if (isZh) "关于" else if (isJa) "情報" else "About", style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.W500), color = WindScoreColors.ink)
-                            Text(if (isZh) "版本与开源许可证信息" else if (isJa) "バージョンとライセンス" else "Version and license info", style = MaterialTheme.typography.bodySmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
+                            Text(s.about, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.W500), color = WindScoreColors.ink)
+                            Text(s.aboutDescription, style = MaterialTheme.typography.bodySmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
                         }
                     }
                 }
@@ -538,7 +537,7 @@ fun SettingsScreen(
                     Icon(painterResource(Res.drawable.arrow_left_thin), s.back, Modifier.size(22.dp), WindScoreColors.ink)
                 }
                 Spacer(Modifier.width(WindScoreSpacing.sm))
-                Text(if (isZh) "关于" else if (isJa) "情報" else "About", style = MaterialTheme.typography.headlineMedium, color = WindScoreColors.ink)
+                Text(s.about, style = MaterialTheme.typography.headlineMedium, color = WindScoreColors.ink)
             }
             Spacer(Modifier.height(WindScoreSpacing.xl))
 
@@ -567,7 +566,7 @@ fun SettingsScreen(
 
                 Text("WindScore", style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold), color = WindScoreColors.ink)
                 Text(s.appSubtitle, style = MaterialTheme.typography.bodyMedium, color = WindScoreColors.ink.copy(alpha = 0.7f))
-                Text(if (isZh) "版本: Alpha" else if (isJa) "バージョン: Alpha" else "Version: Alpha", style = MaterialTheme.typography.bodySmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
+                Text(s.versionAlpha, style = MaterialTheme.typography.bodySmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
 
                 Spacer(Modifier.height(WindScoreSpacing.md))
 
@@ -578,7 +577,7 @@ fun SettingsScreen(
                     shape = RoundedCornerShape(WindScoreRounded.lg),
                 ) {
                     Column(modifier = Modifier.padding(WindScoreSpacing.lg), verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)) {
-                        Text(if (isZh) "软件许可证" else if (isJa) "ソフトウェアライセンス" else "Software License", style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold), color = WindScoreColors.ink)
+                        Text(s.softwareLicense, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold), color = WindScoreColors.ink)
                         Text("Mozilla Public License 2.0 (MPL 2.0)", style = MaterialTheme.typography.bodyMedium, color = WindScoreColors.ink.copy(alpha = 0.8f))
                     }
                 }
@@ -590,7 +589,7 @@ fun SettingsScreen(
                     shape = RoundedCornerShape(WindScoreRounded.lg),
                 ) {
                     Column(modifier = Modifier.padding(WindScoreSpacing.lg), verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)) {
-                        Text(if (isZh) "相关开源许可证" else if (isJa) "関連ライセンス" else "Third-party Licenses", style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold), color = WindScoreColors.ink)
+                        Text(s.thirdPartyLicenses, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold), color = WindScoreColors.ink)
                         
                         val licenses = listOf(
                             "Kotlin Multiplatform (Apache License 2.0)",
@@ -664,7 +663,7 @@ private fun RecentScoresPanel(
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.sm),
                 ) {
-                    items(filtered, key = { it.title + it.totalTicks }) { score ->
+                    items(filtered, key = { it.id.ifBlank { "${it.title}:${it.totalTicks}" } }) { score ->
                         ScoreListItem(
                             score = score,
                             onClick = { onScoreClick(score) },
@@ -682,6 +681,7 @@ private fun RecentScoresPanel(
 private fun ScoreListBody(
     recentScores: List<Score>,
     onScoreClick: (Score) -> Unit,
+    onImportFailure: (Throwable) -> Unit,
     onShowSettings: () -> Unit,
     onRename: (Score) -> Unit,
     onDelete: (Score) -> Unit,
@@ -703,7 +703,7 @@ private fun ScoreListBody(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.sm),
         ) {
-            ScoreFilePickerButton(onPicked = onScoreClick, style = PillButtonStyle.PRIMARY)
+            ScoreFilePickerButton(onPicked = onScoreClick, onFailure = onImportFailure, style = PillButtonStyle.PRIMARY)
             Box(
                 modifier = Modifier.size(40.dp).clip(RoundedCornerShape(WindScoreRounded.full))
                     .background(WindScoreColors.surfaceSoft).clickable(onClick = onShowSettings),
@@ -735,7 +735,7 @@ private fun ScoreListBody(
                     modifier = Modifier.fillMaxSize().padding(WindScoreSpacing.lg),
                     verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.sm),
                 ) {
-                    items(filtered, key = { it.title + it.totalTicks }) { score ->
+                    items(filtered, key = { it.id.ifBlank { "${it.title}:${it.totalTicks}" } }) { score ->
                         ScoreListItem(
                             score = score,
                             onClick = { onScoreClick(score) },

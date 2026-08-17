@@ -12,7 +12,10 @@ data class SheetSnapshot(
     val chunkHeight: Int,
     val totalHeight: Int,
     val cursorSteps: List<CursorStep>,
-)
+) {
+    val hasValidGeometry: Boolean
+        get() = chunks.isNotEmpty() && chunkWidth > 0 && chunkHeight > 0 && totalHeight > 0
+}
 
 /**
  * 光标步进：某个 tick 对应的光标位置（相对于位图的像素坐标）。

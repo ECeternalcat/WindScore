@@ -20,7 +20,7 @@ internal object LangStorage {
     fun save(code: String, baseDir: File = File(getAppStorageDir())) {
         runCatching {
             if (!baseDir.exists()) baseDir.mkdirs()
-            file(baseDir).writeText(code, Charsets.UTF_8)
+            file(baseDir).atomicWriteText(code)
         }
     }
 }

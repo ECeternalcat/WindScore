@@ -23,3 +23,4 @@ plugins {
 rootProject.name = "WindScore"
 
 include(":composeApp")
+include(":androidApp")
