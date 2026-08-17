@@ -54,6 +54,7 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.runtime.rememberCoroutineScope
 import windscore.composeapp.generated.resources.clock_thin
+import windscore.composeapp.generated.resources.corners_out_thin
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.windscore.core.engine.ScoreSession
@@ -487,6 +488,16 @@ fun PlayerScreen(
             }
         }
 
+        // 常驻展开把手：控件收起后顶部保留可见入口（可发现性，替代仅一次的 Toast 提示）
+        AnimatedVisibility(
+            visible = isCompact && !controlsVisible,
+            enter = fadeIn(tween(250)),
+            exit = fadeOut(tween(250)),
+            modifier = Modifier.align(Alignment.TopCenter),
+        ) {
+            CollapsedPanelHandle(onClick = { controlsVisible = true })
+        }
+
         val activeToast = toastMessage ?: localToastMessage
         AnimatedVisibility(
             visible = activeToast != null,
@@ -599,6 +610,31 @@ private fun PlayerToolbar(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun CollapsedPanelHandle(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val s = strings()
+    val handleShape = RoundedCornerShape(
+        bottomStart = WindScoreRounded.lg,
+        bottomEnd = WindScoreRounded.lg,
+    )
+    Box(
+        modifier = modifier
+            .size(width = 72.dp, height = 40.dp)
+            .clip(handleShape)
+            .background(windScoreColors().canvas.copy(alpha = 0.92f))
+            .border(1.dp, windScoreColors().hairline, handleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            painter = painterResource(Res.drawable.corners_out_thin),
+            contentDescription = s.swipeDownToExpand,
+            tint = windScoreColors().ink.copy(alpha = 0.6f),
+            modifier = Modifier.size(18.dp),
+        )
     }
 }
 

@@ -24,12 +24,18 @@ Purpose: verify TECHNICAL_ROADMAP.md remediation status and clear known risks be
 - `ScoreCacheEnvelope` schema versioning with legacy migration.
 - Recents use typed serialization; score identity = md5(xml); fingerprints are only a fast path.
 
-### Priority 4/5 — PARTIAL (not blocking)
+### Priority 4/5 — PARTIAL
 
-- Android real-device MIDI/WebView tests: not done.
-- Forced-landscape rationale, non-Windows packaging: not documented.
-- `WindScoreColors` facade: still used in 100+ places (backed by CompositionLocal, safe but unfinished).
-- Compact-panel expand affordance: not done.
+Real-device status (owner-reported 2026-08-18, regular daily use):
+
+- MIDI connect/play/scoring full flow, hot-plug reconnect, open-failed device fallback: verified in daily use.
+- Sheet view (WebView/OSMD) rendering, cursor, score switching, import/recents/rename/delete: verified in daily use.
+- UNVERIFIED: very large scores (dozens of pages) OSMD render time & memory (no such score available).
+- UNVERIFIED: forced landscape on tablets/split-screen/multi-window (plain rotation works).
+
+Remaining documented gaps: forced-landscape rationale, non-Windows desktop packaging.
+`WindScoreColors` facade: REMOVED (all call sites use `windScoreColors()` / captured palette).
+Compact-panel expand affordance: DONE (persistent top-center handle when controls are collapsed).
 
 ## 2. New Risks Found (pre-refactor)
 
@@ -72,3 +78,11 @@ Remaining known risks (accepted, see §2): R7 enum persistence compat (documente
 | after R1 (MidiInputController) | 99/99 | exposed latent StateTrace crash |
 | after R2/R3/R5 (session StateFlow + completion flow + StateTrace guard) | 99/99 | 68/68 |
 | after R4 (TrackSelection/JudgmentPolicy) + R6 + test robustness | 102/102 | 71/71 |
+| after facade removal + panel handle + sync tick publish | 102/102 | 71/71 |
+
+## 5. Cleanup Batch 2 (2026-08-18)
+
+- Removed the `WindScoreColors` compatibility facade; 206 call sites across 10 files now use `windScoreColors()` directly (CompositionLocal access). `PianoRoll` already captured the palette before Canvas.
+- `PlaybackController` position commands (seek/step/loop/stop/reset) now publish `tick` to state synchronously instead of relying on the async timeline collector — removes a whole class of stale-UI/flaky-test windows.
+- Added persistent collapsed-panel expand handle (top-center, compact layout only): the two-finger gesture stays but is no longer the only discoverable entry.
+- Verified the mechanical rewrite preserved UTF-8 content (±/あ/emoji byte-level check).
