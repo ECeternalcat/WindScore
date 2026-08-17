@@ -69,7 +69,7 @@ import com.windscore.ui.components.PillToggle
 import com.windscore.ui.components.CircularIconButton
 import com.windscore.ui.components.pitchName
 import com.windscore.ui.i18n.strings
-import com.windscore.ui.theme.WindScoreColors
+import com.windscore.ui.theme.windScoreColors
 import com.windscore.ui.theme.WindScoreRounded
 import com.windscore.ui.theme.WindScoreSpacing
 import org.jetbrains.compose.resources.painterResource
@@ -502,7 +502,7 @@ fun PlayerScreen(
             ) {
                 Surface(
                     shape = RoundedCornerShape(WindScoreRounded.md),
-                    color = WindScoreColors.ink,
+                    color = windScoreColors().ink,
                     contentColor = Color.White,
                     shadowElevation = 4.dp,
                     modifier = Modifier.padding(horizontal = 32.dp, vertical = 16.dp)
@@ -573,7 +573,7 @@ private fun PlayerToolbar(
             Text(
                 title,
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.W500),
-                color = WindScoreColors.ink,
+                color = windScoreColors().ink,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -623,7 +623,7 @@ private fun PlayerControlBar(
 ) {
     val s = strings()
     val ss = session.state.collectAsState().value
-    val labelColor = WindScoreColors.ink.copy(alpha = 0.5f)
+    val labelColor = windScoreColors().ink.copy(alpha = 0.5f)
     Column(
         modifier = Modifier.fillMaxWidth().padding(horizontal = WindScoreSpacing.lg, vertical = WindScoreSpacing.xs),
         verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs),
@@ -670,7 +670,7 @@ private fun PlayerControlBar(
                     CircularIconButton(onClick = onStopPlay, enabled = sheetReady) {
                         Icon(painterResource(Res.drawable.stop_thin), s.stop, Modifier.size(20.dp))
                     }
-                    Text("${(ss.currentTick * 100 / (session.score.totalTicks.coerceAtLeast(1))).coerceIn(0, 100)}%", style = MaterialTheme.typography.bodySmall, color = WindScoreColors.ink)
+                    Text("${(ss.currentTick * 100 / (session.score.totalTicks.coerceAtLeast(1))).coerceIn(0, 100)}%", style = MaterialTheme.typography.bodySmall, color = windScoreColors().ink)
                 }
             }
             // 循环
@@ -695,13 +695,13 @@ private fun PlayerControlBar(
             Text(
                 text = if (ss.finished) s.finishedAccuracy(session.scorePercent()) else s.toPlayPending(pending),
                 style = MaterialTheme.typography.bodySmall,
-                color = if (ss.finished) WindScoreColors.semanticSuccess else WindScoreColors.ink,
+                color = if (ss.finished) windScoreColors().semanticSuccess else windScoreColors().ink,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
             if (activeLoopRange != null) {
-                Text(s.loopRangeLabel(activeLoopRange.first, activeLoopRange.last), style = MaterialTheme.typography.bodySmall, color = WindScoreColors.accentMagenta, maxLines = 1)
+                Text(s.loopRangeLabel(activeLoopRange.first, activeLoopRange.last), style = MaterialTheme.typography.bodySmall, color = windScoreColors().accentMagenta, maxLines = 1)
             }
         }
     }
@@ -720,12 +720,12 @@ private fun StatusLine(session: ScoreSession, viewMode: ViewMode = ViewMode.ROLL
         Text(
             if (ss.finished) s.finishedAccuracy(session.scorePercent()) else s.toPlayPending(pending),
             style = MaterialTheme.typography.bodySmall,
-            color = if (ss.finished) WindScoreColors.semanticSuccess else WindScoreColors.ink,
+            color = if (ss.finished) windScoreColors().semanticSuccess else windScoreColors().ink,
         )
         Text(
             s.progressTick(ss.progress, ss.groupCount, ss.currentTick, session.score.totalTicks),
             style = MaterialTheme.typography.bodySmall,
-            color = WindScoreColors.ink,
+            color = windScoreColors().ink,
         )
     }
 }
@@ -765,7 +765,7 @@ private fun MainStage(
             .fillMaxWidth()
             .padding(horizontal = frameH, vertical = frameV)
             .clip(RoundedCornerShape(WindScoreRounded.lg))
-            .background(WindScoreColors.blockLime),
+            .background(windScoreColors().blockLime),
     ) {
         Box(Modifier.fillMaxSize().padding(innerPadding)) {
             val rawXml = session.score.rawXml
@@ -853,7 +853,7 @@ private fun MainStage(
                                 ) {
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                         CircularProgressIndicator(
-                                            color = WindScoreColors.accentMagenta,
+                                            color = windScoreColors().accentMagenta,
                                             strokeWidth = 3.dp,
                                             modifier = Modifier.size(36.dp),
                                         )
@@ -867,7 +867,7 @@ private fun MainStage(
                                         Text(
                                             text = loadingText,
                                             style = MaterialTheme.typography.bodyMedium,
-                                            color = WindScoreColors.ink,
+                                            color = windScoreColors().ink,
                                             textAlign = TextAlign.Center,
                                             modifier = Modifier.padding(horizontal = WindScoreSpacing.lg)
                                         )
@@ -938,15 +938,15 @@ private fun StatusCard(session: ScoreSession, modifier: Modifier = Modifier) {
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(WindScoreRounded.lg))
-            .background(WindScoreColors.canvas)
-            .border(1.dp, WindScoreColors.hairline, RoundedCornerShape(WindScoreRounded.lg))
+            .background(windScoreColors().canvas)
+            .border(1.dp, windScoreColors().hairline, RoundedCornerShape(WindScoreRounded.lg))
             .padding(WindScoreSpacing.md),
         verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)
     ) {
         Text(
             text = s.statusLabel,
             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.W600, fontSize = 10.sp),
-            color = WindScoreColors.ink.copy(alpha = 0.5f)
+            color = windScoreColors().ink.copy(alpha = 0.5f)
         )
 
         Spacer(Modifier.height(2.dp))
@@ -956,12 +956,12 @@ private fun StatusCard(session: ScoreSession, modifier: Modifier = Modifier) {
             Text(
                 text = s.toPlay,
                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
-                color = WindScoreColors.ink.copy(alpha = 0.5f)
+                color = windScoreColors().ink.copy(alpha = 0.5f)
             )
             Text(
                 text = if (ss.finished) s.performanceComplete else pending,
                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.W500),
-                color = if (ss.finished) WindScoreColors.semanticSuccess else WindScoreColors.ink,
+                color = if (ss.finished) windScoreColors().semanticSuccess else windScoreColors().ink,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -978,24 +978,24 @@ private fun StatusCard(session: ScoreSession, modifier: Modifier = Modifier) {
                 Text(
                     text = s.progress,
                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
-                    color = WindScoreColors.ink.copy(alpha = 0.5f)
+                    color = windScoreColors().ink.copy(alpha = 0.5f)
                 )
                 Text(
                     text = "${ss.progress}/${ss.groupCount}",
                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.W500),
-                    color = WindScoreColors.ink
+                    color = windScoreColors().ink
                 )
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "TICK",
                     style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
-                    color = WindScoreColors.ink.copy(alpha = 0.5f)
+                    color = windScoreColors().ink.copy(alpha = 0.5f)
                 )
                 Text(
                     text = "${ss.currentTick}/${session.score.totalTicks}",
                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.W500),
-                    color = WindScoreColors.ink
+                    color = windScoreColors().ink
                 )
             }
         }
@@ -1007,8 +1007,8 @@ private fun StatusCard(session: ScoreSession, modifier: Modifier = Modifier) {
         androidx.compose.material3.LinearProgressIndicator(
             progress = { progressRatio },
             modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
-            color = WindScoreColors.accentMagenta,
-            trackColor = WindScoreColors.hairlineSoft
+            color = windScoreColors().accentMagenta,
+            trackColor = windScoreColors().hairlineSoft
         )
     }
 }

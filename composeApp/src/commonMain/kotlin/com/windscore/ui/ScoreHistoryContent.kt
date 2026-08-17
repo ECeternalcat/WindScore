@@ -42,7 +42,7 @@ import com.windscore.core.model.PracticeMode
 import com.windscore.core.model.ScoreRecord
 import com.windscore.ui.components.CircularIconButton
 import com.windscore.ui.i18n.strings
-import com.windscore.ui.theme.WindScoreColors
+import com.windscore.ui.theme.windScoreColors
 import com.windscore.ui.theme.WindScoreRounded
 import com.windscore.ui.theme.WindScoreSpacing
 import org.jetbrains.compose.resources.painterResource
@@ -61,7 +61,7 @@ fun ScoreHistoryContent(
 ) {
     val s = strings()
     Column(
-        modifier = Modifier.fillMaxSize().background(WindScoreColors.canvas),
+        modifier = Modifier.fillMaxSize().background(windScoreColors().canvas),
     ) {
         // 标题栏
         Row(
@@ -79,7 +79,7 @@ fun ScoreHistoryContent(
             Text(
                 s.scoreHistory,
                 style = MaterialTheme.typography.headlineMedium,
-                color = WindScoreColors.ink,
+                color = windScoreColors().ink,
             )
         }
 
@@ -88,7 +88,7 @@ fun ScoreHistoryContent(
                 Text(
                     s.noHistory,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = WindScoreColors.ink.copy(alpha = 0.5f),
+                    color = windScoreColors().ink.copy(alpha = 0.5f),
                 )
             }
         } else {
@@ -120,10 +120,10 @@ fun ScoreHistoryContent(
 private fun ScoreTrendChart(records: List<ScoreRecord>) {
     val series = records.asReversed().map { it.percent.toFloat() } // oldest -> newest
     val improving = series.last() >= series.first()
-    val color = if (improving) WindScoreColors.scoreClean else WindScoreColors.scoreStuck
+    val color = if (improving) windScoreColors().scoreClean else windScoreColors().scoreStuck
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = WindScoreColors.surfaceSoft,
+        color = windScoreColors().surfaceSoft,
         shape = RoundedCornerShape(WindScoreRounded.md),
     ) {
         Canvas(modifier = Modifier.fillMaxWidth().height(64.dp).padding(WindScoreSpacing.md)) {
@@ -145,7 +145,7 @@ private fun ScoreTrendChart(records: List<ScoreRecord>) {
 private fun HistoryItem(record: ScoreRecord, delta: Int?) {
     val s = strings()
     var expanded by remember { mutableStateOf(false) }
-    val scoreColor = if (record.percent >= 80) WindScoreColors.scoreClean else WindScoreColors.scoreStuck
+    val scoreColor = if (record.percent >= 80) windScoreColors().scoreClean else windScoreColors().scoreStuck
     val modeLabel = when (record.practiceMode) {
         PracticeMode.BOTH -> s.bothHands
         PracticeMode.RIGHT_ONLY -> s.rightHand
@@ -154,7 +154,7 @@ private fun HistoryItem(record: ScoreRecord, delta: Int?) {
 
     Surface(
         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(WindScoreRounded.md)).clickable { expanded = !expanded },
-        color = WindScoreColors.surfaceSoft,
+        color = windScoreColors().surfaceSoft,
         shape = RoundedCornerShape(WindScoreRounded.md),
     ) {
         Column(modifier = Modifier.padding(WindScoreSpacing.md)) {
@@ -169,18 +169,18 @@ private fun HistoryItem(record: ScoreRecord, delta: Int?) {
                         painter = painterResource(Res.drawable.clock_thin),
                         contentDescription = null,
                         modifier = Modifier.size(14.dp),
-                        tint = WindScoreColors.ink.copy(alpha = 0.5f),
+                        tint = windScoreColors().ink.copy(alpha = 0.5f),
                     )
                     Text(
                         formatDateTime(record.timestamp),
                         style = MaterialTheme.typography.bodySmall,
-                        color = WindScoreColors.ink.copy(alpha = 0.6f),
+                        color = windScoreColors().ink.copy(alpha = 0.6f),
                     )
                 }
                 Text(
                     modeLabel,
                     style = MaterialTheme.typography.labelSmall,
-                    color = WindScoreColors.ink.copy(alpha = 0.5f),
+                    color = windScoreColors().ink.copy(alpha = 0.5f),
                 )
             }
 
@@ -204,8 +204,8 @@ private fun HistoryItem(record: ScoreRecord, delta: Int?) {
                         .fillMaxWidth()
                         .padding(top = WindScoreSpacing.sm)
                         .clip(RoundedCornerShape(WindScoreRounded.sm))
-                        .background(WindScoreColors.canvas)
-                        .border(1.dp, WindScoreColors.hairlineSoft, RoundedCornerShape(WindScoreRounded.sm))
+                        .background(windScoreColors().canvas)
+                        .border(1.dp, windScoreColors().hairlineSoft, RoundedCornerShape(WindScoreRounded.sm))
                         .padding(WindScoreSpacing.sm),
                     verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs),
                 ) {
@@ -223,9 +223,9 @@ private fun HistoryItem(record: ScoreRecord, delta: Int?) {
 private fun DeltaChip(delta: Int?) {
     if (delta == null) return
     val (text, color) = when {
-        delta > 0 -> "+$delta" to WindScoreColors.scoreClean
-        delta < 0 -> delta.toString() to WindScoreColors.scoreStuck
-        else -> "±0" to WindScoreColors.ink.copy(alpha = 0.4f)
+        delta > 0 -> "+$delta" to windScoreColors().scoreClean
+        delta < 0 -> delta.toString() to windScoreColors().scoreStuck
+        else -> "±0" to windScoreColors().ink.copy(alpha = 0.4f)
     }
     Surface(
         color = color.copy(alpha = 0.12f),
@@ -246,7 +246,7 @@ private fun DetailRow(label: String, value: String) {
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Text(label, style = MaterialTheme.typography.bodySmall, color = WindScoreColors.ink.copy(alpha = 0.6f))
-        Text(value, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.W500), color = WindScoreColors.ink)
+        Text(label, style = MaterialTheme.typography.bodySmall, color = windScoreColors().ink.copy(alpha = 0.6f))
+        Text(value, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.W500), color = windScoreColors().ink)
     }
 }

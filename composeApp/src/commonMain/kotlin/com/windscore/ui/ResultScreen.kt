@@ -25,7 +25,7 @@ import com.windscore.core.engine.ScoreSession
 import com.windscore.ui.components.PillButton
 import com.windscore.ui.components.PillButtonStyle
 import com.windscore.ui.i18n.strings
-import com.windscore.ui.theme.WindScoreColors
+import com.windscore.ui.theme.windScoreColors
 import com.windscore.ui.theme.WindScoreRounded
 import com.windscore.ui.theme.WindScoreSpacing
 
@@ -50,7 +50,7 @@ fun ResultScreen(
 
     Surface(
         modifier = modifier.padding(WindScoreSpacing.lg),
-        color = WindScoreColors.blockCream,
+        color = windScoreColors().blockCream,
         shape = RoundedCornerShape(WindScoreRounded.lg),
     ) {
         Column(
@@ -60,31 +60,31 @@ fun ResultScreen(
             Text(
                 s.performanceComplete,
                 style = MaterialTheme.typography.headlineLarge,
-                color = WindScoreColors.ink,
+                color = windScoreColors().ink,
             )
             Spacer(Modifier.height(WindScoreSpacing.md))
             Text(
                 "$percent%",
                 fontSize = 64.sp,
                 fontWeight = FontWeight.W300,
-                color = if (percent >= 80) WindScoreColors.scoreClean else WindScoreColors.scoreStuck,
+                color = if (percent >= 80) windScoreColors().scoreClean else windScoreColors().scoreStuck,
                 letterSpacing = (-0.96).sp,
             )
             Text(
                 s.cleanHitsLine(clean, total, wrong),
                 style = MaterialTheme.typography.bodyMedium,
-                color = WindScoreColors.ink.copy(alpha = 0.7f),
+                color = windScoreColors().ink.copy(alpha = 0.7f),
             )
             Spacer(Modifier.height(WindScoreSpacing.xl))
             Text(
                 s.stuckHeatmap,
                 style = MaterialTheme.typography.titleMedium,
-                color = WindScoreColors.ink,
+                color = windScoreColors().ink,
             )
             Text(
                 s.heatmapHint,
                 style = MaterialTheme.typography.bodySmall,
-                color = WindScoreColors.ink.copy(alpha = 0.5f),
+                color = windScoreColors().ink.copy(alpha = 0.5f),
             )
             Spacer(Modifier.height(WindScoreSpacing.sm))
             Heatmap(heatmap, Modifier.fillMaxWidth().height(40.dp))
@@ -99,8 +99,8 @@ fun ResultScreen(
 @Composable
 private fun Heatmap(counts: IntArray, modifier: Modifier = Modifier) {
     val maxCount = counts.maxOrNull()?.coerceAtLeast(1) ?: 1
-    val clean = WindScoreColors.scoreClean
-    val stuck = WindScoreColors.scoreStuck
+    val clean = windScoreColors().scoreClean
+    val stuck = windScoreColors().scoreStuck
     Canvas(modifier) {
         val w = size.width
         val h = size.height

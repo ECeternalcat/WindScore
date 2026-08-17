@@ -35,7 +35,7 @@ import com.windscore.ui.components.PillToggle
 import com.windscore.ui.components.CustomSwitch
 import com.windscore.ui.components.CircularIconButton
 import com.windscore.ui.i18n.strings
-import com.windscore.ui.theme.WindScoreColors
+import com.windscore.ui.theme.windScoreColors
 import com.windscore.ui.theme.WindScoreRounded
 import com.windscore.ui.theme.WindScoreSpacing
 import org.jetbrains.compose.resources.painterResource
@@ -86,8 +86,8 @@ fun ControlSidebar(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(WindScoreRounded.lg))
-            .background(WindScoreColors.canvas)
-            .border(1.dp, WindScoreColors.hairline, RoundedCornerShape(WindScoreRounded.lg))
+            .background(windScoreColors().canvas)
+            .border(1.dp, windScoreColors().hairline, RoundedCornerShape(WindScoreRounded.lg))
             .padding(WindScoreSpacing.md),
         verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.md),
     ) {
@@ -104,11 +104,11 @@ fun ControlSidebar(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .border(1.dp, WindScoreColors.hairlineSoft, RoundedCornerShape(WindScoreRounded.md))
+                .border(1.dp, windScoreColors().hairlineSoft, RoundedCornerShape(WindScoreRounded.md))
                 .padding(WindScoreSpacing.sm),
             verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)
         ) {
-            Text(s.mode, style = MaterialTheme.typography.labelSmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
+            Text(s.mode, style = MaterialTheme.typography.labelSmall, color = windScoreColors().ink.copy(alpha = 0.5f))
             Spacer(Modifier.height(2.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -124,7 +124,7 @@ fun ControlSidebar(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .border(1.dp, WindScoreColors.hairlineSoft, RoundedCornerShape(WindScoreRounded.md))
+                .border(1.dp, windScoreColors().hairlineSoft, RoundedCornerShape(WindScoreRounded.md))
                 .padding(WindScoreSpacing.sm),
             verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)
         ) {
@@ -134,7 +134,7 @@ fun ControlSidebar(
             ) {
                 // Left: View Mode Group
                 Column(modifier = Modifier.weight(3f)) {
-                    Text(s.view, style = MaterialTheme.typography.labelSmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
+                    Text(s.view, style = MaterialTheme.typography.labelSmall, color = windScoreColors().ink.copy(alpha = 0.5f))
                     Spacer(Modifier.height(4.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)) {
                         CircularIconButton(onClick = { onViewChange(ViewMode.ROLL) }, selected = viewMode == ViewMode.ROLL, testTag = "view-roll") {
@@ -153,7 +153,7 @@ fun ControlSidebar(
 
                 // Right: Playback Control Group
                 Column(modifier = Modifier.weight(2f)) {
-                    Text(s.playback, style = MaterialTheme.typography.labelSmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
+                    Text(s.playback, style = MaterialTheme.typography.labelSmall, color = windScoreColors().ink.copy(alpha = 0.5f))
                     Spacer(Modifier.height(4.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)) {
                         CircularIconButton(onClick = onTogglePlay, enabled = sheetReady) {
@@ -176,7 +176,7 @@ fun ControlSidebar(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .border(1.dp, WindScoreColors.hairlineSoft, RoundedCornerShape(WindScoreRounded.md))
+                .border(1.dp, windScoreColors().hairlineSoft, RoundedCornerShape(WindScoreRounded.md))
                 .padding(WindScoreSpacing.sm),
             verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)
         ) {
@@ -185,11 +185,11 @@ fun ControlSidebar(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(s.speed, style = MaterialTheme.typography.labelSmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
+                Text(s.speed, style = MaterialTheme.typography.labelSmall, color = windScoreColors().ink.copy(alpha = 0.5f))
                 Text(
                     text = "${(playbackSpeed * 100).toInt()}%",
                     style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.W600),
-                    color = WindScoreColors.ink
+                    color = windScoreColors().ink
                 )
             }
 
@@ -203,9 +203,9 @@ fun ControlSidebar(
                 valueRange = 0.0f..2.0f,
                 modifier = Modifier.fillMaxWidth().height(24.dp),
                 colors = androidx.compose.material3.SliderDefaults.colors(
-                    thumbColor = WindScoreColors.primary,
-                    activeTrackColor = WindScoreColors.primary,
-                    inactiveTrackColor = WindScoreColors.hairlineSoft
+                    thumbColor = windScoreColors().primary,
+                    activeTrackColor = windScoreColors().primary,
+                    inactiveTrackColor = windScoreColors().hairlineSoft
                 )
             )
 
@@ -232,11 +232,11 @@ fun ControlSidebar(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .border(1.dp, WindScoreColors.hairlineSoft, RoundedCornerShape(WindScoreRounded.md))
+                .border(1.dp, windScoreColors().hairlineSoft, RoundedCornerShape(WindScoreRounded.md))
                 .padding(WindScoreSpacing.sm),
             verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)
         ) {
-            Text(s.loop, style = MaterialTheme.typography.labelSmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
+            Text(s.loop, style = MaterialTheme.typography.labelSmall, color = windScoreColors().ink.copy(alpha = 0.5f))
             Spacer(Modifier.height(4.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -252,7 +252,7 @@ fun ControlSidebar(
                     ) {
                         Icon(painterResource(Res.drawable.repeat_thin), s.loopStart, Modifier.size(20.dp))
                     }
-                    Text(s.loopStart, style = MaterialTheme.typography.bodySmall, color = WindScoreColors.ink)
+                    Text(s.loopStart, style = MaterialTheme.typography.bodySmall, color = windScoreColors().ink)
                 }
 
                 // Loop End
@@ -265,7 +265,7 @@ fun ControlSidebar(
                     ) {
                         Icon(painterResource(Res.drawable.repeat_thin), s.loopEnd, Modifier.size(20.dp))
                     }
-                    Text(s.loopEnd, style = MaterialTheme.typography.bodySmall, color = WindScoreColors.ink)
+                    Text(s.loopEnd, style = MaterialTheme.typography.bodySmall, color = windScoreColors().ink)
                 }
 
                 // Clear
@@ -283,7 +283,7 @@ fun ControlSidebar(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .border(1.dp, WindScoreColors.hairlineSoft, RoundedCornerShape(WindScoreRounded.md))
+                .border(1.dp, windScoreColors().hairlineSoft, RoundedCornerShape(WindScoreRounded.md))
                 .padding(WindScoreSpacing.sm),
             verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)
         ) {
@@ -292,12 +292,12 @@ fun ControlSidebar(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(s.metronome, style = MaterialTheme.typography.labelSmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
+                Text(s.metronome, style = MaterialTheme.typography.labelSmall, color = windScoreColors().ink.copy(alpha = 0.5f))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)
                 ) {
-                    Text(s.countdownBeat, style = MaterialTheme.typography.bodySmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
+                    Text(s.countdownBeat, style = MaterialTheme.typography.bodySmall, color = windScoreColors().ink.copy(alpha = 0.5f))
                     CustomSwitch(
                         checked = countdownEnabled,
                         onCheckedChange = onCountdownEnabledChange
@@ -319,7 +319,7 @@ fun ControlSidebar(
                     contentDescription = s.metronomeVolume,
                     modifier = Modifier.size(20.dp).clip(RoundedCornerShape(WindScoreRounded.full))
                         .clickable(onClick = onToggleMute),
-                    tint = WindScoreColors.ink.copy(alpha = 0.5f)
+                    tint = windScoreColors().ink.copy(alpha = 0.5f)
                 )
                 androidx.compose.material3.Slider(
                     value = metronomeVol.toFloat(),
@@ -329,15 +329,15 @@ fun ControlSidebar(
                     valueRange = 0.0f..100.0f,
                     modifier = Modifier.weight(1f).height(24.dp),
                     colors = androidx.compose.material3.SliderDefaults.colors(
-                        thumbColor = WindScoreColors.primary,
-                        activeTrackColor = WindScoreColors.primary,
-                        inactiveTrackColor = WindScoreColors.hairlineSoft
+                        thumbColor = windScoreColors().primary,
+                        activeTrackColor = windScoreColors().primary,
+                        inactiveTrackColor = windScoreColors().hairlineSoft
                     )
                 )
                 Text(
                     text = "${metronomeVol}%",
                     style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.W600),
-                    color = WindScoreColors.ink,
+                    color = windScoreColors().ink,
                     modifier = Modifier.width(44.dp),
                     textAlign = androidx.compose.ui.text.style.TextAlign.End
                 )

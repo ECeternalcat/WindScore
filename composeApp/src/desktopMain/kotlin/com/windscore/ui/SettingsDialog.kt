@@ -6,7 +6,7 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogWindow
 import androidx.compose.ui.window.rememberDialogState
-import com.windscore.ui.theme.WindScoreColors
+import com.windscore.ui.theme.windScoreColors
 import com.windscore.ui.theme.WindScoreTheme
 
 import com.sun.jna.Native
@@ -63,7 +63,7 @@ actual fun SettingsDialog(
             }
             WindScoreTheme(darkTheme = darkTheme) {
                 Surface(
-                    color = WindScoreColors.canvas
+                    color = windScoreColors().canvas
                 ) {
                     content()
                 }

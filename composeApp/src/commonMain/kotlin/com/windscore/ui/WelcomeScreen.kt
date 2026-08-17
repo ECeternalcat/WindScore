@@ -61,7 +61,7 @@ import com.windscore.ui.components.PillToggle
 import com.windscore.ui.i18n.AppLanguage
 import com.windscore.ui.i18n.AppStrings
 import com.windscore.ui.i18n.strings
-import com.windscore.ui.theme.WindScoreColors
+import com.windscore.ui.theme.windScoreColors
 import com.windscore.ui.theme.WindScoreRounded
 import com.windscore.ui.theme.WindScoreSpacing
 import com.windscore.ui.theme.WindScoreTheme
@@ -152,7 +152,7 @@ fun WelcomeScreen(
     ) {
         Surface(
             modifier = Modifier.fillMaxSize(),
-            color = WindScoreColors.canvas,
+            color = windScoreColors().canvas,
         ) {
             SettingsScreen(
                 onBack = { showSettings = false },
@@ -173,7 +173,7 @@ fun WelcomeScreen(
                 TextButton(onClick = {
                     onDelete(score)
                     pendingDelete = null
-                }) { Text(s.confirmDeleteAction, color = WindScoreColors.accentMagenta) }
+                }) { Text(s.confirmDeleteAction, color = windScoreColors().accentMagenta) }
             },
             dismissButton = {
                 TextButton(onClick = { pendingDelete = null }) { Text(s.cancel) }
@@ -232,7 +232,7 @@ private fun WelcomeTopBar() {
     ) {
         Text("WindScore", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.W700))
         Spacer(Modifier.width(WindScoreSpacing.sm))
-        Text(s.appSubtitle, style = MaterialTheme.typography.bodySmall, color = WindScoreColors.ink)
+        Text(s.appSubtitle, style = MaterialTheme.typography.bodySmall, color = windScoreColors().ink)
     }
 }
 
@@ -276,7 +276,7 @@ private fun ActionCard(
     val s = strings()
     Surface(
         modifier = modifier.clip(RoundedCornerShape(WindScoreRounded.lg)),
-        color = WindScoreColors.blockLime,
+        color = windScoreColors().blockLime,
         shape = RoundedCornerShape(WindScoreRounded.lg),
     ) {
         Row(
@@ -297,13 +297,13 @@ private fun ActionButton(icon: DrawableResource, label: String, onClick: () -> U
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             modifier = Modifier.size(72.dp).clip(RoundedCornerShape(WindScoreRounded.lg))
-                .background(WindScoreColors.canvas).clickable(onClick = onClick),
+                .background(windScoreColors().canvas).clickable(onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(painterResource(icon), label, Modifier.size(36.dp), WindScoreColors.ink)
+            Icon(painterResource(icon), label, Modifier.size(36.dp), windScoreColors().ink)
         }
         Spacer(Modifier.height(WindScoreSpacing.sm))
-        Text(label, style = MaterialTheme.typography.titleMedium, color = WindScoreColors.ink)
+        Text(label, style = MaterialTheme.typography.titleMedium, color = windScoreColors().ink)
     }
 }
 
@@ -332,10 +332,10 @@ fun SettingsScreen(
                     modifier = Modifier.size(40.dp).clip(RoundedCornerShape(WindScoreRounded.full)).clickable(onClick = onBack),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(painterResource(Res.drawable.arrow_left_thin), s.back, Modifier.size(22.dp), WindScoreColors.ink)
+                    Icon(painterResource(Res.drawable.arrow_left_thin), s.back, Modifier.size(22.dp), windScoreColors().ink)
                 }
                 Spacer(Modifier.width(WindScoreSpacing.sm))
-                Text(s.settings, style = MaterialTheme.typography.headlineMedium, color = WindScoreColors.ink)
+                Text(s.settings, style = MaterialTheme.typography.headlineMedium, color = windScoreColors().ink)
             }
             Spacer(Modifier.height(WindScoreSpacing.xl))
 
@@ -346,7 +346,7 @@ fun SettingsScreen(
                 // 语言 / Language
                 Surface(
                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(WindScoreRounded.lg)),
-                    color = WindScoreColors.surfaceSoft,
+                    color = windScoreColors().surfaceSoft,
                     shape = RoundedCornerShape(WindScoreRounded.lg),
                 ) {
                     Column(modifier = Modifier.padding(WindScoreSpacing.lg), verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.sm)) {
@@ -355,13 +355,13 @@ fun SettingsScreen(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Box(
-                                modifier = Modifier.size(40.dp).clip(RoundedCornerShape(WindScoreRounded.md)).background(WindScoreColors.blockLilac),
+                                modifier = Modifier.size(40.dp).clip(RoundedCornerShape(WindScoreRounded.md)).background(windScoreColors().blockLilac),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                Text("Aあ", style = MaterialTheme.typography.titleMedium, color = WindScoreColors.ink)
+                                Text("Aあ", style = MaterialTheme.typography.titleMedium, color = windScoreColors().ink)
                             }
                             Spacer(Modifier.width(WindScoreSpacing.md))
-                            Text(s.language, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.W500), color = WindScoreColors.ink)
+                            Text(s.language, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.W500), color = windScoreColors().ink)
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)) {
                             AppLanguage.entries.forEach { lang ->
@@ -379,7 +379,7 @@ fun SettingsScreen(
                 // 界面主题 / UI Theme
                 Surface(
                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(WindScoreRounded.lg)),
-                    color = WindScoreColors.surfaceSoft,
+                    color = windScoreColors().surfaceSoft,
                     shape = RoundedCornerShape(WindScoreRounded.lg),
                 ) {
                     Column(modifier = Modifier.padding(WindScoreSpacing.lg), verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.sm)) {
@@ -388,13 +388,13 @@ fun SettingsScreen(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Box(
-                                modifier = Modifier.size(40.dp).clip(RoundedCornerShape(WindScoreRounded.md)).background(WindScoreColors.blockMint),
+                                modifier = Modifier.size(40.dp).clip(RoundedCornerShape(WindScoreRounded.md)).background(windScoreColors().blockMint),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                Text("🌓", style = MaterialTheme.typography.titleMedium, color = WindScoreColors.ink)
+                                Text("🌓", style = MaterialTheme.typography.titleMedium, color = windScoreColors().ink)
                             }
                             Spacer(Modifier.width(WindScoreSpacing.md))
-                            Text(s.uiTheme, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.W500), color = WindScoreColors.ink)
+                            Text(s.uiTheme, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.W500), color = windScoreColors().ink)
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)) {
                             listOf(
@@ -416,7 +416,7 @@ fun SettingsScreen(
                 // 默认视图 / Default View Mode
                 Surface(
                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(WindScoreRounded.lg)),
-                    color = WindScoreColors.surfaceSoft,
+                    color = windScoreColors().surfaceSoft,
                     shape = RoundedCornerShape(WindScoreRounded.lg),
                 ) {
                     Column(modifier = Modifier.padding(WindScoreSpacing.lg), verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.sm)) {
@@ -425,13 +425,13 @@ fun SettingsScreen(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Box(
-                                modifier = Modifier.size(40.dp).clip(RoundedCornerShape(WindScoreRounded.md)).background(WindScoreColors.blockLime),
+                                modifier = Modifier.size(40.dp).clip(RoundedCornerShape(WindScoreRounded.md)).background(windScoreColors().blockLime),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                Icon(painterResource(Res.drawable.music_notes_thin), null, Modifier.size(20.dp), WindScoreColors.ink)
+                                Icon(painterResource(Res.drawable.music_notes_thin), null, Modifier.size(20.dp), windScoreColors().ink)
                             }
                             Spacer(Modifier.width(WindScoreSpacing.md))
-                            Text(s.defaultView, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.W500), color = WindScoreColors.ink)
+                            Text(s.defaultView, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.W500), color = windScoreColors().ink)
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)) {
                             listOf(
@@ -453,7 +453,7 @@ fun SettingsScreen(
                 // 默认预备拍秒数 / Default Pre-beat
                 Surface(
                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(WindScoreRounded.lg)),
-                    color = WindScoreColors.surfaceSoft,
+                    color = windScoreColors().surfaceSoft,
                     shape = RoundedCornerShape(WindScoreRounded.lg),
                 ) {
                     Column(modifier = Modifier.padding(WindScoreSpacing.lg), verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.sm)) {
@@ -462,13 +462,13 @@ fun SettingsScreen(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Box(
-                                modifier = Modifier.size(40.dp).clip(RoundedCornerShape(WindScoreRounded.md)).background(WindScoreColors.blockCoral),
+                                modifier = Modifier.size(40.dp).clip(RoundedCornerShape(WindScoreRounded.md)).background(windScoreColors().blockCoral),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                Icon(painterResource(Res.drawable.clock_thin), null, Modifier.size(20.dp), WindScoreColors.ink)
+                                Icon(painterResource(Res.drawable.clock_thin), null, Modifier.size(20.dp), windScoreColors().ink)
                             }
                             Spacer(Modifier.width(WindScoreSpacing.md))
-                            Text(s.defaultPreBeat, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.W500), color = WindScoreColors.ink)
+                            Text(s.defaultPreBeat, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.W500), color = windScoreColors().ink)
                         }
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)) {
                             listOf(0, 1, 2, 3, 4, 5).forEach { seconds ->
@@ -486,20 +486,20 @@ fun SettingsScreen(
                 // 反馈 / Feedback
                 Surface(
                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(WindScoreRounded.lg)).clickable { openUrl(FEEDBACK_URL) },
-                    color = WindScoreColors.surfaceSoft,
+                    color = windScoreColors().surfaceSoft,
                     shape = RoundedCornerShape(WindScoreRounded.lg),
                 ) {
                     Row(modifier = Modifier.padding(WindScoreSpacing.lg), verticalAlignment = Alignment.CenterVertically) {
                         Box(
-                            modifier = Modifier.size(40.dp).clip(RoundedCornerShape(WindScoreRounded.md)).background(WindScoreColors.blockPink),
+                            modifier = Modifier.size(40.dp).clip(RoundedCornerShape(WindScoreRounded.md)).background(windScoreColors().blockPink),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Icon(painterResource(Res.drawable.bug_thin), null, Modifier.size(22.dp), WindScoreColors.ink)
+                            Icon(painterResource(Res.drawable.bug_thin), null, Modifier.size(22.dp), windScoreColors().ink)
                         }
                         Spacer(Modifier.width(WindScoreSpacing.md))
                         Column(Modifier.weight(1f)) {
-                            Text(s.feedback, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.W500), color = WindScoreColors.ink)
-                            Text(s.feedbackDesc, style = MaterialTheme.typography.bodySmall, color = WindScoreColors.ink)
+                            Text(s.feedback, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.W500), color = windScoreColors().ink)
+                            Text(s.feedbackDesc, style = MaterialTheme.typography.bodySmall, color = windScoreColors().ink)
                         }
                     }
                 }
@@ -507,7 +507,7 @@ fun SettingsScreen(
                 // 关于 / About
                 Surface(
                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(WindScoreRounded.lg)).clickable { subScreen = SettingsSubScreen.ABOUT },
-                    color = WindScoreColors.surfaceSoft,
+                    color = windScoreColors().surfaceSoft,
                     shape = RoundedCornerShape(WindScoreRounded.lg),
                 ) {
                     Row(modifier = Modifier.padding(WindScoreSpacing.lg), verticalAlignment = Alignment.CenterVertically) {
@@ -519,8 +519,8 @@ fun SettingsScreen(
                         }
                         Spacer(Modifier.width(WindScoreSpacing.md))
                         Column(Modifier.weight(1f)) {
-                            Text(s.about, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.W500), color = WindScoreColors.ink)
-                            Text(s.aboutDescription, style = MaterialTheme.typography.bodySmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
+                            Text(s.about, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.W500), color = windScoreColors().ink)
+                            Text(s.aboutDescription, style = MaterialTheme.typography.bodySmall, color = windScoreColors().ink.copy(alpha = 0.5f))
                         }
                     }
                 }
@@ -534,10 +534,10 @@ fun SettingsScreen(
                     modifier = Modifier.size(40.dp).clip(RoundedCornerShape(WindScoreRounded.full)).clickable { subScreen = SettingsSubScreen.MAIN },
                     contentAlignment = Alignment.Center,
                 ) {
-                    Icon(painterResource(Res.drawable.arrow_left_thin), s.back, Modifier.size(22.dp), WindScoreColors.ink)
+                    Icon(painterResource(Res.drawable.arrow_left_thin), s.back, Modifier.size(22.dp), windScoreColors().ink)
                 }
                 Spacer(Modifier.width(WindScoreSpacing.sm))
-                Text(s.about, style = MaterialTheme.typography.headlineMedium, color = WindScoreColors.ink)
+                Text(s.about, style = MaterialTheme.typography.headlineMedium, color = windScoreColors().ink)
             }
             Spacer(Modifier.height(WindScoreSpacing.xl))
 
@@ -564,32 +564,32 @@ fun SettingsScreen(
 
                 Spacer(Modifier.height(WindScoreSpacing.xs))
 
-                Text("WindScore", style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold), color = WindScoreColors.ink)
-                Text(s.appSubtitle, style = MaterialTheme.typography.bodyMedium, color = WindScoreColors.ink.copy(alpha = 0.7f))
-                Text(s.versionAlpha, style = MaterialTheme.typography.bodySmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
+                Text("WindScore", style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold), color = windScoreColors().ink)
+                Text(s.appSubtitle, style = MaterialTheme.typography.bodyMedium, color = windScoreColors().ink.copy(alpha = 0.7f))
+                Text(s.versionAlpha, style = MaterialTheme.typography.bodySmall, color = windScoreColors().ink.copy(alpha = 0.5f))
 
                 Spacer(Modifier.height(WindScoreSpacing.md))
 
                 // License Section
                 Surface(
                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(WindScoreRounded.lg)),
-                    color = WindScoreColors.surfaceSoft,
+                    color = windScoreColors().surfaceSoft,
                     shape = RoundedCornerShape(WindScoreRounded.lg),
                 ) {
                     Column(modifier = Modifier.padding(WindScoreSpacing.lg), verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)) {
-                        Text(s.softwareLicense, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold), color = WindScoreColors.ink)
-                        Text("Mozilla Public License 2.0 (MPL 2.0)", style = MaterialTheme.typography.bodyMedium, color = WindScoreColors.ink.copy(alpha = 0.8f))
+                        Text(s.softwareLicense, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold), color = windScoreColors().ink)
+                        Text("Mozilla Public License 2.0 (MPL 2.0)", style = MaterialTheme.typography.bodyMedium, color = windScoreColors().ink.copy(alpha = 0.8f))
                     }
                 }
 
                 // Third-party Licenses
                 Surface(
                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(WindScoreRounded.lg)),
-                    color = WindScoreColors.surfaceSoft,
+                    color = windScoreColors().surfaceSoft,
                     shape = RoundedCornerShape(WindScoreRounded.lg),
                 ) {
                     Column(modifier = Modifier.padding(WindScoreSpacing.lg), verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)) {
-                        Text(s.thirdPartyLicenses, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold), color = WindScoreColors.ink)
+                        Text(s.thirdPartyLicenses, style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold), color = windScoreColors().ink)
                         
                         val licenses = listOf(
                             "Kotlin Multiplatform (Apache License 2.0)",
@@ -601,7 +601,7 @@ fun SettingsScreen(
                             "Kotlinx Coroutines (Apache License 2.0)"
                         )
                         licenses.forEach { lic ->
-                            Text("• $lic", style = MaterialTheme.typography.bodySmall, color = WindScoreColors.ink.copy(alpha = 0.6f))
+                            Text("• $lic", style = MaterialTheme.typography.bodySmall, color = windScoreColors().ink.copy(alpha = 0.6f))
                         }
                     }
                 }
@@ -634,14 +634,14 @@ private fun RecentScoresPanel(
 
     Surface(
         modifier = modifier.clip(RoundedCornerShape(WindScoreRounded.lg)),
-        color = WindScoreColors.surfaceSoft,
+        color = windScoreColors().surfaceSoft,
         shape = RoundedCornerShape(WindScoreRounded.lg),
     ) {
         Column(modifier = Modifier.fillMaxSize().padding(WindScoreSpacing.lg)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(painterResource(Res.drawable.clock_thin), null, Modifier.size(20.dp), WindScoreColors.ink)
+                Icon(painterResource(Res.drawable.clock_thin), null, Modifier.size(20.dp), windScoreColors().ink)
                 Spacer(Modifier.width(WindScoreSpacing.xs))
-                Text(s.recentScores, style = MaterialTheme.typography.titleMedium, color = WindScoreColors.ink)
+                Text(s.recentScores, style = MaterialTheme.typography.titleMedium, color = windScoreColors().ink)
             }
             Spacer(Modifier.height(WindScoreSpacing.md))
             SearchField(
@@ -652,11 +652,11 @@ private fun RecentScoresPanel(
             Spacer(Modifier.height(WindScoreSpacing.sm))
             if (scores.isEmpty() && !searchFocused) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(s.noRecent, style = MaterialTheme.typography.bodyMedium, color = WindScoreColors.ink)
+                    Text(s.noRecent, style = MaterialTheme.typography.bodyMedium, color = windScoreColors().ink)
                 }
             } else if (showEmptyHint) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(s.noMatch, style = MaterialTheme.typography.bodyMedium, color = WindScoreColors.ink)
+                    Text(s.noMatch, style = MaterialTheme.typography.bodyMedium, color = windScoreColors().ink)
                 }
             } else {
                 LazyColumn(
@@ -706,29 +706,29 @@ private fun ScoreListBody(
             ScoreFilePickerButton(onPicked = onScoreClick, onFailure = onImportFailure, style = PillButtonStyle.PRIMARY)
             Box(
                 modifier = Modifier.size(40.dp).clip(RoundedCornerShape(WindScoreRounded.full))
-                    .background(WindScoreColors.surfaceSoft).clickable(onClick = onShowSettings),
+                    .background(windScoreColors().surfaceSoft).clickable(onClick = onShowSettings),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(painterResource(Res.drawable.gear_six_thin), s.settings, Modifier.size(22.dp), WindScoreColors.ink)
+                Icon(painterResource(Res.drawable.gear_six_thin), s.settings, Modifier.size(22.dp), windScoreColors().ink)
             }
         }
         Spacer(Modifier.height(WindScoreSpacing.lg))
         SearchField(searchQuery, { searchQuery = it }, { searchFocused = it })
         Spacer(Modifier.height(WindScoreSpacing.sm))
-        Text(s.scoreLibrary, style = MaterialTheme.typography.headlineLarge, color = WindScoreColors.ink)
+        Text(s.scoreLibrary, style = MaterialTheme.typography.headlineLarge, color = windScoreColors().ink)
         Spacer(Modifier.height(WindScoreSpacing.sm))
         Surface(
             modifier = Modifier.weight(1f).fillMaxWidth().clip(RoundedCornerShape(WindScoreRounded.lg)),
-            color = WindScoreColors.surfaceSoft,
+            color = windScoreColors().surfaceSoft,
             shape = RoundedCornerShape(WindScoreRounded.lg),
         ) {
             if (recentScores.isEmpty() && !searchFocused) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(s.loadFirstScore, style = MaterialTheme.typography.bodyMedium, color = WindScoreColors.ink)
+                    Text(s.loadFirstScore, style = MaterialTheme.typography.bodyMedium, color = windScoreColors().ink)
                 }
             } else if (showEmptyHint) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(s.noMatch, style = MaterialTheme.typography.bodyMedium, color = WindScoreColors.ink)
+                    Text(s.noMatch, style = MaterialTheme.typography.bodyMedium, color = windScoreColors().ink)
                 }
             } else {
                 LazyColumn(
@@ -760,17 +760,17 @@ private fun SearchField(
         value = query,
         onValueChange = onQueryChange,
         modifier = Modifier.fillMaxWidth().onFocusChanged { onFocusChange(it.isFocused) },
-        placeholder = { Text(s.searchScores, style = MaterialTheme.typography.bodyMedium, color = WindScoreColors.ink.copy(alpha = 0.4f)) },
+        placeholder = { Text(s.searchScores, style = MaterialTheme.typography.bodyMedium, color = windScoreColors().ink.copy(alpha = 0.4f)) },
         singleLine = true,
         shape = RoundedCornerShape(WindScoreRounded.md),
         colors = TextFieldDefaults.colors(
-            focusedContainerColor = WindScoreColors.canvas,
-            unfocusedContainerColor = WindScoreColors.canvas,
-            cursorColor = WindScoreColors.ink,
+            focusedContainerColor = windScoreColors().canvas,
+            unfocusedContainerColor = windScoreColors().canvas,
+            cursorColor = windScoreColors().ink,
             focusedIndicatorColor = Color.Transparent,
             unfocusedIndicatorColor = Color.Transparent,
-            focusedTextColor = WindScoreColors.ink,
-            unfocusedTextColor = WindScoreColors.ink,
+            focusedTextColor = windScoreColors().ink,
+            unfocusedTextColor = windScoreColors().ink,
         ),
     )
 }
@@ -788,26 +788,26 @@ private fun ScoreListItem(
     val displayTitle = score.title.ifBlank { s.untitledScore }
     Surface(
         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(WindScoreRounded.md)).clickable(onClick = onClick),
-        color = WindScoreColors.canvas,
+        color = windScoreColors().canvas,
         shape = RoundedCornerShape(WindScoreRounded.md),
     ) {
         Row(modifier = Modifier.padding(WindScoreSpacing.md), verticalAlignment = Alignment.CenterVertically) {
             Box(
-                modifier = Modifier.size(48.dp).clip(RoundedCornerShape(WindScoreRounded.md)).background(WindScoreColors.blockLilac),
+                modifier = Modifier.size(48.dp).clip(RoundedCornerShape(WindScoreRounded.md)).background(windScoreColors().blockLilac),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(painterResource(Res.drawable.music_notes_thin), null, Modifier.size(24.dp), WindScoreColors.ink)
+                Icon(painterResource(Res.drawable.music_notes_thin), null, Modifier.size(24.dp), windScoreColors().ink)
             }
             Spacer(Modifier.width(WindScoreSpacing.md))
             Column(Modifier.weight(1f)) {
                 Text(
                     displayTitle,
                     style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.W500),
-                    color = WindScoreColors.ink,
+                    color = windScoreColors().ink,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                Text(s.noteCountAndBpm(score.notes.size, score.tempo), style = MaterialTheme.typography.bodySmall, color = WindScoreColors.ink)
+                Text(s.noteCountAndBpm(score.notes.size, score.tempo), style = MaterialTheme.typography.bodySmall, color = windScoreColors().ink)
             }
             // 重命名
             Box(
@@ -815,7 +815,7 @@ private fun ScoreListItem(
                     .clickable(onClick = onRename),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(painterResource(Res.drawable.pencil_simple_thin), s.rename, Modifier.size(18.dp), WindScoreColors.ink.copy(alpha = 0.6f))
+                Icon(painterResource(Res.drawable.pencil_simple_thin), s.rename, Modifier.size(18.dp), windScoreColors().ink.copy(alpha = 0.6f))
             }
             Spacer(Modifier.width(WindScoreSpacing.xxs))
             // 删除
@@ -824,7 +824,7 @@ private fun ScoreListItem(
                     .clickable(onClick = onDelete),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(painterResource(Res.drawable.trash_thin), s.deleteScore, Modifier.size(18.dp), WindScoreColors.ink.copy(alpha = 0.6f))
+                Icon(painterResource(Res.drawable.trash_thin), s.deleteScore, Modifier.size(18.dp), windScoreColors().ink.copy(alpha = 0.6f))
             }
         }
     }

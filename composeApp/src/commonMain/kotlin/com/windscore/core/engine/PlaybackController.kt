@@ -101,6 +101,7 @@ class PlaybackController(
         session?.setLoop(range.first, range.last)
         player?.loopRange = range
         player?.seekTo(range.first)
+        publishTick()
         _state.update { it.copy(loopRange = player?.loopRange) }
     }
 
@@ -109,6 +110,7 @@ class PlaybackController(
         player?.loopRange = null
         val target = session?.currentTick ?: 0L
         player?.seekTo(target)
+        publishTick()
         _state.update { it.copy(loopRange = null) }
     }
 
@@ -116,16 +118,19 @@ class PlaybackController(
         player?.seekTo(tick)
         val target = player?.tick?.value ?: tick
         session?.seekTo(target)
+        publishTick()
     }
 
     fun stepForward() {
         player?.stepForward()
         seekSessionToPlayer()
+        publishTick()
     }
 
     fun stepBackward() {
         player?.stepBackward()
         seekSessionToPlayer()
+        publishTick()
     }
 
     fun toggle() {
@@ -139,6 +144,7 @@ class PlaybackController(
     fun stop() {
         player?.stop()
         seekSessionToPlayer()
+        publishTick()
     }
 
     fun reset() {
@@ -146,6 +152,7 @@ class PlaybackController(
         player?.reset()
         session?.reset()
         seekSessionToPlayer()
+        publishTick()
     }
 
     fun close() {
@@ -162,6 +169,11 @@ class PlaybackController(
         val currentPlayer = player ?: return
         val tick = currentPlayer.tick.value
         session?.seekTo(tick)
+    }
+
+    /** Position commands are synchronous; publish tick immediately instead of waiting for the async collector. */
+    private fun publishTick() {
+        player?.let { p -> _state.update { it.copy(tick = p.tick.value) } }
     }
 
     private fun syncSession(tick: Long, playing: Boolean) {

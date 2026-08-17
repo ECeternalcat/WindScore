@@ -40,7 +40,7 @@ import com.windscore.ui.components.PillButton
 import com.windscore.ui.components.PillButtonStyle
 import com.windscore.ui.components.PillToggle
 import com.windscore.ui.i18n.strings
-import com.windscore.ui.theme.WindScoreColors
+import com.windscore.ui.theme.windScoreColors
 import com.windscore.ui.theme.WindScoreRounded
 import com.windscore.ui.theme.WindScoreSpacing
 import org.jetbrains.compose.resources.painterResource
@@ -73,8 +73,8 @@ fun ScoringSetupPanel(
         modifier = modifier
             .fillMaxSize()
             .clip(RoundedCornerShape(WindScoreRounded.lg))
-            .background(WindScoreColors.canvas)
-            .border(1.dp, WindScoreColors.hairline, RoundedCornerShape(WindScoreRounded.lg))
+            .background(windScoreColors().canvas)
+            .border(1.dp, windScoreColors().hairline, RoundedCornerShape(WindScoreRounded.lg))
             .padding(WindScoreSpacing.md),
         verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.md),
     ) {
@@ -83,12 +83,12 @@ fun ScoringSetupPanel(
                 painter = painterResource(Res.drawable.pencil_simple_thin),
                 contentDescription = s.scoring,
                 modifier = Modifier.size(18.dp),
-                tint = WindScoreColors.ink,
+                tint = windScoreColors().ink,
             )
             Text(
                 s.scoringSettings,
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.W600),
-                color = WindScoreColors.ink,
+                color = windScoreColors().ink,
             )
         }
 
@@ -96,11 +96,11 @@ fun ScoringSetupPanel(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .border(1.dp, WindScoreColors.hairlineSoft, RoundedCornerShape(WindScoreRounded.md))
+                .border(1.dp, windScoreColors().hairlineSoft, RoundedCornerShape(WindScoreRounded.md))
                 .padding(WindScoreSpacing.sm),
             verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs),
         ) {
-            Text(s.scoringRange, style = MaterialTheme.typography.labelSmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
+            Text(s.scoringRange, style = MaterialTheme.typography.labelSmall, color = windScoreColors().ink.copy(alpha = 0.5f))
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs),
@@ -112,7 +112,7 @@ fun ScoringSetupPanel(
             Text(
                 s.scoringRangeHint,
                 style = MaterialTheme.typography.bodySmall,
-                color = WindScoreColors.ink.copy(alpha = 0.5f),
+                color = windScoreColors().ink.copy(alpha = 0.5f),
             )
         }
 
@@ -120,11 +120,11 @@ fun ScoringSetupPanel(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .border(1.dp, WindScoreColors.hairlineSoft, RoundedCornerShape(WindScoreRounded.md))
+                .border(1.dp, windScoreColors().hairlineSoft, RoundedCornerShape(WindScoreRounded.md))
                 .padding(WindScoreSpacing.sm),
             verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs),
         ) {
-            Text(s.scoringView, style = MaterialTheme.typography.labelSmall, color = WindScoreColors.ink.copy(alpha = 0.5f))
+            Text(s.scoringView, style = MaterialTheme.typography.labelSmall, color = windScoreColors().ink.copy(alpha = 0.5f))
             Row(horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)) {
                 CircularIconButton(onClick = { onViewChange(ViewMode.ROLL) }, selected = viewMode == ViewMode.ROLL) {
                     Icon(painterResource(Res.drawable.piano_keys_thin), s.pianoRoll, Modifier.size(20.dp))
@@ -155,7 +155,7 @@ fun ScoringSetupPanel(
         // 评分历史入口
         Surface(
             modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(WindScoreRounded.md)).clickable(onClick = onShowHistory),
-            color = WindScoreColors.surfaceSoft,
+            color = windScoreColors().surfaceSoft,
             shape = RoundedCornerShape(WindScoreRounded.md),
         ) {
             Row(
@@ -167,13 +167,13 @@ fun ScoringSetupPanel(
                     painter = painterResource(Res.drawable.clock_thin),
                     contentDescription = null,
                     modifier = Modifier.size(18.dp),
-                    tint = WindScoreColors.ink.copy(alpha = 0.6f),
+                    tint = windScoreColors().ink.copy(alpha = 0.6f),
                 )
                 Column(Modifier.weight(1f)) {
                     Text(
                         s.scoreHistory,
                         style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.W500),
-                        color = WindScoreColors.ink,
+                        color = windScoreColors().ink,
                     )
                     val subtitle = if (history.isEmpty()) {
                         s.noHistory
@@ -184,7 +184,7 @@ fun ScoringSetupPanel(
                     Text(
                         subtitle,
                         style = MaterialTheme.typography.bodySmall,
-                        color = WindScoreColors.ink.copy(alpha = 0.5f),
+                        color = windScoreColors().ink.copy(alpha = 0.5f),
                         maxLines = 1,
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     )
@@ -210,8 +210,8 @@ fun ScoringActivePanel(
         modifier = modifier
             .fillMaxSize()
             .clip(RoundedCornerShape(WindScoreRounded.lg))
-            .background(WindScoreColors.canvas)
-            .border(1.dp, WindScoreColors.hairline, RoundedCornerShape(WindScoreRounded.lg))
+            .background(windScoreColors().canvas)
+            .border(1.dp, windScoreColors().hairline, RoundedCornerShape(WindScoreRounded.lg))
             .padding(WindScoreSpacing.md),
         verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.md),
     ) {
@@ -220,12 +220,12 @@ fun ScoringActivePanel(
                 painter = painterResource(Res.drawable.music_notes_thin),
                 contentDescription = s.scoringActiveLabel,
                 modifier = Modifier.size(18.dp),
-                tint = WindScoreColors.ink,
+                tint = windScoreColors().ink,
             )
             Text(
                 s.scoringActive,
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.W600),
-                color = WindScoreColors.ink,
+                color = windScoreColors().ink,
             )
         }
 
@@ -237,13 +237,13 @@ fun ScoringActivePanel(
                 Text(
                     s.pleaseStart,
                     style = MaterialTheme.typography.headlineSmall,
-                    color = WindScoreColors.ink,
+                    color = windScoreColors().ink,
                 )
                 Spacer(Modifier.height(WindScoreSpacing.sm))
                 Text(
                     s.scoringProgress(ss.progress, ss.groupCount),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = WindScoreColors.ink.copy(alpha = 0.5f),
+                    color = windScoreColors().ink.copy(alpha = 0.5f),
                 )
             }
         }
@@ -266,8 +266,8 @@ fun ScoringDonePanel(modifier: Modifier = Modifier) {
         modifier = modifier
             .fillMaxSize()
             .clip(RoundedCornerShape(WindScoreRounded.lg))
-            .background(WindScoreColors.canvas)
-            .border(1.dp, WindScoreColors.hairline, RoundedCornerShape(WindScoreRounded.lg))
+            .background(windScoreColors().canvas)
+            .border(1.dp, windScoreColors().hairline, RoundedCornerShape(WindScoreRounded.lg))
             .padding(WindScoreSpacing.md),
         verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.md),
     ) {
@@ -276,19 +276,19 @@ fun ScoringDonePanel(modifier: Modifier = Modifier) {
                 painter = painterResource(Res.drawable.pencil_simple_thin),
                 contentDescription = s.scoringDone,
                 modifier = Modifier.size(18.dp),
-                tint = WindScoreColors.ink.copy(alpha = 0.5f),
+                tint = windScoreColors().ink.copy(alpha = 0.5f),
             )
             Text(
                 s.scoringDone,
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.W600),
-                color = WindScoreColors.ink,
+                color = windScoreColors().ink,
             )
         }
         Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
             Text(
                 s.scoringDoneHint,
                 style = MaterialTheme.typography.bodyMedium,
-                color = WindScoreColors.ink.copy(alpha = 0.5f),
+                color = windScoreColors().ink.copy(alpha = 0.5f),
             )
         }
     }
@@ -312,7 +312,7 @@ fun ScoringResultOverlay(
 
     Surface(
         modifier = modifier.padding(WindScoreSpacing.lg),
-        color = WindScoreColors.blockCream,
+        color = windScoreColors().blockCream,
         shape = RoundedCornerShape(WindScoreRounded.lg),
     ) {
         Column(
@@ -322,20 +322,20 @@ fun ScoringResultOverlay(
             Text(
                 s.performanceComplete,
                 style = MaterialTheme.typography.headlineLarge,
-                color = WindScoreColors.ink,
+                color = windScoreColors().ink,
             )
             Spacer(Modifier.height(WindScoreSpacing.md))
             Text(
                 "$percent%",
                 fontSize = 64.sp,
                 fontWeight = FontWeight.W300,
-                color = if (percent >= 80) WindScoreColors.scoreClean else WindScoreColors.scoreStuck,
+                color = if (percent >= 80) windScoreColors().scoreClean else windScoreColors().scoreStuck,
                 letterSpacing = (-0.96).sp,
             )
             Text(
                 s.cleanHitsLine(clean, total, wrong),
                 style = MaterialTheme.typography.bodyMedium,
-                color = WindScoreColors.ink.copy(alpha = 0.7f),
+                color = windScoreColors().ink.copy(alpha = 0.7f),
                 textAlign = TextAlign.Center,
             )
             Spacer(Modifier.height(WindScoreSpacing.xl))

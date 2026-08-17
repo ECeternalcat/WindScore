@@ -135,32 +135,6 @@ internal fun windScorePalette(darkTheme: Boolean): WindScorePalette =
 @Composable
 fun windScoreColors(): WindScorePalette = LocalWindScoreColors.current
 
-/** Compatibility facade for composables; drawing code captures [windScoreColors] before Canvas. */
-object WindScoreColors {
-    val primary: Color @Composable get() = windScoreColors().primary
-    val onPrimary: Color @Composable get() = windScoreColors().onPrimary
-    val ink: Color @Composable get() = windScoreColors().ink
-    val canvas: Color @Composable get() = windScoreColors().canvas
-    val inverseCanvas: Color @Composable get() = windScoreColors().inverseCanvas
-    val inverseInk: Color @Composable get() = windScoreColors().inverseInk
-    val onInverseSoft: Color @Composable get() = windScoreColors().onInverseSoft
-    val hairline: Color @Composable get() = windScoreColors().hairline
-    val hairlineSoft: Color @Composable get() = windScoreColors().hairlineSoft
-    val surfaceSoft: Color @Composable get() = windScoreColors().surfaceSoft
-    val blockLime: Color @Composable get() = windScoreColors().blockLime
-    val blockLilac: Color @Composable get() = windScoreColors().blockLilac
-    val blockCream: Color @Composable get() = windScoreColors().blockCream
-    val blockPink: Color @Composable get() = windScoreColors().blockPink
-    val blockMint: Color @Composable get() = windScoreColors().blockMint
-    val blockCoral: Color @Composable get() = windScoreColors().blockCoral
-    val blockNavy: Color @Composable get() = windScoreColors().blockNavy
-    val accentMagenta: Color @Composable get() = windScoreColors().accentMagenta
-    val semanticSuccess: Color @Composable get() = windScoreColors().semanticSuccess
-    val overlayScrim: Color @Composable get() = windScoreColors().overlayScrim
-    val scoreClean: Color @Composable get() = windScoreColors().scoreClean
-    val scoreStuck: Color @Composable get() = windScoreColors().scoreStuck
-}
-
 object WindScoreSpacing {
     val hair = 1.dp
     val xxs = 4.dp

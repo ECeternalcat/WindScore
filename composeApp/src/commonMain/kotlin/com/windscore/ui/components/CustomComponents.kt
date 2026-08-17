@@ -25,7 +25,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.windscore.ui.theme.WindScoreColors
+import com.windscore.ui.theme.windScoreColors
 import com.windscore.ui.theme.WindScoreRounded
 
 @Composable
@@ -34,7 +34,7 @@ fun CustomSwitch(
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val background = if (checked) WindScoreColors.primary else WindScoreColors.hairlineSoft
+    val background = if (checked) windScoreColors().primary else windScoreColors().hairlineSoft
     val alignment = if (checked) Alignment.CenterEnd else Alignment.CenterStart
     val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     Box(
@@ -96,12 +96,12 @@ fun CircularIconButton(
     content: @Composable () -> Unit,
 ) {
     val background = when {
-        selected -> WindScoreColors.primary
-        else -> WindScoreColors.surfaceSoft
+        selected -> windScoreColors().primary
+        else -> windScoreColors().surfaceSoft
     }
     val contentColor = when {
-        selected -> WindScoreColors.onPrimary
-        else -> WindScoreColors.ink
+        selected -> windScoreColors().onPrimary
+        else -> windScoreColors().ink
     }
     val interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     Box(
@@ -111,7 +111,7 @@ fun CircularIconButton(
             .bounceClick(interactionSource)
             .size(40.dp)
             .clip(RoundedCornerShape(WindScoreRounded.full))
-            .background(if (enabled) background else WindScoreColors.hairlineSoft)
+            .background(if (enabled) background else windScoreColors().hairlineSoft)
             .clickable(
                 enabled = enabled,
                 interactionSource = interactionSource,

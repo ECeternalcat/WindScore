@@ -54,7 +54,7 @@ import com.windscore.ui.SettingsDialog
 import com.windscore.ui.WelcomeScreen
 import com.windscore.ui.i18n.AppLanguage
 import com.windscore.ui.i18n.strings
-import com.windscore.ui.theme.WindScoreColors
+import com.windscore.ui.theme.windScoreColors
 import com.windscore.ui.theme.WindScoreTheme
 import kotlinx.serialization.Serializable
 import kotlinx.coroutines.launch
@@ -395,7 +395,7 @@ fun App(
         Box(Modifier.fillMaxSize()) {
             Surface(
                 modifier = Modifier.fillMaxSize(),
-                color = WindScoreColors.canvas,
+                color = windScoreColors().canvas,
             ) {
                 Crossfade(
                 targetState = currentScore,
@@ -536,7 +536,7 @@ fun App(
                     ) {
                         Surface(
                             modifier = Modifier.fillMaxSize(),
-                            color = WindScoreColors.canvas,
+                            color = windScoreColors().canvas,
                         ) {
                             SettingsScreen(
                                 onBack = { showSettings = false },
@@ -556,7 +556,7 @@ fun App(
                     ) {
                         Surface(
                             modifier = Modifier.fillMaxSize(),
-                            color = WindScoreColors.canvas,
+                            color = windScoreColors().canvas,
                         ) {
                             com.windscore.ui.ScoreHistoryContent(
                                 records = scoreHistory,
@@ -576,7 +576,7 @@ fun App(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(WindScoreColors.canvas)
+                        .background(windScoreColors().canvas)
                         .clickable(
                             interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                             indication = null,
@@ -586,7 +586,7 @@ fun App(
                     Icon(
                         painter = painterResource(Res.drawable.piano_keys_thin),
                         contentDescription = "Loading",
-                        tint = WindScoreColors.ink,
+                        tint = windScoreColors().ink,
                         modifier = Modifier.size(64.dp)
                     )
                 }
@@ -596,7 +596,7 @@ fun App(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(WindScoreColors.canvas.copy(alpha = 0.92f))
+                    .background(windScoreColors().canvas.copy(alpha = 0.92f))
                     .clickable(
                         interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
                         indication = null,
@@ -606,10 +606,10 @@ fun App(
                 androidx.compose.foundation.layout.Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    CircularProgressIndicator(color = WindScoreColors.ink)
+                    CircularProgressIndicator(color = windScoreColors().ink)
                     Text(
                         text = tr.loadingScore,
-                        color = WindScoreColors.ink,
+                        color = windScoreColors().ink,
                         modifier = Modifier.padding(top = 16.dp),
                     )
                 }
@@ -626,8 +626,8 @@ fun App(
                 contentAlignment = Alignment.BottomCenter,
             ) {
                 Surface(
-                    color = WindScoreColors.ink,
-                    contentColor = WindScoreColors.canvas,
+                    color = windScoreColors().ink,
+                    contentColor = windScoreColors().canvas,
                     shadowElevation = 4.dp,
                 ) {
                     Text(
