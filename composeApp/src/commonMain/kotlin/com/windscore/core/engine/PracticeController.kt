@@ -1,6 +1,7 @@
 package com.windscore.core.engine
 
 import com.windscore.audio.AudioSynth
+import com.windscore.core.MidiNoteHandler
 import com.windscore.core.model.PracticeMode
 import com.windscore.core.model.Score
 import com.windscore.core.traceState
@@ -18,7 +19,7 @@ data class PracticeState(
 class PracticeController(
     private val synth: AudioSynth,
     private val scope: CoroutineScope,
-) {
+) : MidiNoteHandler {
     private val _state = MutableStateFlow(PracticeState())
     val state: StateFlow<PracticeState> = _state.asStateFlow()
 
@@ -59,12 +60,15 @@ class PracticeController(
         )
     }
 
-    fun onNoteOn(pitch: Int) {
+    /** Terminal fallback handler: always consumes so events never fall through. */
+    override fun onNoteOn(pitch: Int): Boolean {
         _state.value.session?.onNoteOn(pitch)
+        return true
     }
 
-    fun onNoteOff(pitch: Int) {
+    override fun onNoteOff(pitch: Int): Boolean {
         _state.value.session?.onNoteOff(pitch)
+        return true
     }
 
     fun close() {

@@ -35,6 +35,7 @@ import androidx.compose.material3.Text
 import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -621,6 +622,7 @@ private fun PlayerControlBar(
     activeLoopRange: LongRange? = null,
 ) {
     val s = strings()
+    val ss = session.state.collectAsState().value
     val labelColor = WindScoreColors.ink.copy(alpha = 0.5f)
     Column(
         modifier = Modifier.fillMaxWidth().padding(horizontal = WindScoreSpacing.lg, vertical = WindScoreSpacing.xs),
@@ -668,7 +670,7 @@ private fun PlayerControlBar(
                     CircularIconButton(onClick = onStopPlay, enabled = sheetReady) {
                         Icon(painterResource(Res.drawable.stop_thin), s.stop, Modifier.size(20.dp))
                     }
-                    Text("${(session.currentTick * 100 / (session.score.totalTicks.coerceAtLeast(1))).coerceIn(0, 100)}%", style = MaterialTheme.typography.bodySmall, color = WindScoreColors.ink)
+                    Text("${(ss.currentTick * 100 / (session.score.totalTicks.coerceAtLeast(1))).coerceIn(0, 100)}%", style = MaterialTheme.typography.bodySmall, color = WindScoreColors.ink)
                 }
             }
             // 循环
@@ -688,12 +690,12 @@ private fun PlayerControlBar(
             }
         }
         // 状态行
-        val pending = session.pendingPitches.joinToString { pitchName(it) }
+        val pending = ss.pendingPitches.joinToString { pitchName(it) }
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.md)) {
             Text(
-                text = if (session.finished) s.finishedAccuracy(session.scorePercent()) else s.toPlayPending(pending),
+                text = if (ss.finished) s.finishedAccuracy(session.scorePercent()) else s.toPlayPending(pending),
                 style = MaterialTheme.typography.bodySmall,
-                color = if (session.finished) WindScoreColors.semanticSuccess else WindScoreColors.ink,
+                color = if (ss.finished) WindScoreColors.semanticSuccess else WindScoreColors.ink,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
@@ -708,19 +710,20 @@ private fun PlayerControlBar(
 @Composable
 private fun StatusLine(session: ScoreSession, viewMode: ViewMode = ViewMode.ROLL, sheetReady: Boolean = true) {
     val s = strings()
+    val ss = session.state.collectAsState().value
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        val pending = session.pendingPitches.joinToString { pitchName(it) }
+        val pending = ss.pendingPitches.joinToString { pitchName(it) }
         Text(
-            if (session.finished) s.finishedAccuracy(session.scorePercent()) else s.toPlayPending(pending),
+            if (ss.finished) s.finishedAccuracy(session.scorePercent()) else s.toPlayPending(pending),
             style = MaterialTheme.typography.bodySmall,
-            color = if (session.finished) WindScoreColors.semanticSuccess else WindScoreColors.ink,
+            color = if (ss.finished) WindScoreColors.semanticSuccess else WindScoreColors.ink,
         )
         Text(
-            s.progressTick(session.progress, session.groupCount, session.currentTick, session.score.totalTicks),
+            s.progressTick(ss.progress, ss.groupCount, ss.currentTick, session.score.totalTicks),
             style = MaterialTheme.typography.bodySmall,
             color = WindScoreColors.ink,
         )
@@ -747,10 +750,11 @@ private fun MainStage(
     modifier: Modifier = Modifier,
 ) {
     val s = strings()
+    val ss = session.state.collectAsState().value
     val frameH = if (isCompact) WindScoreSpacing.sm else 0.dp
     val frameV = if (isCompact) WindScoreSpacing.sm else 0.dp
     val innerPadding = if (isCompact) WindScoreSpacing.lg else WindScoreSpacing.sm
-    val tick = if (isPlaying) playTick else session.currentTick
+    val tick = if (isPlaying) playTick else ss.currentTick
     val showRoll = viewMode == ViewMode.ROLL
     val showSheetKb = viewMode == ViewMode.SHEET_KEYBOARD
     val showSheetFull = viewMode == ViewMode.SHEET_FULL
@@ -765,9 +769,9 @@ private fun MainStage(
     ) {
         Box(Modifier.fillMaxSize().padding(innerPadding)) {
             val rawXml = session.score.rawXml
-            val activePitches = if (isPlaying) playingPitches else session.heldPitches
-            val targetPitches = if (isPlaying) playingPitches else session.cuePitches
-            val hostedTargetPitches = if (isPlaying) emptySet() else session.hostedCuePitches
+            val activePitches = if (isPlaying) playingPitches else ss.heldPitches
+            val targetPitches = if (isPlaying) playingPitches else ss.cuePitches
+            val hostedTargetPitches = if (isPlaying) emptySet() else ss.hostedCuePitches
 
             LaunchedEffect(
                 session.traceId,
@@ -816,8 +820,8 @@ private fun MainStage(
                                 .clip(RoundedCornerShape(WindScoreRounded.lg)),
                             hostedTrack = session.hostedTrack,
                             heldPitchesProvider = { activePitches },
-                            hitNoteIdsProvider = { session.hitNoteIds },
-                            pulseIntensityProvider = { session.pulseIntensity },
+                            hitNoteIdsProvider = { ss.hitNoteIds },
+                            pulseIntensityProvider = { ss.pulseIntensity },
                             bpmProvider = { session.score.tempo.takeIf { it > 0 } ?: 120 },
                             pendingLoopStart = pendingLoopStart,
                             loopRange = activeLoopRange,
@@ -928,7 +932,8 @@ private fun MainStage(
 @Composable
 private fun StatusCard(session: ScoreSession, modifier: Modifier = Modifier) {
     val s = strings()
-    val pending = session.pendingPitches.joinToString { pitchName(it) }.ifEmpty { s.none }
+    val ss = session.state.collectAsState().value
+    val pending = ss.pendingPitches.joinToString { pitchName(it) }.ifEmpty { s.none }
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -954,9 +959,9 @@ private fun StatusCard(session: ScoreSession, modifier: Modifier = Modifier) {
                 color = WindScoreColors.ink.copy(alpha = 0.5f)
             )
             Text(
-                text = if (session.finished) s.performanceComplete else pending,
+                text = if (ss.finished) s.performanceComplete else pending,
                 style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.W500),
-                color = if (session.finished) WindScoreColors.semanticSuccess else WindScoreColors.ink,
+                color = if (ss.finished) WindScoreColors.semanticSuccess else WindScoreColors.ink,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -976,7 +981,7 @@ private fun StatusCard(session: ScoreSession, modifier: Modifier = Modifier) {
                     color = WindScoreColors.ink.copy(alpha = 0.5f)
                 )
                 Text(
-                    text = "${session.progress}/${session.groupCount}",
+                    text = "${ss.progress}/${ss.groupCount}",
                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.W500),
                     color = WindScoreColors.ink
                 )
@@ -988,7 +993,7 @@ private fun StatusCard(session: ScoreSession, modifier: Modifier = Modifier) {
                     color = WindScoreColors.ink.copy(alpha = 0.5f)
                 )
                 Text(
-                    text = "${session.currentTick}/${session.score.totalTicks}",
+                    text = "${ss.currentTick}/${session.score.totalTicks}",
                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.W500),
                     color = WindScoreColors.ink
                 )
@@ -998,7 +1003,7 @@ private fun StatusCard(session: ScoreSession, modifier: Modifier = Modifier) {
         Spacer(Modifier.height(4.dp))
 
         // Linear Progress Bar (长条进度条)
-        val progressRatio = (session.currentTick.toFloat() / session.score.totalTicks.coerceAtLeast(1).toFloat()).coerceIn(0f, 1f)
+        val progressRatio = (ss.currentTick.toFloat() / session.score.totalTicks.coerceAtLeast(1).toFloat()).coerceIn(0f, 1f)
         androidx.compose.material3.LinearProgressIndicator(
             progress = { progressRatio },
             modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),

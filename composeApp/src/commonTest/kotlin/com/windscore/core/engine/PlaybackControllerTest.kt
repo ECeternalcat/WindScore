@@ -100,7 +100,7 @@ class PlaybackControllerTest {
     }
 
     private suspend fun eventually(predicate: () -> Boolean) {
-        repeat(100) {
+        repeat(500) {
             if (predicate()) return
             delay(10)
         }

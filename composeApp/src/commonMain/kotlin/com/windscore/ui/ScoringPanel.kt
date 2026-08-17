@@ -19,6 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -204,6 +205,7 @@ fun ScoringActivePanel(
     modifier: Modifier = Modifier,
 ) {
     val s = strings()
+    val ss = session.state.collectAsState().value
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -239,7 +241,7 @@ fun ScoringActivePanel(
                 )
                 Spacer(Modifier.height(WindScoreSpacing.sm))
                 Text(
-                    s.scoringProgress(session.progress, session.groupCount),
+                    s.scoringProgress(ss.progress, ss.groupCount),
                     style = MaterialTheme.typography.bodyMedium,
                     color = WindScoreColors.ink.copy(alpha = 0.5f),
                 )

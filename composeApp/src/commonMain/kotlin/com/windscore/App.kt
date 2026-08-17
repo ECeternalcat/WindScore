@@ -44,12 +44,10 @@ import com.windscore.core.OpenedScore
 import com.windscore.core.AppDiagnostic
 import com.windscore.core.DiagnosticController
 import com.windscore.core.MidiDiagnosticProblem
-import com.windscore.core.traceState
+import com.windscore.core.MidiInputController
 import com.windscore.core.model.PracticeMode
 import com.windscore.core.model.Score
-import com.windscore.midi.MidiEvent
 import com.windscore.midi.MidiManager
-import com.windscore.midi.MidiDiagnostic
 import com.windscore.ui.PlayerScreen
 import com.windscore.ui.SettingsScreen
 import com.windscore.ui.SettingsDialog
@@ -87,7 +85,6 @@ fun App(
     var pendingLoopStart by remember { mutableStateOf<Long?>(null) }
     var loopSetupState by remember { mutableStateOf(LoopSetupState.IDLE) }
     var toastMessage by remember { mutableStateOf<String?>(null) }
-    var running by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val diagnostics = remember { DiagnosticController() }
@@ -177,6 +174,12 @@ fun App(
     val scoringSession = scoringState.session
     val scoringPhase = scoringState.phase
 
+    // MIDI 事件仲裁：scoring 优先于 practice；新练习模型通过 register 接入
+    val midiInput = remember { MidiInputController(midiManager, synth, scope, diagnostics) }
+    midiInput.register(scoring)
+    midiInput.register(practice)
+    val running by midiInput.running.collectAsState()
+
     val currentPracticeTick = session?.currentTick ?: 0L
     val currentPracticeLoop = session?.takeIf { it.isLoopActive }?.loopRange
     LaunchedEffect(
@@ -230,49 +233,6 @@ fun App(
         }
     }
 
-    LaunchedEffect(running) {
-        if (running) {
-            try {
-                synth.start()
-                midiManager.start()
-                midiManager.events.collect { ev ->
-                    traceState(
-                        "app.consume event=$ev practiceSession=${practice.state.value.session?.traceId} " +
-                            "scoringSession=${scoring.state.value.session?.traceId} scoringPhase=${scoring.state.value.phase}",
-                    )
-                    when (ev) {
-                        is MidiEvent.NoteOn -> {
-                            synth.noteOn(ev.pitch, ev.velocity)
-                            if (!scoring.onNoteOn(ev.pitch)) practice.onNoteOn(ev.pitch)
-                        }
-                        is MidiEvent.NoteOff -> {
-                            synth.noteOff(ev.pitch)
-                            if (!scoring.onNoteOff(ev.pitch)) practice.onNoteOff(ev.pitch)
-                        }
-                    }
-                }
-            } catch (error: Exception) {
-                diagnostics.report(AppDiagnostic.Midi(MidiDiagnosticProblem.RUNTIME_FAILED, error))
-                running = false
-            } finally {
-                midiManager.stop()
-            }
-        }
-    }
-
-    LaunchedEffect(midiManager, diagnostics) {
-        midiManager.diagnostics.collect { diagnostic ->
-            val problem = when (diagnostic) {
-                MidiDiagnostic.Unsupported -> MidiDiagnosticProblem.UNSUPPORTED
-                MidiDiagnostic.NoInputDevice -> MidiDiagnosticProblem.NO_INPUT_DEVICE
-                is MidiDiagnostic.DeviceOpenFailed -> MidiDiagnosticProblem.DEVICE_OPEN_FAILED
-                MidiDiagnostic.Disconnected -> MidiDiagnosticProblem.DISCONNECTED
-            }
-            val cause = (diagnostic as? MidiDiagnostic.DeviceOpenFailed)?.cause
-            diagnostics.report(AppDiagnostic.Midi(problem, cause))
-        }
-    }
-
     DisposableEffect(Unit) {
         onDispose {
             library.close()
@@ -280,6 +240,7 @@ fun App(
             practice.close()
             scoring.close()
             settingsController.close()
+            midiInput.close()
             midiManager.stop()
             synth.stop()
         }
@@ -398,7 +359,7 @@ fun App(
         playback.setPracticeSyncEnabled(false)
         scoring.start(score, mode)
         // 评分靠实时弹奏驱动，自动开启 MIDI 采集（若尚未开启）
-        if (!running) running = true
+        midiInput.setRunning(true)
     }
 
     /** 退出评分：释放评分 Session 并回到评分设置态。 */
@@ -526,7 +487,7 @@ fun App(
                         },
                         onBack = { closeScore() },
                         onToggleMidi = {
-                            running = !running
+                            midiInput.toggle()
                         },
                         onReset = { resetSession() },
                         onModeChange = { setPracticeMode(it) },

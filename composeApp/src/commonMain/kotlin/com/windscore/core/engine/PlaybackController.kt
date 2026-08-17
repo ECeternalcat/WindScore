@@ -171,7 +171,7 @@ class PlaybackController(
                 "playback.syncSession session=${it.traceId} sessionTick=${it.currentTick} " +
                     "playerTick=$tick playing=$playing",
             )
-            it.isHostedEnabled = !playing
+            it.setHostedEnabled(!playing)
             it.seekTo(tick)
         }
     }

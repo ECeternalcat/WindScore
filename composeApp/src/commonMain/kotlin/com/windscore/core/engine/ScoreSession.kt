@@ -1,7 +1,5 @@
 package com.windscore.core.engine
 
-import androidx.compose.runtime.MutableState
-import androidx.compose.runtime.mutableStateOf
 import com.windscore.audio.AudioSynth
 import com.windscore.core.model.NoteEntity
 import com.windscore.core.model.PracticeMode
@@ -13,13 +11,39 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
- * [JudgmentEngine] 的 Compose 友好包装，并负责**托管轨道的自动发声**（文档 4.2）：
+ * Immutable observable snapshot of a practice/scoring session.
+ * UI collects [ScoreSession.state]; non-UI consumers may use the
+ * convenience getters on [ScoreSession] (plain snapshot reads).
+ */
+data class SessionState(
+    val currentTick: Long = 0L,
+    val progress: Int = 0,
+    val groupCount: Int = 0,
+    val finished: Boolean = false,
+    val pendingPitches: Set<Int> = emptySet(),
+    val cuePitches: Set<Int> = emptySet(),
+    val hostedCuePitches: Set<Int> = emptySet(),
+    val heldPitches: Set<Int> = emptySet(),
+    val hitNoteIds: Set<Int> = emptySet(),
+    val pulseIntensity: Float = 0.15f,
+    val hostedEnabled: Boolean = true,
+)
+
+/**
+ * [JudgmentEngine] 的状态流友好包装，并负责**托管轨道的自动发声**（文档 4.2）：
  * 游标每落到新组，由 [AudioSynth] 主动 noteOn 托管音，并按音符持续时长延迟 noteOff。
  *
  * 额外责任：对连续纯托管段按真实节奏定时推进，避免瞬时 burst。
+ *
+ * 状态以单一 [SessionState] 快照流暴露（对齐控制器层的 StateFlow 约定，
+ * 不再依赖 Compose runtime）。托管开关通过 [setHostedEnabled] 显式设置。
  */
 class ScoreSession(
     val score: Score,
@@ -39,29 +63,26 @@ class ScoreSession(
 
     /** 托管段自动推进任务；遇到练习组或结束时取消。 */
     /** Hosted play control switch. Set to false when MIDI player is running. */
-    var isHostedEnabled: Boolean = true
-
     private var hostedJob: Job? = null
 
     /** 上一个已处理托管组的起始 tick，用于计算下一托管组的节奏间隔。 */
     private var lastHostedTick: Long = -1
 
-    private val _currentTick: MutableState<Long> = mutableStateOf(engine.currentTick)
-    var currentTick: Long
-        get() = _currentTick.value
-        private set(value) { _currentTick.value = value }
+    private val _state = MutableStateFlow(buildState())
+    val state: StateFlow<SessionState> = _state.asStateFlow()
 
-    private val _progress: MutableState<Int> = mutableStateOf(engine.progress)
-    var progress: Int
-        get() = _progress.value
-        private set(value) { _progress.value = value }
-
-    private val _finished: MutableState<Boolean> = mutableStateOf(engine.isFinished)
-    var finished: Boolean
-        get() = _finished.value
-        private set(value) { _finished.value = value }
-
-    val groupCount: Int get() = engine.groupCount
+    // —— 快照便捷读取（非订阅式；UI 请收集 state）——
+    val currentTick: Long get() = _state.value.currentTick
+    val progress: Int get() = _state.value.progress
+    val finished: Boolean get() = _state.value.finished
+    val groupCount: Int get() = _state.value.groupCount
+    val pendingPitches: Set<Int> get() = _state.value.pendingPitches
+    val cuePitches: Set<Int> get() = _state.value.cuePitches
+    val hostedCuePitches: Set<Int> get() = _state.value.hostedCuePitches
+    val heldPitches: Set<Int> get() = _state.value.heldPitches
+    val hitNoteIds: Set<Int> get() = _state.value.hitNoteIds
+    val pulseIntensity: Float get() = _state.value.pulseIntensity
+    val isHostedEnabled: Boolean get() = _state.value.hostedEnabled
 
     val practiceMode: PracticeMode get() = engine.practiceMode
 
@@ -71,35 +92,7 @@ class ScoreSession(
     /** 当前循环范围；未启用时返回 [0, totalTicks]。 */
     val loopRange: LongRange get() = engine.currentLoopStart..engine.currentLoopEnd
 
-    /** 当前等待用户按下的音高（仅练习轨道）。可观察 State，供 UI 高亮提示稳定重组。 */
-    private val _pendingPitches: MutableState<Set<Int>> = mutableStateOf(engine.pendingPitches())
-    val pendingPitches: Set<Int> get() = _pendingPitches.value
-
-    private val _cuePitches: MutableState<Set<Int>> = mutableStateOf(engine.cuePitches())
-    val cuePitches: Set<Int> get() = _cuePitches.value
-
-    private val _hostedCuePitches: MutableState<Set<Int>> = mutableStateOf(engine.hostedCuePitches())
-    val hostedCuePitches: Set<Int> get() = _hostedCuePitches.value
-
     val activeKeys: Set<Int> get() = engine.activeKeys()
-
-    /** 当前物理按下的音高（可观察 State，供 PianoRoll draw 阶段读取以高亮反馈）。 */
-    private val _heldPitches: MutableState<Set<Int>> = mutableStateOf(emptySet())
-    var heldPitches: Set<Int>
-        get() = _heldPitches.value
-        private set(value) { _heldPitches.value = value }
-
-    private val _hitNoteIds: MutableState<Set<Int>> = mutableStateOf(emptySet())
-    val hitNoteIds: Set<Int> get() = _hitNoteIds.value
-
-    /**
-     * 动态节拍脉冲强度（Phase 3 文档 6.4）。
-     * 范围 0..1：长辈连续按对并接近 BPM 时接近 1.0，卡住找键时衰减到 0.15 左右。
-     */
-    private val _pulseIntensity: MutableState<Float> = mutableStateOf(0.15f)
-    var pulseIntensity: Float
-        get() = _pulseIntensity.value
-        private set(value) { _pulseIntensity.value = value }
 
     /** 被系统托管的轨道（UI 应将其透明度降至 0.3）；BOTH 模式为 null。 */
     val hostedTrack: TrackType? get() = when (practiceMode) {
@@ -109,7 +102,6 @@ class ScoreSession(
     }
 
     init {
-        sync()
         startPulseDecay()
     }
 
@@ -117,17 +109,38 @@ class ScoreSession(
         sessionScope.cancel()
     }
 
+    /** 显式控制托管发声开关（替代曾经的可变公开字段，跨对象写入安全）。 */
+    fun setHostedEnabled(enabled: Boolean) {
+        _state.update { it.copy(hostedEnabled = enabled) }
+    }
+
     /** 启动脉冲强度衰减协程： progress 推进时点亮，卡顿时逐渐变暗。 */
     private fun startPulseDecay() {
         sessionScope.launch {
             while (true) {
                 delay(PULSE_DECAY_MS)
-                if (!finished) {
-                    pulseIntensity = (pulseIntensity * PULSE_DECAY_FACTOR).coerceAtLeast(PULSE_MIN)
+                if (!_state.value.finished) {
+                    _state.update { s ->
+                        s.copy(pulseIntensity = (s.pulseIntensity * PULSE_DECAY_FACTOR).coerceAtLeast(PULSE_MIN))
+                    }
                 }
             }
         }
     }
+
+    private fun buildState() = SessionState(
+        currentTick = engine.currentTick,
+        progress = engine.progress,
+        groupCount = engine.groupCount,
+        finished = engine.isFinished,
+        pendingPitches = engine.pendingPitches(),
+        cuePitches = engine.cuePitches(),
+        hostedCuePitches = engine.hostedCuePitches(),
+        heldPitches = engine.activeKeys(),
+        hitNoteIds = engine.hitNoteIds(),
+        pulseIntensity = PULSE_MIN,
+        hostedEnabled = true,
+    )
 
     // —— 准度计分（结算页用，过程不展示）——
     fun scorePercent(): Int = engine.scorePercent()
@@ -205,22 +218,25 @@ class ScoreSession(
     }
 
     private fun sync() {
-        val prevProgress = progress
-        currentTick = engine.currentTick
-        progress = engine.progress
-        finished = engine.isFinished
-        heldPitches = engine.activeKeys()
-        _hitNoteIds.value = engine.hitNoteIds()
-        _pendingPitches.value = engine.pendingPitches()
-        _cuePitches.value = engine.cuePitches()
-        _hostedCuePitches.value = engine.hostedCuePitches()
+        val snapshot = _state.value
+        val newState = snapshot.copy(
+            currentTick = engine.currentTick,
+            progress = engine.progress,
+            finished = engine.isFinished,
+            heldPitches = engine.activeKeys(),
+            hitNoteIds = engine.hitNoteIds(),
+            pendingPitches = engine.pendingPitches(),
+            cuePitches = engine.cuePitches(),
+            hostedCuePitches = engine.hostedCuePitches(),
+        )
         // A/B 循环回卷会导致 progress 倒退，此时应重置托管调度基准，避免延迟计算错乱
-        if (progress < prevProgress) {
+        if (newState.progress < snapshot.progress) {
             lastHostedTick = -1
         }
         // 进度向前推进时点亮节拍脉冲；回卷时也重新点燃，提示继续练习
-        if (progress != prevProgress) {
-            pulseIntensity = 1f
+        val progressChanged = newState.progress != snapshot.progress
+        _state.value = if (progressChanged) newState.copy(pulseIntensity = 1f) else newState
+        if (progressChanged) {
             scheduleHostedIfNeeded()
         }
     }
@@ -231,7 +247,9 @@ class ScoreSession(
      */
     private fun scheduleHostedIfNeeded() {
         hostedJob?.cancel()
-        if (!isHostedEnabled || !interactiveStarted || finished || engine.pendingPitches().isNotEmpty()) {
+        if (!_state.value.hostedEnabled || !interactiveStarted || _state.value.finished ||
+            engine.pendingPitches().isNotEmpty()
+        ) {
             lastHostedTick = -1
             return
         }
@@ -263,10 +281,11 @@ class ScoreSession(
     }
 
     private fun trace(action: String) {
+        val s = _state.value
         traceState(
-            "session=$traceId action=$action tick=$currentTick progress=$progress/$groupCount " +
-                "pending=${pendingPitches.sorted()} cue=${cuePitches.sorted()} " +
-                "hostedCue=${hostedCuePitches.sorted()} held=${heldPitches.sorted()} finished=$finished",
+            "session=$traceId action=$action tick=${s.currentTick} progress=${s.progress}/${s.groupCount} " +
+                "pending=${s.pendingPitches.sorted()} cue=${s.cuePitches.sorted()} " +
+                "hostedCue=${s.hostedCuePitches.sorted()} held=${s.heldPitches.sorted()} finished=${s.finished}",
         )
     }
 
