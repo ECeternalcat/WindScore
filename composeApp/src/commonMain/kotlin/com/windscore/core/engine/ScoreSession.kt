@@ -4,7 +4,10 @@ import com.windscore.audio.AudioSynth
 import com.windscore.core.model.NoteEntity
 import com.windscore.core.model.PracticeMode
 import com.windscore.core.model.Score
+import com.windscore.core.model.TrackSelection
 import com.windscore.core.model.TrackType
+import com.windscore.core.model.hostedTrack
+import com.windscore.core.model.trackSelection
 import com.windscore.core.traceState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -50,9 +53,13 @@ class ScoreSession(
     private val synth: AudioSynth,
     private val scope: CoroutineScope,
     practiceMode: PracticeMode = PracticeMode.BOTH,
+    policy: JudgmentPolicy = WaitModeJudgment,
 ) {
     internal val traceId: Long = nextTraceId++
-    private val engine = JudgmentEngine(score, practiceMode)
+    /** 用户侧练习模型（持久化/UI 用）；引擎内的轨道归属由其派生。 */
+    val practiceMode: PracticeMode = practiceMode
+    private val trackSelection: TrackSelection = practiceMode.trackSelection()
+    private val engine = JudgmentEngine(score, trackSelection, policy)
     private val sessionScope = CoroutineScope(scope.coroutineContext + SupervisorJob())
 
     private val msPerTick: Double = run {
@@ -84,8 +91,6 @@ class ScoreSession(
     val pulseIntensity: Float get() = _state.value.pulseIntensity
     val isHostedEnabled: Boolean get() = _state.value.hostedEnabled
 
-    val practiceMode: PracticeMode get() = engine.practiceMode
-
     /** A/B 循环是否启用。 */
     val isLoopActive: Boolean get() = engine.isLoopActive
 
@@ -94,12 +99,8 @@ class ScoreSession(
 
     val activeKeys: Set<Int> get() = engine.activeKeys()
 
-    /** 被系统托管的轨道（UI 应将其透明度降至 0.3）；BOTH 模式为 null。 */
-    val hostedTrack: TrackType? get() = when (practiceMode) {
-        PracticeMode.BOTH -> null
-        PracticeMode.RIGHT_ONLY -> TrackType.LEFT_HAND
-        PracticeMode.LEFT_ONLY -> TrackType.RIGHT_HAND
-    }
+    /** 被系统托管的轨道（UI 应将其透明度降至 0.3）；双手模式为 null。 */
+    val hostedTrack: TrackType? get() = trackSelection.hostedTrack
 
     init {
         startPulseDecay()

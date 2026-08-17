@@ -1,9 +1,10 @@
 package com.windscore.core.engine
 
 import com.windscore.core.model.NoteEntity
-import com.windscore.core.model.PracticeMode
 import com.windscore.core.model.Score
+import com.windscore.core.model.TrackSelection
 import com.windscore.core.model.TrackType
+import com.windscore.core.model.isActiveTrack
 
 /**
  * 判定状态机 ——“等待模式”的核心（文档 2.3）。Phase 2 扩展：单/双手隔离与自动托管（文档 4.2）。
@@ -12,13 +13,16 @@ import com.windscore.core.model.TrackType
  * - [currentTick] 永远等于“当前组”的起始 tick。
  * - 一组 = 同一 startTick 的若干音（可能是和弦，可能跨左右手）。
  *
- * 练习模式 [practiceMode]：
- * - [PracticeMode.BOTH]：双手都要按，无托管。
- * - [PracticeMode.RIGHT_ONLY]：用户只按右手；左手轨道（LEFT_HAND）由系统**自动托管**——
+ * 轨道归属 [trackSelection]：
+ * - [TrackSelection.BOTH_HANDS]：双手都要按，无托管。
+ * - [TrackSelection.RIGHT_HAND]：用户只按右手；左手轨道由系统**自动托管**——
  *   当游标到达其所在组时立即标记 isHit 并交由上层 SoftSynth 发声。
- * - [PracticeMode.LEFT_ONLY]：镜像，托管右手。
+ * - [TrackSelection.LEFT_HAND]：镜像，托管右手。
  *
- * 命中条件：当前组“练习轨道”的音高 ⊆ activeKeys 且 ⊆ freshKeys（本组激活后新按下）。
+ * 判定规则 [policy]：当前默认为等待模式 [WaitModeJudgment]；新的练习模型
+ * （跟弹/节奏等）通过注入不同策略实现，而不与轨道归属耦合。
+ *
+ * 命中条件（等待模式）：当前组“练习轨道”的音高 ⊆ activeKeys 且 ⊆ freshKeys（本组激活后新按下）。
  * 按错/漏按：无视，无负面反馈（坑 3.2）。和弦微小时间差由每次 NoteOn 重判天然容忍。
  * 重复音/震音：freshKeys 要求重新击键；延音长音（Tie 已合并）只属其起始组。
  *
@@ -31,7 +35,8 @@ import com.windscore.core.model.TrackType
  */
 class JudgmentEngine(
     score: Score,
-    val practiceMode: PracticeMode = PracticeMode.BOTH,
+    val trackSelection: TrackSelection = TrackSelection.BOTH_HANDS,
+    val policy: JudgmentPolicy = WaitModeJudgment,
 ) {
 
     /** 按起始 tick 分组（同 tick 多音 = 和弦 = 一组）。保留对原 [NoteEntity] 的引用。 */
@@ -193,7 +198,7 @@ class JudgmentEngine(
 
     /** Hosted-hand pitches in the current timeline group; empty in both-hands mode. */
     fun hostedCuePitches(): Set<Int> {
-        if (practiceMode == PracticeMode.BOTH) return emptySet()
+        if (trackSelection == TrackSelection.BOTH_HANDS) return emptySet()
         return groups.getOrNull(groupIndex)
             ?.asSequence()
             ?.filterNot { isActiveTrack(it.track) }
@@ -202,11 +207,7 @@ class JudgmentEngine(
     }
 
     /** 该轨道是否由用户练习（true）/系统托管（false）。 */
-    fun isActiveTrack(track: TrackType): Boolean = when (practiceMode) {
-        PracticeMode.BOTH -> true
-        PracticeMode.RIGHT_ONLY -> track == TrackType.RIGHT_HAND
-        PracticeMode.LEFT_ONLY -> track == TrackType.LEFT_HAND
-    }
+    fun isActiveTrack(track: TrackType): Boolean = trackSelection.isActiveTrack(track)
 
     /** 用户按下某音高。返回本次新到达组应自动托管的音。 */
     fun onNoteOn(pitch: Int): List<NoteEntity> {
@@ -288,9 +289,9 @@ class JudgmentEngine(
             val required = group
                 .filter { isActiveTrack(it.track) }
                 .mapTo(mutableSetOf()) { it.pitch }
-            // 当前组要求音必须仍按下，且是在该组激活后新按下；和弦可分次按齐，重复音必须重新击键。
+            // 判定规则由策略决定（默认等待模式：按住 + 新按下；和弦可分次按齐，重复音必须重新击键）。
             // 多余或错误音不阻止推进，只影响最终准确率。
-            val satisfied = required.all { it in activeKeys && it in freshKeys }
+            val satisfied = policy.isSatisfied(required, activeKeys, freshKeys)
             if (satisfied) {
                 // 准度：该组弹奏期间若未错按，则计入“干净命中”
                 if (!currentGroupDirty) {

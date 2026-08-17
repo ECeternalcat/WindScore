@@ -1,8 +1,8 @@
 package com.windscore.core.engine
 
 import com.windscore.core.model.NoteEntity
-import com.windscore.core.model.PracticeMode
 import com.windscore.core.model.Score
+import com.windscore.core.model.TrackSelection
 import com.windscore.core.model.TrackType
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -118,7 +118,7 @@ class JudgmentEngineTest {
                 note(1, 48, 4, track = TrackType.LEFT_HAND),
                 note(2, 62, 8, track = TrackType.RIGHT_HAND),
             ),
-            PracticeMode.RIGHT_ONLY,
+            TrackSelection.RIGHT_HAND,
         )
 
         assertEquals(setOf(60), engine.cuePitches())
@@ -139,13 +139,13 @@ class JudgmentEngineTest {
         )
         val engine = JudgmentEngine(
             groupedScore,
-            PracticeMode.BOTH,
+            TrackSelection.BOTH_HANDS,
         )
 
         assertEquals(setOf(60, 48), engine.cuePitches())
         assertTrue(engine.hostedCuePitches().isEmpty())
 
-        val rightOnly = JudgmentEngine(groupedScore, PracticeMode.RIGHT_ONLY)
+        val rightOnly = JudgmentEngine(groupedScore, TrackSelection.RIGHT_HAND)
         assertEquals(setOf(60), rightOnly.cuePitches())
         assertEquals(setOf(48), rightOnly.hostedCuePitches())
     }
@@ -177,7 +177,7 @@ class JudgmentEngineTest {
             note(1, 48, 0, track = TrackType.LEFT_HAND),
             note(2, 64, 4, track = TrackType.RIGHT_HAND),
         )
-        val engine = JudgmentEngine(s, PracticeMode.RIGHT_ONLY)
+        val engine = JudgmentEngine(s, TrackSelection.RIGHT_HAND)
 
         val hosted = engine.arrive()
         assertEquals(listOf(48), hosted.map { it.pitch }, "组0 左手自动托管")
@@ -200,7 +200,7 @@ class JudgmentEngineTest {
             note(0, 60, 0, track = TrackType.RIGHT_HAND),
             note(1, 48, 0, track = TrackType.LEFT_HAND),
         )
-        val engine = JudgmentEngine(s, PracticeMode.LEFT_ONLY)
+        val engine = JudgmentEngine(s, TrackSelection.LEFT_HAND)
         val hosted = engine.arrive()
         assertEquals(listOf(60), hosted.map { it.pitch }, "左手模式托管右手")
         assertEquals(setOf(48), engine.pendingPitches(), "用户只需按左手 48")
@@ -215,7 +215,7 @@ class JudgmentEngineTest {
             note(0, 48, 0, track = TrackType.LEFT_HAND),
             note(1, 60, 4, track = TrackType.RIGHT_HAND),
         )
-        val engine = JudgmentEngine(s, PracticeMode.RIGHT_ONLY)
+        val engine = JudgmentEngine(s, TrackSelection.RIGHT_HAND)
         val hosted = engine.arrive()
         assertEquals(listOf(48), hosted.map { it.pitch }, "纯托管组到达即发声")
         assertEquals(4L, engine.currentTick, "无练习音的组立即推进到下一组")
@@ -231,7 +231,7 @@ class JudgmentEngineTest {
             note(2, 52, 8, track = TrackType.LEFT_HAND),
             note(3, 60, 12, track = TrackType.RIGHT_HAND),
         )
-        val engine = JudgmentEngine(s, PracticeMode.RIGHT_ONLY)
+        val engine = JudgmentEngine(s, TrackSelection.RIGHT_HAND)
         val firstHosted = engine.arrive()
         assertEquals(listOf(48), firstHosted.map { it.pitch }, "arrive 只处理第一个托管组")
         assertEquals(4L, engine.currentTick, "推进到组1 后停止，不 burst 到练习组")

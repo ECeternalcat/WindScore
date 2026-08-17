@@ -2,7 +2,7 @@ package com.windscore
 
 import com.windscore.core.engine.JudgmentEngine
 import com.windscore.core.loadScore
-import com.windscore.core.model.PracticeMode
+import com.windscore.core.model.TrackSelection
 import kotlin.test.Test
 import kotlin.test.assertTrue
 
@@ -15,7 +15,7 @@ class IntegrationTest {
     @Test
     fun fullPlaythroughBothHands() {
         val score = loadScore()
-        val engine = JudgmentEngine(score, PracticeMode.BOTH)
+        val engine = JudgmentEngine(score, TrackSelection.BOTH_HANDS)
         engine.arrive()
 
         autoPlay(engine)
@@ -28,7 +28,7 @@ class IntegrationTest {
     @Test
     fun fullPlaythroughRightOnlyHostsLeft() {
         val score = loadScore()
-        val engine = JudgmentEngine(score, PracticeMode.RIGHT_ONLY)
+        val engine = JudgmentEngine(score, TrackSelection.RIGHT_HAND)
         engine.arrive() // 触发组0 左手托管
 
         autoPlay(engine)
@@ -41,7 +41,7 @@ class IntegrationTest {
     @Test
     fun fumbledPlaythroughLowersScore() {
         val score = loadScore()
-        val engine = JudgmentEngine(score, PracticeMode.BOTH)
+        val engine = JudgmentEngine(score, TrackSelection.BOTH_HANDS)
         engine.arrive()
 
         // 每组先按一个错音（72，多半不在需求里），再按对的 —— 模拟长辈卡壳
