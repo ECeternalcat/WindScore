@@ -85,6 +85,8 @@ class PlaybackControllerTest {
             val session = ScoreSession(score, RecordingSynth(), scope)
             val controller = PlaybackController(RecordingSynth(), scope)
             controller.load(score, session)
+            // Slow playback widens the observation window (the default speed finishes this score in <1s).
+            controller.setSpeed(0.05f)
 
             controller.toggle()
             eventually { controller.state.value.isPlaying && !session.isHostedEnabled }

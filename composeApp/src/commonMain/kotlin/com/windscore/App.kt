@@ -276,9 +276,8 @@ fun App(
                 loopRange = restoredLoop,
             )
         } else {
-            val currentTickVal = session?.currentTick ?: 0L
-            val prevLoopRange = session?.takeIf { it.isLoopActive }?.loopRange
-            practice.load(finalScore, practiceMode, currentTickVal, prevLoopRange)
+            // 无保存设置（首次打开）：从零开始，不继承上一乐谱 session 的位置与循环
+            practice.load(finalScore, practiceMode, currentTick = 0L, loopRange = null)
         }
 
         val activeSession = checkNotNull(practice.state.value.session)

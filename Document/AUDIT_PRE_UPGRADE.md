@@ -58,16 +58,17 @@ Order (each step must keep all tests green):
 - [x] Rollback point completed (`38ee7e2`)
 - [x] R1 MidiInputRouter (`core/MidiInputController.kt`; scoring/practice implement `MidiNoteHandler`; App.kt arbitration removed; 6 new tests; flaky `PlaybackControllerTest` poll budget raised to 5s)
 - [x] R2/R3 ScoreSession de-Compose: single `StateFlow<SessionState>` snapshot; `setHostedEnabled()` replaces public var; UI collects state (`ss = session.state.collectAsState()`); PlaybackController uses method. R5 also done: ScoringController awaits `state.first { finished }` instead of 20 ms polling. Fixed latent android-host crash: `androidMain/StateTrace` guarded with `runCatching` (unmocked `android.util.Log` broke all session-touching host tests since the trace instrumentation landed).
-- [ ] R2/R3 ScoreSession StateFlow
-- [ ] R4 TrackSelection/JudgmentPolicy
-- [ ] R5 Scoring completion flow
-- [ ] R6 fresh-open tick/loop fix
-- [ ] Full test suite green; results recorded below
+- [x] R4 TrackSelection/JudgmentPolicy: `JudgmentEngine(score, trackSelection, policy)`; `TrackSelection` (BOTH_HANDS/RIGHT_HAND/LEFT_HAND) owns track hosting semantics via `isActiveTrack`/`hostedTrack` extensions; `JudgmentPolicy` (default `WaitModeJudgment`) owns hit rules; `PracticeMode` remains the persisted/user-facing model, mapped 1:1 today. New practice models plug in as policies/handlers without enum churn in the UI. Contract tests in `JudgmentPolicyTest`.
+- [x] R6 fresh-open semantics: `applyOpenedScore` without saved settings starts at tick 0 with no loop (no longer inherits the previous score's session position).
+- [x] Test robustness: `playbackDisablesHostedScheduling...` observes playback at 0.05x speed (score finished in <1s at 1x, making the window racy under load).
 
-## 4. Test Results (fill after each step)
+Remaining known risks (accepted, see §2): R7 enum persistence compat (documented), Priority 4/5 roadmap leftovers (real-device tests, WindScoreColors facade, expand affordance).
+
+## 4. Test Results
 
 | Step | desktopTest | androidHostTest |
 |------|-------------|-----------------|
 | baseline | 93/93 | 51/51 (pre-StateTrace code) |
 | after R1 (MidiInputController) | 99/99 | exposed latent StateTrace crash |
 | after R2/R3/R5 (session StateFlow + completion flow + StateTrace guard) | 99/99 | 68/68 |
+| after R4 (TrackSelection/JudgmentPolicy) + R6 + test robustness | 102/102 | 71/71 |
