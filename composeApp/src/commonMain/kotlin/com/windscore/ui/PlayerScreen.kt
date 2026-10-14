@@ -137,6 +137,7 @@ fun PlayerScreen(
     onExitScoring: () -> Unit = {},
     scoreHistory: List<com.windscore.core.model.ScoreRecord> = emptyList(),
     onShowHistory: () -> Unit = {},
+    onShowAttemptDiagnostics: () -> Unit = {},
     appConfig: com.windscore.core.model.AppConfig = com.windscore.core.loadAppConfig(),
 ) {
     val scope = rememberCoroutineScope()
@@ -427,6 +428,7 @@ fun PlayerScreen(
                                                     onStartScoring = onStartScoring,
                                                     history = scoreHistory,
                                                     onShowHistory = onShowHistory,
+                                                    onShowAttemptDiagnostics = onShowAttemptDiagnostics,
                                                 )
                                                 ScoringPhase.ACTIVE -> ScoringActivePanel(
                                                     session = scoringSession ?: session,

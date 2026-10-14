@@ -604,6 +604,8 @@ Addressed the second code audit (`Document/Audit_20260714.md`): fixed **9 of 13*
 - `Document/Worklog.md`: chronological implementation and verification history.
 - `Document/TECHNICAL_ROADMAP.md`: current architecture assessment and forward-looking engineering roadmap.
 - `Document/DESIGN.md`: visual design system and UI direction.
+- `Document/Document_20260818.md`: WindScore product philosophy — evidence-level model, personal baseline, comparable-conditions principles, and behavioral boundaries.
+- `Document/MVP_TECHNICAL_ROADMAP.md`: MVP technical route from the current codebase to the long-term practice dashboard (data flow, attempt recording, phased UI integration P0–P4).
 
 ---
 
@@ -842,3 +844,96 @@ Addressed the second code audit (`Document/Audit_20260714.md`): fixed **9 of 13*
 ### Verification
 - `:composeApp:desktopTest --rerun-tasks`: 93 tests passed.
 - Android compilation and packaging were intentionally left to the user because Gradle Android builds stall in the shared terminal environment.
+
+---
+
+## Phase 16 — MVP Batch 1: Long-Term Practice Recording Layer (2026-08-18)
+
+> Implements the first development batch of `Document/MVP_TECHNICAL_ROADMAP.md` (P0 hidden data collection): a non-invasive Attempt recording layer that preserves raw MIDI events with practice conditions, without changing any existing practice/scoring behavior.
+
+### Design baseline (exploration findings)
+- `MidiInputController.dispatch()` is the single choke point where desktop and Android MIDI transports converge — the recorder hooks there, guaranteeing each physical keypress is recorded exactly once and hosted-hand synth notes (which bypass dispatch) never contaminate recordings.
+- `MidiEvent` carried no timestamp and platform MIDI timestamps were discarded; a `TimeSource.Monotonic` application-side clock is now the event time authority (wall clock only for Attempt start/end).
+- No HintMode/attemptType/midiDeviceId concepts existed; ViewMode (ROLL / SHEET_KEYBOARD / SHEET_FULL) maps deterministically onto the new `HintMode` and `PracticeModeType`.
+
+### Serializable models (`core/practice/`)
+- `RawMidiEvent` (offsetMicros monotonic relative time, NOTE_ON/NOTE_OFF, pitch, velocity, source).
+- `PracticeContext` (scoreId, scoreVersion, region ticks, PracticeMode, HintMode, requested/observed tempo, PracticeModeType, AttemptType, midiDeviceId, startedAt).
+- `PracticeAttempt` (attemptId, sessionId, context, immutable event snapshot, endedAt, 7-value `AttemptEndReason`: COMPLETED / USER_STOPPED / USER_RESTARTED / NAVIGATED_AWAY / MIDI_DISCONNECTED / APP_INTERRUPTED / FREE_PLAY_MARKED).
+
+### Recording engine
+- `AttemptRecorder`: session/attempt state machine; finalize is idempotent; finalized snapshots are immutable; defensive finalization when starting a new attempt while one is active; `onMidiDisconnected()` finalizes with `MIDI_DISCONNECTED` and starts a replacement attempt under the same conditions in the same session; events while idle are dropped silently.
+- `MonotonicMicrosClock` injectable interface + `SystemMonotonicMicrosClock` default (process-lifetime monotonic mark).
+- `MidiRecordingSink` (commonMain/midi): non-consuming side-channel interface; `MidiInputController` records at the very front of `dispatch()` (before synth and handlers, i.e. before wait-mode judgment per roadmap §5.3) and notifies the sink on `MidiDiagnostic.Disconnected`; all sink invocations are exception-isolated so recording failures cannot break practice/scoring.
+
+### Persistence
+- `AttemptStorage` (jvmShared): CBOR `attempts/<scoreId>/<attemptId>.cbor` with `AttemptFileEnvelope.schemaVersion`, atomic writes, corrupt-file skip, newest-first loading, and startup `.tmp` cleanup for crash leftovers.
+- `StorageProvider` gained `savePracticeAttempt` / `loadPracticeAttempts` / `cleanupAttemptTempFiles` expect/actuals (desktop + Android).
+- Empty attempts are not persisted; saves are async on `Dispatchers.IO`; failures report through a new `AppDiagnostic.Recording` diagnostic (toast reuses the storage-unavailable string).
+
+### Lifecycle wiring (`PracticeRecordingController` + `App.kt`)
+- `PracticeRecordingController` (implements `MidiRecordingSink`): translates app flow into attempt boundaries — `beginPracticeSession` on score open, `restartPracticeAttempt` on toolbar reset, `practiceConditionsChanged` on hand-mode / view-mode / loop set / loop adjust / loop clear (each ends the old attempt with USER_STOPPED and opens a new one under the new conditions), `scoringStarted`/`scoringCompleted` (region forced to full score) / `practiceResumed` on scoring exit, `endSession` (NAVIGATED_AWAY) in `closeScore()`, `close()` (APP_INTERRUPTED) on app dispose; runs temp-file cleanup at startup.
+- `AttemptConditions` built from live app state (score, practice mode, view mode, active loop, playback speed → requestedTempo = score.tempo × speed).
+
+### Dev diagnostics UI
+- `AttemptDiagnosticsContent` + entry in `ScoringSetupPanel` ("Attempt Diagnostics (dev)"): lists persisted attempts with conditions, region, hint mode, requested tempo, event count, duration, session id and end reason — the roadmap's batch-1 verification surface (no user-facing trend UI yet).
+
+### New tests (23)
+- `AttemptRecorderTest` (common): monotonic non-decreasing offsets, NoteOn/NoteOff ordering with velocity retention, idempotent finalize, idle-event tolerance, defensive finalization, disconnect replacement attempt in same session, session grouping, snapshot immutability.
+- `PracticeRecordingControllerTest` (common): context construction (loop region, hint mode, requested tempo), restart/condition-change boundaries, scoring lifecycle over full region, empty-attempt suppression, save-failure diagnostics, loadAttempts, idle tolerance.
+- `MidiInputControllerSinkTest` (common): sink-before-handlers ordering without consumption, sink exception isolation, disconnect→sink notification (and non-disconnect diagnostics ignored).
+- `AttemptStorageTest` (desktop): CBOR round-trip, newest-first + per-score isolation, corrupt-file skip, temp-file cleanup scope.
+
+### Verification
+- `:composeApp:desktopTest --rerun-tasks`: **125 tests passed** (baseline 102 + 23 new), verified stable across three consecutive full reruns.
+- `:composeApp:compileAndroidMain`: passed. `:androidApp:assembleDebug` left to the user in Android Studio (Gradle Android builds stall in this terminal environment).
+- Roadmap acceptance gate updated: the doc's "93 desktop tests" figure is stale; the reproducible baseline before this phase was 102.
+
+### Known leftovers
+- Roadmap batch-1 item 7 (record 10–20 real practice attempts and validate data quality) awaits user playtesting via the Attempt Diagnostics page.
+- `PlaybackControllerTest.seekStepAndLoopKeepSessionAndPlayerAligned` exhibited load-sensitive flakiness (3 failures across full-suite runs, none in isolation; pre-existing race between `clearLoop`'s stale timeline collector emission and `publishTick`). Not touched by this phase; recommend a dedicated fix (e.g. generation-token the timeline collector).
+- `PracticeContext.midiDeviceId` and `observedTempo` are persisted as null placeholders; device identity capture and measured tempo estimation are deferred to the analysis phase.
+- Attempt finalization currently relies on Compose `DisposableEffect` dispose for APP_INTERRUPTED; Android process-death mid-attempt loses the in-memory buffer (accepted by roadmap §9 for MVP; temp-file cleanup handles partial writes).
+
+---
+
+## Phase 17 — Practice Recording Lifecycle, Collection & Export (2026-10-14)
+
+> Completes the long-term recording seam on top of Phase 16: recovered recording lifecycle, local collection/export, and the two approved review fixes. Code work and validation were performed in earlier serial writer/reviewer runs whose artifacts live outside the repo; this docs-only entry records the final post-fix state. User-owned dirty work preserved throughout; no commits; HEAD `041d6ba71749bdf6bddf826c18e8742542d8a966` unchanged.
+
+### Recording lifecycle (local automatic recording)
+- `SessionLane` ordered owner shared by MIDI dispatch, lifecycle commands, wait-engine advancement and hosted jobs; IO saves execute independently outside the lane.
+- `JudgmentEngine.CompletedGroup` / `drainCompletedGroups()` emit real completed-group/pass/full-completion transitions; seek/reset/step never fabricate completion evidence.
+- `ScoreSession.onProgress` is a synchronous, ordered, exception-isolated callback; raw MIDI append precedes judgment, so the final triggering NoteOn belongs to the ending attempt.
+- `setPracticeSpeed` adapts hosted timing (speed 0 pauses hosted advancement/audio; scoring stays base tempo/speed 1); playback disables practice judgment/hosting; MIDI disable/disconnect finalize and inhibit, fresh enable arms only the current eligible session.
+- Durable `awaitPendingWrites` / `loadDurableAttempts` prevent collection from silently presenting failed persistence as empty success; an independent persistence SupervisorJob keeps finalized saves alive across navigation.
+- Storage schema v2: nullable start/divisions/speed/effectiveHostedTempo, attempt duration/reached/boundary evidence, carried/held/unmatched-release quality fields, and PRE-judgment `sessionTick`/`sessionGroup` on raw events; legacy/future/corrupt files are preserved or skipped without rewriting.
+
+### Collection & export
+- Allowlisted v1 JSON envelope under `core/collection`: summaries carry only relative ticks/duration, practice conditions, statuses, event counts, schema versions and neutral data-quality flags; raw events only after explicit per-export opt-in; no score/session/attempt IDs, title/source/hash/path, device identity or wall-clock timestamps.
+- Localized (EN/ZH/JA) collection UI with private-recording and sensitivity warnings; initially nothing selected and raw MIDI unchecked; preview bytes and saved bytes are the same serialization.
+- Desktop AWT save dialog and Android `ACTION_CREATE_DOCUMENT` helpers; cancellation and write failure are distinct outcomes; suggested filename `windscore-practice-collection.json`; no upload/telemetry/import path was added.
+
+### Approved review fixes
+- `AttemptExportSaveTransaction`: bytes captured at chooser invocation, concurrent export refused, dismissal lock held until terminal `finish()`; Desktop/Android adapters finish the transaction on saved/cancelled/failed/coroutine-cancelled paths. Export-busy state guards the collection back control, App back handler, `closeScore`, SettingsDialog close, collection dismiss and Desktop window close (localized saving label in the window title).
+- Export DTO adds per-export ordinal `scoreAlias`, `scoreVersion` and nullable `divisions`; session aliases are scoped to `(scoreId, sessionId)` so shared internal session IDs across scores do not merge; ordering/aliases are deterministic regardless of selection click order; no original score identity is serialized.
+
+### Verification (final post-fix numbers; earlier intermediate/partial gate outcomes were corrected during the run and are superseded — details remain in session artifacts, not repeated as final status)
+- Source-matched private snapshot re-hashed before the gates: `windscore-collection-approved-fix-source-hashes.json` — 143 Kotlin source/test files, 0 mismatches.
+- Focused `*AttemptExportTest` + `*AttemptExportSaveTransactionTest`: **5/5 passed**.
+- Full `:composeApp:desktopTest --rerun-tasks`: **146/146 passed** (34 suites, 0 failures/errors/skips), including `ControlSidebarUiTest`; counts summed from freshly generated XML.
+- `:composeApp:compileAndroidMain` and `:androidApp:compileDebugKotlin`: passed.
+- `git diff --check`: passed (pre-existing line-ending normalization warnings only); staged-name list empty; HEAD unchanged.
+- Independent read-only final recheck confirmed both approved findings resolved, re-verified the hash manifest and XML counts; no new findings.
+
+### Environment deviations (temporary, approved)
+- Gates ran in the private snapshot `C:/Users/eternal/AppData/Local/Temp/windscore-lifecycle-build-68g2k851` with cached **Gradle 9.7.1** and full **Adoptium JDK 21.0.12.1** (process-local `JAVA_HOME`/`PATH`, explicit `org.gradle.java.home`, toolchain path, auto-detect=false, auto-download=false, `--no-daemon --offline`).
+- Snapshot-only edits: copied daemon criteria removed; copied Android SDK directory corrected to the installed `C:/Users/eternal/AppData/Local/Android/Sdk`. **Original wrapper 9.6.1 / JetBrains 21 daemon criteria and all build scripts remain unchanged.**
+
+### Documentation
+- Added `Document/PRACTICE_DATA_COLLECTION.md` (Chinese user guide, explicitly assigned localized doc): local automatic private recording vs user-mediated collection/export, initially empty selection/raw unchecked, sensitivity and pseudonym limits, exact preview/manual save, save/dismiss behavior, score aliases/version/divisions, filenames and diagnostic/raw-timeline interpretation, plus an 18-item 10–20-real-attempt acceptance checklist. The checklist describes required manual validation only; hardware/chooser/SAF manual checks are NOT claimed complete. This also frames the outstanding Phase 16 roadmap item 7 (record 10–20 real practice attempts and validate data quality).
+
+### Known leftovers / residual risks
+- Canonical wrapper 9.6.1/JetBrains 21 execution, packaging, real MIDI devices, Desktop overwrite UX and Android SAF (providers may be remote) were not manually validated.
+- Aliases and minimized musical context are pseudonymization, not anonymity; raw MIDI exports are highly sensitive.
+- Forced process termination or external provider failure can interrupt writes despite UI dismissal guards; Android background/process-death behavior remains untested.

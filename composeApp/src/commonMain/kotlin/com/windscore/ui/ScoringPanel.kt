@@ -64,6 +64,7 @@ fun ScoringSetupPanel(
     onStartScoring: (PracticeMode) -> Unit,
     history: List<ScoreRecord>,
     onShowHistory: () -> Unit,
+    onShowAttemptDiagnostics: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     var scoringHand by remember { mutableStateOf(PracticeMode.BOTH) }
@@ -189,6 +190,30 @@ fun ScoringSetupPanel(
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
                     )
                 }
+            }
+        }
+
+        Surface(
+            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(WindScoreRounded.md)).clickable(onClick = onShowAttemptDiagnostics),
+            color = windScoreColors().surfaceSoft,
+            shape = RoundedCornerShape(WindScoreRounded.md),
+        ) {
+            Row(
+                modifier = Modifier.padding(WindScoreSpacing.sm).fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.sm),
+            ) {
+                Icon(
+                    painter = painterResource(Res.drawable.music_notes_thin),
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = windScoreColors().ink.copy(alpha = 0.4f),
+                )
+                Text(
+                    s.collectionTitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = windScoreColors().ink.copy(alpha = 0.6f),
+                )
             }
         }
     }

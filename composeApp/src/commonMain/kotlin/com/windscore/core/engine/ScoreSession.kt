@@ -4,7 +4,6 @@ import com.windscore.audio.AudioSynth
 import com.windscore.core.model.NoteEntity
 import com.windscore.core.model.PracticeMode
 import com.windscore.core.model.Score
-import com.windscore.core.model.TrackSelection
 import com.windscore.core.model.TrackType
 import com.windscore.core.model.hostedTrack
 import com.windscore.core.model.trackSelection
@@ -19,12 +18,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlin.math.ceil
 
-/**
- * Immutable observable snapshot of a practice/scoring session.
- * UI collects [ScoreSession.state]; non-UI consumers may use the
- * convenience getters on [ScoreSession] (plain snapshot reads).
- */
 data class SessionState(
     val currentTick: Long = 0L,
     val progress: Int = 0,
@@ -39,15 +34,19 @@ data class SessionState(
     val hostedEnabled: Boolean = true,
 )
 
-/**
- * [JudgmentEngine] 的状态流友好包装，并负责**托管轨道的自动发声**（文档 4.2）：
- * 游标每落到新组，由 [AudioSynth] 主动 noteOn 托管音，并按音符持续时长延迟 noteOff。
- *
- * 额外责任：对连续纯托管段按真实节奏定时推进，避免瞬时 burst。
- *
- * 状态以单一 [SessionState] 快照流暴露（对齐控制器层的 StateFlow 约定，
- * 不再依赖 Compose runtime）。托管开关通过 [setHostedEnabled] 显式设置。
- */
+enum class ProgressOrigin { USER, HOSTED }
+
+/** Wait-engine position evidence, never score/MIDI alignment or whole-region traversal proof. */
+data class SessionProgress(
+    val origin: ProgressOrigin,
+    val completedGroupTick: Long,
+    val completedGroup: Int,
+    val boundaryTick: Long,
+    val completedPass: Boolean,
+    val fullCompletion: Boolean,
+    val nextTick: Long,
+)
+
 class ScoreSession(
     val score: Score,
     private val synth: AudioSynth,
@@ -55,172 +54,156 @@ class ScoreSession(
     practiceMode: PracticeMode = PracticeMode.BOTH,
     policy: JudgmentPolicy = WaitModeJudgment,
 ) {
-    internal val traceId: Long = nextTraceId++
-    /** 用户侧练习模型（持久化/UI 用）；引擎内的轨道归属由其派生。 */
-    val practiceMode: PracticeMode = practiceMode
-    private val trackSelection: TrackSelection = practiceMode.trackSelection()
+    internal val traceId: Long = SessionLane.run { nextTraceId++ }
+    val practiceMode = practiceMode
+    private val trackSelection = practiceMode.trackSelection()
     private val engine = JudgmentEngine(score, trackSelection, policy)
     private val sessionScope = CoroutineScope(scope.coroutineContext + SupervisorJob())
-
-    private val msPerTick: Double = run {
-        val tempo = score.tempo.takeIf { it > 0 } ?: 120
-        val div = score.divisions.takeIf { it > 0 } ?: 4
-        60_000.0 / (tempo * div)
-    }
-
-    /** 托管段自动推进任务；遇到练习组或结束时取消。 */
-    /** Hosted play control switch. Set to false when MIDI player is running. */
+    private val baseMsPerTick = 60_000.0 / ((score.tempo.takeIf { it > 0 } ?: 120) * (score.divisions.takeIf { it > 0 } ?: 4))
+    private var speed = 1f
+    private var closed = false
     private var hostedJob: Job? = null
-
-    /** 上一个已处理托管组的起始 tick，用于计算下一托管组的节奏间隔。 */
-    private var lastHostedTick: Long = -1
-
-    private val _state = MutableStateFlow(buildState())
+    private var hostedGeneration = 0L
+    private var lastHostedTick = -1L
+    // Explicit wrap origin: do not confuse a loop wrap with an unset scheduling baseline.
+    private var hostedWrapFromTick: Long? = null
+    private var interactiveStarted = false
+    private val _state = MutableStateFlow(SessionState(groupCount = engine.groupCount))
     val state: StateFlow<SessionState> = _state.asStateFlow()
 
-    // —— 快照便捷读取（非订阅式；UI 请收集 state）——
-    val currentTick: Long get() = _state.value.currentTick
-    val progress: Int get() = _state.value.progress
-    val finished: Boolean get() = _state.value.finished
-    val groupCount: Int get() = _state.value.groupCount
-    val pendingPitches: Set<Int> get() = _state.value.pendingPitches
-    val cuePitches: Set<Int> get() = _state.value.cuePitches
-    val hostedCuePitches: Set<Int> get() = _state.value.hostedCuePitches
-    val heldPitches: Set<Int> get() = _state.value.heldPitches
-    val hitNoteIds: Set<Int> get() = _state.value.hitNoteIds
-    val pulseIntensity: Float get() = _state.value.pulseIntensity
-    val isHostedEnabled: Boolean get() = _state.value.hostedEnabled
+    /** Synchronous, ordered, exception-isolated; invoked after input append and engine advancement. */
+    var onProgress: ((ScoreSession, SessionProgress) -> Unit)? = null
 
-    /** A/B 循环是否启用。 */
-    val isLoopActive: Boolean get() = engine.isLoopActive
-
-    /** 当前循环范围；未启用时返回 [0, totalTicks]。 */
-    val loopRange: LongRange get() = engine.currentLoopStart..engine.currentLoopEnd
-
-    val activeKeys: Set<Int> get() = engine.activeKeys()
-
-    /** 被系统托管的轨道（UI 应将其透明度降至 0.3）；双手模式为 null。 */
+    val currentTick get() = _state.value.currentTick
+    val progress get() = _state.value.progress
+    val finished get() = _state.value.finished
+    val groupCount get() = _state.value.groupCount
+    val pendingPitches get() = _state.value.pendingPitches
+    val cuePitches get() = _state.value.cuePitches
+    val hostedCuePitches get() = _state.value.hostedCuePitches
+    val heldPitches get() = _state.value.heldPitches
+    val hitNoteIds get() = _state.value.hitNoteIds
+    val pulseIntensity get() = _state.value.pulseIntensity
+    val isHostedEnabled get() = _state.value.hostedEnabled
+    val isLoopActive get() = SessionLane.run { engine.isLoopActive }
+    val loopRange get() = SessionLane.run { engine.currentLoopStart..engine.currentLoopEnd }
+    val activeKeys get() = SessionLane.run { engine.activeKeys() }
     val hostedTrack: TrackType? get() = trackSelection.hostedTrack
 
     init {
-        startPulseDecay()
-    }
-
-    fun close() {
-        sessionScope.cancel()
-    }
-
-    /** 显式控制托管发声开关（替代曾经的可变公开字段，跨对象写入安全）。 */
-    fun setHostedEnabled(enabled: Boolean) {
-        _state.update { it.copy(hostedEnabled = enabled) }
-    }
-
-    /** 启动脉冲强度衰减协程： progress 推进时点亮，卡顿时逐渐变暗。 */
-    private fun startPulseDecay() {
+        sync()
         sessionScope.launch {
             while (true) {
-                delay(PULSE_DECAY_MS)
-                if (!_state.value.finished) {
-                    _state.update { s ->
-                        s.copy(pulseIntensity = (s.pulseIntensity * PULSE_DECAY_FACTOR).coerceAtLeast(PULSE_MIN))
-                    }
-                }
+                delay(50)
+                _state.update { it.copy(pulseIntensity = (it.pulseIntensity * 0.97f).coerceAtLeast(0.15f)) }
             }
         }
     }
 
-    private fun buildState() = SessionState(
-        currentTick = engine.currentTick,
-        progress = engine.progress,
-        groupCount = engine.groupCount,
-        finished = engine.isFinished,
-        pendingPitches = engine.pendingPitches(),
-        cuePitches = engine.cuePitches(),
-        hostedCuePitches = engine.hostedCuePitches(),
-        heldPitches = engine.activeKeys(),
-        hitNoteIds = engine.hitNoteIds(),
-        pulseIntensity = PULSE_MIN,
-        hostedEnabled = true,
-    )
+    fun close() = SessionLane.run {
+        closed = true
+        onProgress = null
+        hostedGeneration++
+        sessionScope.cancel()
+    }
 
-    // —— 准度计分（结算页用，过程不展示）——
-    fun scorePercent(): Int = engine.scorePercent()
-    fun cleanHitCount(): Int = engine.cleanHitCount()
-    fun totalActiveNotes(): Int = engine.totalActiveNotes()
-    fun wrongPressCount(): Int = engine.wrongPressCount()
-    fun groupWrongCounts(): IntArray = engine.groupWrongCounts()
-
-    private var interactiveStarted = false
-
-    fun onNoteOn(pitch: Int) {
-        trace("noteOn($pitch) before")
-        interactiveStarted = true
-        playHosted(engine.onNoteOn(pitch))
-        sync()
-        trace("noteOn($pitch) after")
-        // 用户交互后无条件武装托管推进：覆盖 seek/reset 后停在纯托管组的死锁场景
-        // （该组不调用 step()、progress 不变，sync 内的调度不会触发）。
+    fun setHostedEnabled(enabled: Boolean) = SessionLane.run {
+        if (closed) return@run
+        _state.update { it.copy(hostedEnabled = enabled) }
         scheduleHostedIfNeeded()
     }
 
-    fun onNoteOff(pitch: Int) {
-        trace("noteOff($pitch) before")
-        engine.onNoteOff(pitch)
-        sync()
-        trace("noteOff($pitch) after")
+    fun setPracticeSpeed(value: Float) = SessionLane.run {
+        if (closed) return@run
+        speed = value.coerceIn(0f, 2f)
+        scheduleHostedIfNeeded()
     }
 
-    fun reset(playAudio: Boolean = false) {
-        trace("reset(playAudio=$playAudio) before")
+    fun scorePercent() = SessionLane.run { engine.scorePercent() }
+    fun cleanHitCount() = SessionLane.run { engine.cleanHitCount() }
+    fun totalActiveNotes() = engine.totalActiveNotes()
+    fun wrongPressCount() = SessionLane.run { engine.wrongPressCount() }
+    fun groupWrongCounts() = SessionLane.run { engine.groupWrongCounts() }
+
+    fun onNoteOn(pitch: Int) = SessionLane.run {
+        // Passthrough may sound during player playback, but cannot fight its position/judgment.
+        if (closed || !isHostedEnabled || finished) return@run
+        interactiveStarted = true
+        trace("noteOn($pitch) before")
+        playHosted(engine.onNoteOn(pitch, allowHostedAdvance = speed > 0))
+        syncAndNotify(ProgressOrigin.USER)
+        trace("noteOn($pitch) after")
+        scheduleHostedIfNeeded()
+    }
+
+    fun onNoteOff(pitch: Int) = SessionLane.run {
+        if (closed || !isHostedEnabled) return@run
+        engine.onNoteOff(pitch)
+        sync()
+    }
+
+    fun reset(playAudio: Boolean = false) = SessionLane.run {
+        if (closed) return@run
         interactiveStarted = false
+        lastHostedTick = -1
+        hostedWrapFromTick = null
         val notes = engine.reset()
         if (playAudio) playHosted(notes)
         sync()
-        trace("reset after")
+        scheduleHostedIfNeeded()
     }
 
-    /** 定点跳转（文档 3.3）。 */
-    fun seekTo(tick: Long) {
-        trace("seekTo($tick) before")
+    fun seekTo(tick: Long) = SessionLane.run {
+        if (closed) return@run
         interactiveStarted = false
+        lastHostedTick = -1
+        hostedWrapFromTick = null
         engine.seekTo(tick)
         sync()
-        trace("seekTo($tick) after")
+        scheduleHostedIfNeeded()
     }
 
-    /** 微观步进：前进一个音符组（文档 3.3 盲操微调）。 */
-    fun stepForward() {
-        trace("stepForward before")
+    fun stepForward() = SessionLane.run {
+        if (closed) return@run
         interactiveStarted = false
+        lastHostedTick = -1
+        hostedWrapFromTick = null
         engine.stepForward()
         sync()
-        trace("stepForward after")
+        scheduleHostedIfNeeded()
     }
 
-    /** 微观步进：后退一个音符组（文档 3.3 盲操微调）。 */
-    fun stepBackward() {
-        trace("stepBackward before")
+    fun stepBackward() = SessionLane.run {
+        if (closed) return@run
         interactiveStarted = false
+        lastHostedTick = -1
+        hostedWrapFromTick = null
         engine.stepBackward()
         sync()
-        trace("stepBackward after")
+        scheduleHostedIfNeeded()
     }
 
-    /** 设置 A/B 循环范围；调用后当前进度会调整到循环起点附近。 */
-    fun setLoop(startTick: Long, endTick: Long, playAudio: Boolean = false) {
+    fun setLoop(startTick: Long, endTick: Long, playAudio: Boolean = false) = SessionLane.run {
+        if (closed) return@run
         engine.setLoop(startTick, endTick)
         reset(playAudio)
     }
 
-    /** 清除 A/B 循环。 */
-    fun clearLoop(playAudio: Boolean = false) {
+    fun clearLoop(playAudio: Boolean = false) = SessionLane.run {
+        if (closed) return@run
         engine.clearLoop()
         reset(playAudio)
     }
 
+    private fun trace(action: String) {
+        val s = _state.value
+        traceState("session=$traceId action=$action tick=${s.currentTick} progress=${s.progress}/${s.groupCount} " +
+            "pending=${s.pendingPitches.sorted()} cue=${s.cuePitches.sorted()} hostedCue=${s.hostedCuePitches.sorted()} " +
+            "held=${s.heldPitches.sorted()} finished=${s.finished}")
+    }
+
     private fun sync() {
-        val snapshot = _state.value
-        val newState = snapshot.copy(
+        _state.update { it.copy(
             currentTick = engine.currentTick,
             progress = engine.progress,
             finished = engine.isFinished,
@@ -229,74 +212,58 @@ class ScoreSession(
             pendingPitches = engine.pendingPitches(),
             cuePitches = engine.cuePitches(),
             hostedCuePitches = engine.hostedCuePitches(),
-        )
-        // A/B 循环回卷会导致 progress 倒退，此时应重置托管调度基准，避免延迟计算错乱
-        if (newState.progress < snapshot.progress) {
-            lastHostedTick = -1
+        ) }
+    }
+
+    private fun syncAndNotify(origin: ProgressOrigin) {
+        val transitions = engine.drainCompletedGroups()
+        val pass = transitions.lastOrNull { it.completedPass }
+        if (pass != null) {
+            hostedWrapFromTick = pass.tick
+        } else if (transitions.isNotEmpty()) {
+            hostedWrapFromTick = null
         }
-        // 进度向前推进时点亮节拍脉冲；回卷时也重新点燃，提示继续练习
-        val progressChanged = newState.progress != snapshot.progress
-        _state.value = if (progressChanged) newState.copy(pulseIntensity = 1f) else newState
-        if (progressChanged) {
-            scheduleHostedIfNeeded()
+        sync()
+        if (transitions.isNotEmpty()) _state.update { it.copy(pulseIntensity = 1f) }
+        transitions.forEach { group ->
+            runCatching { onProgress?.invoke(this, SessionProgress(
+                origin, group.tick, group.group, group.boundaryTick,
+                group.completedPass, group.fullCompletion, currentTick,
+            )) }.onFailure { println("[SessionProgress] Listener failed: ${it.message}") }
         }
     }
 
-    /**
-     * 当游标停在纯托管组时，按真实节奏调度下一步推进。
-     * 第一个托管组立即发声，后续托管组按 tick 间隔延迟。
-     */
     private fun scheduleHostedIfNeeded() {
+        val generation = ++hostedGeneration
         hostedJob?.cancel()
-        if (!_state.value.hostedEnabled || !interactiveStarted || _state.value.finished ||
-            engine.pendingPitches().isNotEmpty()
-        ) {
-            lastHostedTick = -1
-            return
-        }
-        val delayMs = if (lastHostedTick < 0) 0L else {
-            ((engine.currentTick - lastHostedTick) * msPerTick).toLong().coerceAtLeast(0)
-        }
+        if (closed || !isHostedEnabled || !interactiveStarted || finished || speed <= 0 || engine.pendingPitches().isNotEmpty()) return
+        val intervalTicks = hostedWrapFromTick?.let { completedTick ->
+            engine.currentLoopEnd - completedTick + engine.currentTick - engine.currentLoopStart
+        } ?: if (lastHostedTick < 0) 0L else engine.currentTick - lastHostedTick
+        // A positive musical interval must never truncate into a zero-delay hosted loop.
+        val delayMs = if (intervalTicks <= 0) 0L else
+            ceil(intervalTicks * baseMsPerTick / speed).toLong().coerceAtLeast(1)
         hostedJob = sessionScope.launch {
             if (delayMs > 0) delay(delayMs)
-            val notes = engine.advanceHosted()
-            if (notes.isNotEmpty()) {
-                playHosted(notes)
-                sync()
+            SessionLane.run {
+                if (closed || generation != hostedGeneration || !isHostedEnabled || speed <= 0) return@run
+                hostedWrapFromTick = null
+                playHosted(engine.advanceHosted())
+                syncAndNotify(ProgressOrigin.HOSTED)
+                scheduleHostedIfNeeded()
             }
         }
     }
 
     private fun playHosted(notes: List<NoteEntity>) {
-        if (notes.isEmpty()) return
-        // 记录最后一个被处理托管组的起始 tick，供节奏调度用
+        if (notes.isEmpty() || !isHostedEnabled || speed <= 0) return
         lastHostedTick = notes.maxOf { it.startTick }
-        for (n in notes) {
-            synth.noteOn(n.pitch, HOSTED_VELOCITY)
-            val durMs = (n.durationTick * msPerTick).toLong().coerceIn(MIN_TONE_MS, MAX_TONE_MS)
-            sessionScope.launch {
-                delay(durMs)
-                synth.noteOff(n.pitch)
-            }
+        for (note in notes) {
+            synth.noteOn(note.pitch, 80)
+            val duration = (note.durationTick * baseMsPerTick / speed).toLong().coerceIn(60, 4000)
+            sessionScope.launch { delay(duration); synth.noteOff(note.pitch) }
         }
     }
 
-    private fun trace(action: String) {
-        val s = _state.value
-        traceState(
-            "session=$traceId action=$action tick=${s.currentTick} progress=${s.progress}/${s.groupCount} " +
-                "pending=${s.pendingPitches.sorted()} cue=${s.cuePitches.sorted()} " +
-                "hostedCue=${s.hostedCuePitches.sorted()} held=${s.heldPitches.sorted()} finished=${s.finished}",
-        )
-    }
-
-    private companion object {
-        var nextTraceId = 1L
-        const val HOSTED_VELOCITY = 80
-        const val MIN_TONE_MS = 60L
-        const val MAX_TONE_MS = 4000L
-        const val PULSE_DECAY_MS = 50L
-        const val PULSE_DECAY_FACTOR = 0.97f
-        const val PULSE_MIN = 0.15f
-    }
+    private companion object { var nextTraceId = 1L }
 }

@@ -30,3 +30,12 @@ expect fun loadScoreHistory(scoreId: String): List<ScoreRecord>
 
 /** 追加一条评分记录并落盘，返回更新后的历史列表（最新在前）。 */
 expect fun appendScoreRecord(scoreId: String, record: ScoreRecord): List<ScoreRecord>
+
+/** 保存一次练习 Attempt（原始 MIDI 事件与练习条件）。 */
+expect fun savePracticeAttempt(attempt: com.windscore.core.practice.PracticeAttempt)
+
+/** 读取某乐谱的全部 Attempt（最新在前）。 */
+expect fun loadPracticeAttempts(scoreId: String): List<com.windscore.core.practice.PracticeAttempt>
+
+/** 清理崩溃遗留的 Attempt 临时文件，返回删除数量。 */
+expect fun cleanupAttemptTempFiles(): Int

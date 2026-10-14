@@ -33,6 +33,16 @@ class PlaybackController(
     private var timelineJob: Job? = null
     private var pitchesJob: Job? = null
     private var practiceSyncEnabled = true
+    private var playbackActive = false
+
+    /** true is sent synchronously BEFORE playback starts; false after position normalization. */
+    var onPlaybackActiveChanged: ((Boolean) -> Unit)? = null
+
+    private fun notifyPlayback(active: Boolean) {
+        if (playbackActive == active) return
+        playbackActive = active
+        runCatching { onPlaybackActiveChanged?.invoke(active) }
+    }
 
     fun load(
         score: Score,
@@ -41,7 +51,7 @@ class PlaybackController(
         loopRange: LongRange? = session.takeIf { it.isLoopActive }?.loopRange,
         speed: Float = 1f,
         metronomeVolume: Int = 50,
-    ) {
+    ) = SessionLane.run {
         releasePlayer()
         this.session = session
         val newPlayer = ScorePlayer(score, synth, scope).apply {
@@ -51,6 +61,8 @@ class PlaybackController(
             seekTo(initialTick)
         }
         player = newPlayer
+        session.setPracticeSpeed(speed)
+        session.setHostedEnabled(true)
         _state.value = PlaybackState(
             tick = newPlayer.tick.value,
             speed = speed,
@@ -61,9 +73,14 @@ class PlaybackController(
         timelineJob = scope.launch {
             kotlinx.coroutines.flow.combine(newPlayer.tick, newPlayer.playing) { tick, playing -> tick to playing }
                 .collect { (tick, playing) ->
-                    if (tick != newPlayer.tick.value || playing != newPlayer.playing.value) return@collect
-                    _state.update { it.copy(tick = tick, isPlaying = playing) }
-                    syncSession(tick, playing)
+                    SessionLane.run {
+                        // Validation AND mutation share the command lane: stale collector emissions cannot seek back.
+                        if (player !== newPlayer || tick != newPlayer.tick.value || playing != newPlayer.playing.value) return@run
+                        val wasPlaying = _state.value.isPlaying
+                        _state.update { it.copy(tick = tick, isPlaying = playing) }
+                        if (playing || wasPlaying || playbackActive) syncSession(tick, playing)
+                        notifyPlayback(playing)
+                    }
                 }
         }
         pitchesJob = scope.launch {
@@ -73,20 +90,23 @@ class PlaybackController(
         }
     }
 
-    fun attachSession(session: ScoreSession) {
+    fun attachSession(session: ScoreSession) = SessionLane.run {
         traceState("playback.attachSession session=${session.traceId} tick=${_state.value.tick} playing=${_state.value.isPlaying}")
         this.session = session
-        syncSession(_state.value.tick, _state.value.isPlaying)
+        session.setPracticeSpeed(_state.value.speed)
+        session.setHostedEnabled(!_state.value.isPlaying)
+        if (_state.value.isPlaying) syncSession(_state.value.tick, true)
     }
 
-    fun setPracticeSyncEnabled(enabled: Boolean) {
+    fun setPracticeSyncEnabled(enabled: Boolean) = SessionLane.run {
         practiceSyncEnabled = enabled
-        if (enabled) syncSession(_state.value.tick, _state.value.isPlaying)
+        if (enabled) session?.setHostedEnabled(!playbackActive)
     }
 
-    fun setSpeed(speed: Float) {
+    fun setSpeed(speed: Float) = SessionLane.run {
         val normalized = speed.coerceIn(0f, 2f)
         player?.speedMultiplier = normalized.toDouble()
+        session?.setPracticeSpeed(normalized)
         _state.update { it.copy(speed = normalized) }
     }
 
@@ -96,7 +116,7 @@ class PlaybackController(
         _state.update { it.copy(metronomeVolume = normalized) }
     }
 
-    fun setLoop(start: Long, end: Long) {
+    fun setLoop(start: Long, end: Long) = SessionLane.run {
         val range = if (start <= end) start..end else end..start
         session?.setLoop(range.first, range.last)
         player?.loopRange = range
@@ -105,7 +125,7 @@ class PlaybackController(
         _state.update { it.copy(loopRange = player?.loopRange) }
     }
 
-    fun clearLoop() {
+    fun clearLoop() = SessionLane.run {
         session?.clearLoop()
         player?.loopRange = null
         val target = session?.currentTick ?: 0L
@@ -114,40 +134,52 @@ class PlaybackController(
         _state.update { it.copy(loopRange = null) }
     }
 
-    fun seekTo(tick: Long) {
+    fun seekTo(tick: Long) = SessionLane.run {
         player?.seekTo(tick)
         val target = player?.tick?.value ?: tick
         session?.seekTo(target)
         publishTick()
     }
 
-    fun stepForward() {
+    fun stepForward() = SessionLane.run {
         player?.stepForward()
         seekSessionToPlayer()
         publishTick()
     }
 
-    fun stepBackward() {
+    fun stepBackward() = SessionLane.run {
         player?.stepBackward()
         seekSessionToPlayer()
         publishTick()
     }
 
-    fun toggle() {
-        val currentPlayer = player ?: return
+    fun toggle() = SessionLane.run {
+        val currentPlayer = player ?: return@run
         if (!currentPlayer.playing.value && currentPlayer.tick.value == 0L) {
             currentPlayer.seekTo(session?.currentTick ?: 0L)
         }
+        val starting = !currentPlayer.playing.value
+        if (starting) {
+            notifyPlayback(true)
+            session?.setHostedEnabled(false)
+        }
         currentPlayer.toggle()
+        val playing = currentPlayer.playing.value
+        _state.update { it.copy(isPlaying = playing, tick = currentPlayer.tick.value) }
+        syncSession(currentPlayer.tick.value, playing)
+        notifyPlayback(playing)
     }
 
-    fun stop() {
+    fun stop() = SessionLane.run {
         player?.stop()
         seekSessionToPlayer()
         publishTick()
+        session?.setHostedEnabled(true)
+        _state.update { it.copy(isPlaying = false) }
+        notifyPlayback(false)
     }
 
-    fun reset() {
+    fun reset() = SessionLane.run {
         traceState("playback.reset session=${session?.traceId} playerTick=${player?.tick?.value}")
         player?.reset()
         session?.reset()
@@ -155,7 +187,7 @@ class PlaybackController(
         publishTick()
     }
 
-    fun close() {
+    fun close() = SessionLane.run {
         releasePlayer()
         session = null
         practiceSyncEnabled = true
@@ -195,5 +227,6 @@ class PlaybackController(
         pitchesJob = null
         player?.stop()
         player = null
+        playbackActive = false
     }
 }

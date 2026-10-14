@@ -16,6 +16,8 @@ enum class MidiDiagnosticProblem {
     RUNTIME_FAILED,
 }
 
+enum class RecordingDiagnosticOperation { SAVE, LOAD, CLEANUP }
+
 sealed interface AppDiagnostic {
     data class Import(val cause: Throwable) : AppDiagnostic
 
@@ -32,6 +34,11 @@ sealed interface AppDiagnostic {
     data class Midi(
         val problem: MidiDiagnosticProblem,
         val cause: Throwable? = null,
+    ) : AppDiagnostic
+
+    data class Recording(
+        val operation: RecordingDiagnosticOperation,
+        val cause: Throwable,
     ) : AppDiagnostic
 }
 

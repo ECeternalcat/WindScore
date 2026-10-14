@@ -61,3 +61,12 @@ actual fun loadScoreHistory(scoreId: String): List<ScoreRecord> = ScoreHistorySt
 
 actual fun appendScoreRecord(scoreId: String, record: ScoreRecord): List<ScoreRecord> =
     ScoreHistoryStorage.append(scoreId, record)
+
+actual fun savePracticeAttempt(attempt: com.windscore.core.practice.PracticeAttempt) {
+    AttemptStorage.save(attempt)
+}
+
+actual fun loadPracticeAttempts(scoreId: String): List<com.windscore.core.practice.PracticeAttempt> =
+    AttemptStorage.load(scoreId)
+
+actual fun cleanupAttemptTempFiles(): Int = AttemptStorage.cleanupTempFiles()

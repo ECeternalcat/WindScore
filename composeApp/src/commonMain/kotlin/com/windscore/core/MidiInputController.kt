@@ -4,7 +4,9 @@ import com.windscore.audio.AudioSynth
 import com.windscore.midi.MidiDiagnostic
 import com.windscore.midi.MidiEvent
 import com.windscore.midi.MidiManager
+import com.windscore.midi.MidiRecordingSink
 import com.windscore.core.traceState
+import com.windscore.core.engine.SessionLane
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -48,8 +50,18 @@ class MidiInputController(
 
     private val handlers: List<MidiNoteHandler> get() = _handlers.value
 
+    private val _recordingSink = MutableStateFlow<MidiRecordingSink?>(null)
+
+    /** Non-consuming recording side channel: sees every dispatched event before synth/handlers. */
+    var recordingSink: MidiRecordingSink?
+        get() = _recordingSink.value
+        set(value) {
+            _recordingSink.value = value
+        }
+
     private var collectJob: Job? = null
     private var diagnosticJob: Job? = null
+    private var generation = 0L
 
     init {
         diagnosticJob = scope.launch {
@@ -62,6 +74,14 @@ class MidiInputController(
                 }
                 val cause = (diagnostic as? MidiDiagnostic.DeviceOpenFailed)?.cause
                 diagnostics?.report(AppDiagnostic.Midi(problem, cause))
+                SessionLane.run {
+                    if (diagnostic == MidiDiagnostic.Disconnected) {
+                        runCatching { _recordingSink.value?.onMidiDisconnected() }
+                        stop()
+                    } else if (diagnostic == MidiDiagnostic.Unsupported || diagnostic == MidiDiagnostic.NoInputDevice) {
+                        stop()
+                    }
+                }
             }
         }
     }
@@ -76,7 +96,7 @@ class MidiInputController(
 
     fun toggle() = setRunning(!_running.value)
 
-    fun setRunning(enabled: Boolean) {
+    fun setRunning(enabled: Boolean) = SessionLane.run {
         if (enabled) start() else stop()
     }
 
@@ -86,8 +106,11 @@ class MidiInputController(
         diagnosticJob = null
     }
 
-    internal fun dispatch(event: MidiEvent) {
+    internal fun dispatch(event: MidiEvent) = SessionLane.run {
         traceState("midi.dispatch event=$event")
+        _recordingSink.value?.let { sink ->
+            runCatching { sink.onMidiEvent(event) }
+        }
         when (event) {
             is MidiEvent.NoteOn -> {
                 synth.noteOn(event.pitch, event.velocity)
@@ -103,15 +126,30 @@ class MidiInputController(
     private fun start() {
         if (_running.value) return
         _running.value = true
-        synth.start()
-        midiManager.start()
+        val currentGeneration = ++generation
+        try {
+            synth.start()
+            midiManager.start()
+            runCatching { _recordingSink.value?.onMidiEnabledChanged(true) }
+        } catch (error: Exception) {
+            diagnostics?.report(AppDiagnostic.Midi(MidiDiagnosticProblem.RUNTIME_FAILED, error))
+            stop()
+            return
+        }
         collectJob = scope.launch {
             try {
-                midiManager.events.collect { dispatch(it) }
+                midiManager.events.collect { event ->
+                    SessionLane.run {
+                        if (_running.value && generation == currentGeneration) dispatch(event)
+                    }
+                }
             } catch (error: Exception) {
                 if (error is CancellationException) throw error
                 diagnostics?.report(AppDiagnostic.Midi(MidiDiagnosticProblem.RUNTIME_FAILED, error))
-                stop()
+                SessionLane.run {
+                    runCatching { _recordingSink.value?.onMidiDisconnected() }
+                    stop()
+                }
             }
         }
     }
@@ -119,6 +157,8 @@ class MidiInputController(
     private fun stop() {
         if (!_running.value) return
         _running.value = false
+        generation++
+        runCatching { _recordingSink.value?.onMidiEnabledChanged(false) }
         collectJob?.cancel()
         collectJob = null
         midiManager.stop()

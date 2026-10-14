@@ -20,6 +20,8 @@ fun main() = application {
 
     var spaceCount by remember { mutableIntStateOf(0) }
     var darkTheme by remember { mutableStateOf(false) }
+    var collectionExportBusy by remember { mutableStateOf(false) }
+    var collectionExportBusyLabel by remember { mutableStateOf("Saving collection…") }
 
     DisposableEffect(Unit) {
         val mgr = KeyboardFocusManager.getCurrentKeyboardFocusManager()
@@ -40,8 +42,8 @@ fun main() = application {
     }
 
     Window(
-        onCloseRequest = ::exitApplication,
-        title = "WindScore",
+        onCloseRequest = { if (!collectionExportBusy) exitApplication() },
+        title = if (collectionExportBusy) "WindScore — $collectionExportBusyLabel" else "WindScore",
         state = windowState,
     ) {
         androidx.compose.runtime.LaunchedEffect(Unit) {
@@ -60,6 +62,10 @@ fun main() = application {
             isCompact = false,
             spacePressed = spaceCount,
             onDarkThemeChanged = { darkTheme = it },
+            onCollectionExportBusyChange = { busy, label ->
+                collectionExportBusy = busy
+                collectionExportBusyLabel = label
+            },
         )
     }
 }

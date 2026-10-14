@@ -38,6 +38,8 @@ import com.windscore.audio.createAudioSynth
 import com.windscore.core.engine.PlaybackController
 import com.windscore.core.engine.PracticeController
 import com.windscore.core.engine.ScoringController
+import com.windscore.core.engine.ScoringPhase
+import com.windscore.core.engine.SessionLane
 import com.windscore.core.ScoreLibraryController
 import com.windscore.core.AppSettingsController
 import com.windscore.core.OpenedScore
@@ -47,6 +49,8 @@ import com.windscore.core.MidiDiagnosticProblem
 import com.windscore.core.MidiInputController
 import com.windscore.core.model.PracticeMode
 import com.windscore.core.model.Score
+import com.windscore.core.practice.AttemptConditions
+import com.windscore.core.practice.PracticeRecordingController
 import com.windscore.midi.MidiManager
 import com.windscore.ui.PlayerScreen
 import com.windscore.ui.SettingsScreen
@@ -77,6 +81,7 @@ fun App(
     isCompact: Boolean = false,
     spacePressed: Int = 0,
     onDarkThemeChanged: (Boolean) -> Unit = {},
+    onCollectionExportBusyChange: (Boolean, String) -> Unit = { _, _ -> },
 ) {
     var currentScore by remember { mutableStateOf<Score?>(null) }
     var pendingOpenedScore by remember { mutableStateOf<OpenedScore?>(null) }
@@ -131,6 +136,7 @@ fun App(
                     MidiDiagnosticProblem.DISCONNECTED -> currentStrings.midiDisconnected
                     else -> currentStrings.midiUnavailable
                 }
+                is AppDiagnostic.Recording -> currentStrings.storageUnavailable
             }
         }
     }
@@ -146,6 +152,8 @@ fun App(
     // 评分历史（当前乐谱）+ 历史对话框
     var scoreHistory by remember { mutableStateOf<List<com.windscore.core.model.ScoreRecord>>(emptyList()) }
     var showHistoryDialog by remember { mutableStateOf(false) }
+    var showAttemptDiagnostics by remember { mutableStateOf(false) }
+    var collectionExportBusy by remember { mutableStateOf(false) }
 
 
 
@@ -179,6 +187,15 @@ fun App(
     midiInput.register(scoring)
     midiInput.register(practice)
     val running by midiInput.running.collectAsState()
+
+    // 长期练习记录层：在 dispatch 边界录制原始 MIDI，不参与事件仲裁
+    val recording = remember {
+        PracticeRecordingController(scope, diagnostics = diagnostics).apply {
+            onMidiEnabledChanged(midiInput.running.value)
+        }
+    }
+    midiInput.recordingSink = recording
+    playback.onPlaybackActiveChanged = recording::setPlaybackActive
 
     val currentPracticeTick = session?.currentTick ?: 0L
     val currentPracticeLoop = session?.takeIf { it.isLoopActive }?.loopRange
@@ -239,6 +256,7 @@ fun App(
             playback.close()
             practice.close()
             scoring.close()
+            recording.close()
             settingsController.close()
             midiInput.close()
             midiManager.stop()
@@ -249,7 +267,19 @@ fun App(
         scoreHistory = libraryHistory
     }
 
-    fun applyOpenedScore(score: Score, scoreSettings: com.windscore.core.model.ScoreSettings?) {
+    fun currentAttemptConditions(mode: PracticeMode = practice.state.value.mode): AttemptConditions? {
+        val score = currentScore ?: return null
+        return AttemptConditions(
+            score = score,
+            mode = mode,
+            viewMode = viewMode,
+            loopRange = practice.state.value.session?.takeIf { it.isLoopActive }?.loopRange,
+            speed = playback.state.value.speed,
+            session = practice.state.value.session,
+        )
+    }
+
+    fun applyOpenedScore(score: Score, scoreSettings: com.windscore.core.model.ScoreSettings?) = SessionLane.run {
         val restoreSettings = scoreSettings != null
         val scoreId = score.id.takeIf { it.isNotEmpty() } ?: score.rawXml?.let { com.windscore.core.calculateMd5(it) } ?: ""
         val finalScore = score.copy(id = scoreId)
@@ -290,6 +320,17 @@ fun App(
             metronomeVolume = scoreSettings?.metronomeVol ?: playbackState.metronomeVolume,
         )
 
+        recording.beginPracticeSession(
+            AttemptConditions(
+                score = finalScore,
+                mode = practice.state.value.mode,
+                viewMode = viewMode,
+                loopRange = activeSession.takeIf { it.isLoopActive }?.loopRange,
+                speed = playback.state.value.speed,
+                session = activeSession,
+            ),
+        )
+
     }
 
     LaunchedEffect(openedScore) {
@@ -316,7 +357,11 @@ fun App(
         library.open(score)
     }
 
-    fun closeScore() {
+    fun closeScore() = SessionLane.run {
+        if (collectionExportBusy) {
+            showPlatformToast(tr.collectionSaving)
+            return@run
+        }
         library.cancelOpening()
         library.clearActiveScore()
         val score = currentScore
@@ -336,6 +381,7 @@ fun App(
             settingsController.saveScoreNow(score.id, settings)
         }
         settingsController.clearActiveScore()
+        recording.endSession()
         playback.close()
         practice.close()
         scoring.exit()
@@ -343,40 +389,53 @@ fun App(
     }
 
     fun resetSession() {
-        playback.reset()
+        recording.changePractice(com.windscore.core.practice.AttemptEndReason.USER_RESTARTED) {
+            playback.reset()
+            currentAttemptConditions()
+        }
     }
 
     fun setPracticeMode(mode: PracticeMode) {
-        val newSession = practice.changeMode(mode) ?: return
-        playback.attachSession(newSession)
+        if (mode == practice.state.value.mode) return
+        recording.changePractice {
+            practice.changeMode(mode)?.let(playback::attachSession)
+            currentAttemptConditions()
+        }
     }
 
     /** 开始评分：以指定手别创建独立的评分 Session（从头开始），并确保 MIDI 采集已开启。 */
-    fun startScoring(mode: PracticeMode) {
-        val score = currentScore ?: return
-        playback.stop()
-        playback.setPracticeSyncEnabled(false)
-        scoring.start(score, mode)
-        // 评分靠实时弹奏驱动，自动开启 MIDI 采集（若尚未开启）
-        midiInput.setRunning(true)
+    fun startScoring(mode: PracticeMode) = SessionLane.run {
+        val score = currentScore ?: return@run
+        recording.scoringStarted {
+            playback.stop()
+            playback.setPracticeSyncEnabled(false)
+            val scoringSession = scoring.start(score, mode)
+            midiInput.setRunning(true)
+            currentAttemptConditions(mode)?.copy(session = scoringSession, speed = 1f, loopRange = null)
+        }
     }
 
     /** 退出评分：释放评分 Session 并回到评分设置态。 */
-    fun exitScoring() {
-        scoring.exit()
-        playback.setPracticeSyncEnabled(true)
+    fun exitScoring() = SessionLane.run {
+        recording.practiceResumed {
+            scoring.exit()
+            playback.setPracticeSyncEnabled(true)
+            currentAttemptConditions()
+        }
     }
 
     // 系统返回键/手势：优先关弹窗 → 回到欢迎页 → 双击返回退出
     var backPressedTime by remember { androidx.compose.runtime.mutableLongStateOf(0L) }
     PlatformBackHandler {
         when {
+            collectionExportBusy -> showPlatformToast(tr.collectionSaving)
             openingScore -> {
                 library.cancelOpening()
                 pendingOpenedScore = null
                 settingsController.clearActiveScore()
             }
             showHistoryDialog -> showHistoryDialog = false
+            showAttemptDiagnostics -> showAttemptDiagnostics = false
             showSettings -> showSettings = false
             currentScore != null -> closeScore()
             else -> {
@@ -437,8 +496,11 @@ fun App(
                             playback.setMetronomeVolume(it)
                         },
                         playbackSpeed = playbackSpeed,
-                        onPlaybackSpeedChange = {
-                            playback.setSpeed(it)
+                        onPlaybackSpeedChange = { speed ->
+                            if (speed.coerceIn(0f, 2f) != playback.state.value.speed) recording.changePractice {
+                                playback.setSpeed(speed)
+                                currentAttemptConditions()
+                            }
                         },
                         onSeek = { tick ->
                             when (loopSetupState) {
@@ -453,36 +515,48 @@ fun App(
                                     pendingLoopStart = null
                                     loopSetupState = LoopSetupState.IDLE
                                     toastMessage = tr.loopSetDone
-                                    playback.setLoop(range.first, range.last)
+                                    recording.changePractice {
+                                        playback.setLoop(range.first, range.last)
+                                        currentAttemptConditions()
+                                    }
                                 }
                                 LoopSetupState.WAITING_FOR_NEW_START -> {
                                     val end = s.loopRange.last
                                     val range = if (tick < end) tick..end else end..tick
                                     loopSetupState = LoopSetupState.IDLE
                                     toastMessage = tr.settingDone
-                                    playback.setLoop(range.first, range.last)
+                                    recording.changePractice {
+                                        playback.setLoop(range.first, range.last)
+                                        currentAttemptConditions()
+                                    }
                                 }
                                 LoopSetupState.WAITING_FOR_NEW_END -> {
                                     val start = s.loopRange.first
                                     val range = if (start < tick) start..tick else tick..start
                                     loopSetupState = LoopSetupState.IDLE
                                     toastMessage = tr.settingDone
-                                    playback.setLoop(range.first, range.last)
+                                    recording.changePractice {
+                                        playback.setLoop(range.first, range.last)
+                                        currentAttemptConditions()
+                                    }
                                 }
                                 LoopSetupState.IDLE -> {
                                     if (activeLoopRange != null) {
                                         toastMessage = tr.closeLoopFirst
                                     } else {
-                                        playback.seekTo(tick)
+                                        recording.changePractice {
+                                            playback.seekTo(tick)
+                                            currentAttemptConditions()
+                                        }
                                     }
                                 }
                             }
                         },
                         onStepForward = {
-                            playback.stepForward()
+                            recording.changePractice { playback.stepForward(); currentAttemptConditions() }
                         },
                         onStepBackward = {
-                            playback.stepBackward()
+                            recording.changePractice { playback.stepBackward(); currentAttemptConditions() }
                         },
                         onBack = { closeScore() },
                         onToggleMidi = {
@@ -490,7 +564,12 @@ fun App(
                         },
                         onReset = { resetSession() },
                         onModeChange = { setPracticeMode(it) },
-                        onViewChange = { viewMode = it },
+                        onViewChange = { view ->
+                            if (view != viewMode) recording.changePractice {
+                                viewMode = view
+                                currentAttemptConditions()
+                            }
+                        },
                         onLoopStart = {
                             if (activeLoopRange != null) {
                                 loopSetupState = LoopSetupState.WAITING_FOR_NEW_START
@@ -507,14 +586,19 @@ fun App(
                             }
                         },
                         onClearLoop = {
-                            playback.clearLoop()
-                            pendingLoopStart = null
-                            loopSetupState = LoopSetupState.IDLE
+                            recording.changePractice {
+                                playback.clearLoop()
+                                pendingLoopStart = null
+                                loopSetupState = LoopSetupState.IDLE
+                                currentAttemptConditions()
+                            }
                         },
                         onTogglePlay = {
                             playback.toggle()
                         },
-                        onStopPlay = { playback.stop() },
+                        onStopPlay = {
+                            recording.changePractice { playback.stop(); currentAttemptConditions() }
+                        },
                         onRenderTime = { renderMs = it },
                         onShowSettings = { showSettings = true },
                         toastMessage = toastMessage,
@@ -525,6 +609,7 @@ fun App(
                         onExitScoring = { exitScoring() },
                         scoreHistory = scoreHistory,
                         onShowHistory = { showHistoryDialog = true },
+                        onShowAttemptDiagnostics = { showAttemptDiagnostics = true },
                         appConfig = appConfig,
                     )
 
@@ -561,6 +646,36 @@ fun App(
                             com.windscore.ui.ScoreHistoryContent(
                                 records = scoreHistory,
                                 onDismiss = { showHistoryDialog = false },
+                            )
+                        }
+                    }
+
+                    // Attempt 记录诊断（开发用）
+                    SettingsDialog(
+                        visible = showAttemptDiagnostics,
+                        onDismiss = {
+                            if (collectionExportBusy) showPlatformToast(tr.collectionSaving)
+                            else showAttemptDiagnostics = false
+                        },
+                        title = tr.collectionTitle,
+                        darkTheme = isDarkTheme,
+                    ) {
+                        Surface(
+                            modifier = Modifier.fillMaxSize(),
+                            color = windScoreColors().canvas,
+                        ) {
+                            com.windscore.ui.AttemptDiagnosticsContent(
+                                scoreId = currentScore?.id.orEmpty(),
+                                loadAttempts = recording::loadDurableAttempts,
+                                onDismiss = {
+                                    if (collectionExportBusy) showPlatformToast(tr.collectionSaving)
+                                    else showAttemptDiagnostics = false
+                                },
+                                appVersion = com.windscore.ui.attemptExportAppVersion(),
+                                onExportBusyChange = {
+                                    collectionExportBusy = it
+                                    onCollectionExportBusyChange(it, tr.collectionSaving)
+                                },
                             )
                         }
                     }

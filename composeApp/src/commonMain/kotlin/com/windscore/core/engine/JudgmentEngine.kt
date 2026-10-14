@@ -48,6 +48,19 @@ class JudgmentEngine(
 
     private val totalTicks: Long = score.totalTicks
 
+    private val completedGroups = mutableListOf<CompletedGroup>()
+
+    /** Only performance advancement emits evidence; seek/reset/step never do. */
+    data class CompletedGroup(
+        val tick: Long,
+        val group: Int,
+        val boundaryTick: Long,
+        val completedPass: Boolean,
+        val fullCompletion: Boolean,
+    )
+
+    fun drainCompletedGroups(): List<CompletedGroup> = completedGroups.toList().also { completedGroups.clear() }
+
     private var groupIndex = 0
     private val activeKeys = mutableSetOf<Int>()
     /** Session-local note hit state; score data remains immutable and shareable. */
@@ -210,7 +223,7 @@ class JudgmentEngine(
     fun isActiveTrack(track: TrackType): Boolean = trackSelection.isActiveTrack(track)
 
     /** 用户按下某音高。返回本次新到达组应自动托管的音。 */
-    fun onNoteOn(pitch: Int): List<NoteEntity> {
+    fun onNoteOn(pitch: Int, allowHostedAdvance: Boolean = true): List<NoteEntity> {
         if (activeKeys.add(pitch)) {
             freshKeys.add(pitch)
         }
@@ -218,7 +231,7 @@ class JudgmentEngine(
         // 当前为纯托管组时，用户按键不推进，由上层按真实节奏调度 advanceHosted
         val group = groups.getOrNull(groupIndex) ?: return emptyList()
         if (group.none { isActiveTrack(it.track) }) return emptyList()
-        return step()
+        return step(allowHostedAdvance)
     }
 
     fun onNoteOff(pitch: Int) {
@@ -275,10 +288,11 @@ class JudgmentEngine(
      * A/B 循环：当推进后的下一组起始 tick >= 循环终点时，自动回卷到循环起点，
      * 并将循环范围内的音符重置为未命中，以便长辈反复练习。
      */
-    private fun step(): List<NoteEntity> {
+    private fun step(allowHostedAdvance: Boolean = true): List<NoteEntity> {
         val hostedPlayed = mutableListOf<NoteEntity>()
         while (groupIndex < groups.size) {
             val group = groups[groupIndex]
+            if (!allowHostedAdvance && group.none { isActiveTrack(it.track) }) break
             // 游标落到新组 → 托管该组的非练习轨道音
             if (groupIndex > lastArrivedGroupIndex) {
                 val hosted = group.filter { !isActiveTrack(it.track) }
@@ -298,13 +312,22 @@ class JudgmentEngine(
                     cleanHitCount += group.count { isActiveTrack(it.track) }
                 }
                 group.forEach { hitNoteIds.add(it.id) }
+                val completedIndex = groupIndex
                 groupIndex++
+                val passEnd = loopEnabled && (groupIndex >= groups.size || currentTick >= loopEndTick)
+                completedGroups += CompletedGroup(
+                    tick = group.first().startTick,
+                    group = completedIndex,
+                    boundaryTick = if (passEnd) loopEndTick else currentTick,
+                    completedPass = passEnd,
+                    fullCompletion = !loopEnabled && groupIndex >= groups.size,
+                )
                 freshKeys.clear()
                 currentGroupDirty = false
                 // A/B 循环边界检测：下一组起点已越过循环终点，回卷
-                if (loopEnabled && groupIndex < groups.size && currentTick >= loopEndTick) {
+                if (passEnd) {
                     jumpToLoopStart()
-                    continue // 继续循环处理新位置
+                    break // explicit pass boundary, including single-group and score-final loops
                 }
                 // 纯托管组不连续 burst；返回给上层按节奏调度
                 if (required.isEmpty()) break
