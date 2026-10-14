@@ -89,3 +89,63 @@ Full desktop suite (including the enharmonic tie refinement): **170 executed,
 169 passed, 1 failed, 0 errors/skipped**. Only the original tempo-change regression
 remains. Original loop regressions and focused overshoot, sustain cutoff,
 beyond-last-note, B-seek and zero-length-region checks pass.
+
+
+## Phase 4: tempo maps and transport rebasing
+
+`TempoChange` stores quarter-notes-per-minute at a canonical tick. `ScoreTiming`
+integrates that piecewise map and provides its inverse. MusicXML sound tempo,
+decimal BPM, standalone sound elements and playback offsets are retained.
+Fractional playback offsets extend the exact canonical resolution when needed;
+visual-only direction offsets do not move sound. Sound-level offsets take
+precedence. Initial tempo remains available as rounded compatibility metadata;
+legacy fixed-tempo scores retain their existing 120 BPM fallback when unspecified.
+
+Ambiguity policy: contradictory simultaneous tempos in different parts are
+reported as import errors. The last declaration at the same position within one
+part wins. Tempo 0 requests explicit user input under MusicXML; this application
+has no such import prompt, so it reports that requirement instead of silently
+choosing a speed. Nonpositive/nonfinite tempos are rejected. Repeat unfolding and
+visual metronome-only directions are outside this fix.
+
+Playback applies speed to elapsed time through the map without rewriting note
+onsets. Pause, seek, reset and loop presentation pauses rebase elapsed time.
+Commands and scheduler mutations use the existing `SessionLane`; generation
+ownership stops cancelled jobs from changing the replacement transport state.
+Paused/seeked sustains are restored when playback resumes, while notes beginning
+outside the selected loop remain excluded. Existing anti-burst lag handling and
+loop presentation pauses are retained.
+
+Hosted wait-mode intervals and note durations use the same map. Waiting for a
+user does not independently advance score position. Hosted sustains are no longer
+clipped to 60–4000 ms: musical duration is rounded up to at least 1 ms and clipped
+at an active loop's B boundary. A focused test observes a five-second sustain
+across a tempo change. Variable-tempo attempts do not claim a single fixed BPM;
+fixed decimal-tempo metadata is calculated before rounding. Historical attempts
+are not rewritten.
+
+Score parser version: 4. Missing serialized version still decodes as 1, ensuring
+legacy caches omitting default fields cannot masquerade as current. Cache upgrades
+retain the original previous model as `<scoreId>.cache.v<parserVersion>` for
+historical tick/group interpretation, without overwriting an existing archive.
+One failed source reparse does not hide unrelated valid library entries; the
+original source and persisted index are retained by loading.
+
+Final complete desktop suite: **189 executed, 189 passed, 0 failures/errors/skipped**.
+All six original regression tests and their assertions are byte-for-byte unchanged
+from the baseline commit. Coverage includes timing integration/inverse, decimal
+and fractional offsets, multi-part tempo agreement/conflicts, versioned cache
+round-trips and archives, metadata, speed, pause/resume, playing seek/reset, loop
+clock rebasing, hosted wait-mode timing and long sustains. The fake-clock transport
+tests control monotonic readings while retaining the real coroutine scheduler.
+Original tempo and hosted-duration regressions also observe real elapsed time.
+
+An intermediate hosted test observed the audio callback before session state
+publication completed. Its state assertion now synchronizes through SessionLane;
+no musical assertion was relaxed. This resolves observer ordering rather than
+hiding a timeout or changing the expected tick.
+
+Android APK/device builds and physical MIDI/audio-device checks were not run.
+Shared domain/JVM code, all common and desktop tests, and both Compose UI tests
+were validated through the desktop task. No MEI, Verovio, dependency changes,
+commits to remote repositories, or pull requests are involved.

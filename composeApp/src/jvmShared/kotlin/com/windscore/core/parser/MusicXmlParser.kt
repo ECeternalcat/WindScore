@@ -2,11 +2,14 @@ package com.windscore.core.parser
 
 import com.windscore.core.model.NoteEntity
 import com.windscore.core.model.Score
+import com.windscore.core.model.TempoChange
 import com.windscore.core.model.TrackType
 import org.w3c.dom.Element
 import org.w3c.dom.Node
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.math.BigDecimal
+import java.math.BigInteger
 import java.util.zip.ZipInputStream
 import javax.xml.parsers.DocumentBuilderFactory
 import kotlin.math.roundToInt
@@ -80,7 +83,8 @@ object MusicXmlParser {
         doc.documentElement.normalize()
 
         val (divisions, legacyTimingCompatible) = canonicalDivisions(doc)
-        var tempo = 0
+        data class RawTempo(val part: Int, val tick: Long, val bpm: Double)
+        val tempos = mutableListOf<RawTempo>()
         val title = readTitle(doc)
 
         data class TieKey(val part: Int, val voice: String, val pitch: Int, val number: String?)
@@ -163,13 +167,25 @@ object MusicXmlParser {
                                     sourceDivisions = (divNode.item(0) as Element).textContent.trim().toInt()
                                 }
                             }
-                            "direction" -> {
-                                val sound = node.getElementsByTagName("sound")
-                                if (sound.length > 0) {
-                                    val t = (sound.item(0) as Element).getAttribute("tempo")
-                                    if (t.isNotEmpty()) {
-                                        tempo = t.toDoubleOrNull()?.roundToInt() ?: 120
+                            "direction", "sound" -> {
+                                val sounds = if (node.nodeName == "sound") listOf(node) else {
+                                    val children = node.getElementsByTagName("sound")
+                                    (0 until children.length).map { children.item(it) as Element }
+                                }
+                                for (sound in sounds) {
+                                    val text = sound.getAttribute("tempo")
+                                    if (text.isEmpty()) continue
+                                    val bpm = text.toDoubleOrNull()
+                                    require(bpm != null && bpm.isFinite() && bpm > 0) {
+                                        "MusicXML tempo must be positive; tempo 0 requires an explicit user choice"
                                     }
+                                    val offset = playbackOffset(node, sound)
+                                    val delta = offset?.textContent?.trim()?.let {
+                                        BigDecimal(it).multiply(BigDecimal.valueOf((divisions / sourceDivisions).toLong())).longValueExact()
+                                    } ?: 0L
+                                    val position = Math.addExact(tickCursor, delta)
+                                    require(position >= 0) { "MusicXML tempo offset precedes the score" }
+                                    tempos.add(RawTempo(pi, position, bpm))
                                 }
                             }
                         }
@@ -235,6 +251,15 @@ object MusicXmlParser {
             )
         }.sortedWith(compareBy({ it.startTick }, { it.pitch }))
 
+        val tempoChanges = tempos.groupBy { it.tick }.toSortedMap().map { (tick, entries) ->
+            // Repeated part declarations agree; contradictory simultaneous global tempos cannot be guessed.
+            val effective = entries.groupBy { it.part }.values.map { it.last().bpm }.distinct()
+            require(effective.size == 1) { "Conflicting MusicXML tempos in different parts at tick $tick" }
+            TempoChange(tick, effective.single())
+        }
+        val initialTempo = if (tempoChanges.isEmpty()) 0 else
+            (tempoChanges.firstOrNull { it.tick == 0L }?.bpm ?: 120.0).roundToInt()
+
         val xmlText = xmlBytes.toString(Charsets.UTF_8)
         val xmlHash = com.windscore.core.calculateMd5(xmlText)
         return Score(
@@ -243,7 +268,8 @@ object MusicXmlParser {
             version = Score.CURRENT_VERSION,
             legacyTimingCompatible = legacyTimingCompatible,
             divisions = divisions,
-            tempo = tempo,
+            tempo = initialTempo,
+            tempoChanges = tempoChanges,
             totalTicks = maxOf(globalMaxTick, maxTick),
             rawXml = xmlText,
             supportsSheetView = true,
@@ -276,6 +302,26 @@ object MusicXmlParser {
                             textOf(node, "divisions")?.let { current = it.trim().toInt(); include(current) }
                         }
                         "note", "backup", "forward" -> include(current)
+                        "direction", "sound" -> {
+                            val sounds = if (node.nodeName == "sound") listOf(node) else {
+                                val children = node.getElementsByTagName("sound")
+                                (0 until children.length).map { children.item(it) as Element }
+                            }
+                            for (sound in sounds.filter { it.getAttribute("tempo").isNotEmpty() }) {
+                                val offset = playbackOffset(node, sound) ?: continue
+                                val value = BigDecimal(offset.textContent.trim()).stripTrailingZeros()
+                                if (value.scale() <= 0) continue
+                                require(value.scale() <= 30) { "MusicXML tempo offset exceeds supported tick resolution" }
+                                val power = BigInteger.TEN.pow(value.scale())
+                                val denominator = power / value.unscaledValue().abs().gcd(power)
+                                val required = denominator * BigInteger.valueOf(current.toLong())
+                                require(required <= BigInteger.valueOf(Int.MAX_VALUE.toLong())) {
+                                    "MusicXML tempo offset exceeds supported tick resolution"
+                                }
+                                include(current)
+                                include(required.toInt())
+                            }
+                        }
                     }
                     node = node.nextSibling
                 }
@@ -288,6 +334,13 @@ object MusicXmlParser {
         val duration = readDuration(el)
         require(duration >= 0) { "MusicXML duration must not be negative" }
         return Math.multiplyExact(duration, (divisions / sourceDivisions).toLong())
+    }
+
+    private fun playbackOffset(direction: Element, sound: Element): Element? {
+        val own = sound.getElementsByTagName("offset").item(0) as? Element
+        if (own != null) return own
+        return (direction.getElementsByTagName("offset").item(0) as? Element)
+            ?.takeIf { it.getAttribute("sound") == "yes" }
     }
 
     private fun readTieNumber(note: Element, type: String): String? {

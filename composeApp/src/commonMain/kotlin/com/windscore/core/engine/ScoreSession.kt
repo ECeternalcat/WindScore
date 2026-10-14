@@ -59,7 +59,7 @@ class ScoreSession(
     private val trackSelection = practiceMode.trackSelection()
     private val engine = JudgmentEngine(score, trackSelection, policy)
     private val sessionScope = CoroutineScope(scope.coroutineContext + SupervisorJob())
-    private val baseMsPerTick = 60_000.0 / ((score.tempo.takeIf { it > 0 } ?: 120) * (score.divisions.takeIf { it > 0 } ?: 4))
+    private val timing = ScoreTiming(score)
     private var speed = 1f
     private var closed = false
     private var hostedJob: Job? = null
@@ -237,12 +237,13 @@ class ScoreSession(
         val generation = ++hostedGeneration
         hostedJob?.cancel()
         if (closed || !isHostedEnabled || !interactiveStarted || finished || speed <= 0 || engine.pendingPitches().isNotEmpty()) return
-        val intervalTicks = hostedWrapFromTick?.let { completedTick ->
-            engine.currentLoopEnd - completedTick + engine.currentTick - engine.currentLoopStart
-        } ?: if (lastHostedTick < 0) 0L else engine.currentTick - lastHostedTick
+        val intervalMs = hostedWrapFromTick?.let { completedTick ->
+            timing.millisecondsBetween(completedTick, engine.currentLoopEnd) +
+                timing.millisecondsBetween(engine.currentLoopStart, engine.currentTick)
+        } ?: if (lastHostedTick < 0) 0.0 else timing.millisecondsBetween(lastHostedTick, engine.currentTick)
         // A positive musical interval must never truncate into a zero-delay hosted loop.
-        val delayMs = if (intervalTicks <= 0) 0L else
-            ceil(intervalTicks * baseMsPerTick / speed).toLong().coerceAtLeast(1)
+        val delayMs = if (intervalMs <= 0) 0L else
+            ceil(intervalMs / speed).toLong().coerceAtLeast(1)
         hostedJob = sessionScope.launch {
             if (delayMs > 0) delay(delayMs)
             SessionLane.run {
@@ -260,7 +261,9 @@ class ScoreSession(
         lastHostedTick = notes.maxOf { it.startTick }
         for (note in notes) {
             synth.noteOn(note.pitch, 80)
-            val duration = (note.durationTick * baseMsPerTick / speed).toLong().coerceIn(60, 4000)
+            val noteEnd = note.startTick + note.durationTick
+            val end = if (engine.isLoopActive) minOf(noteEnd, engine.currentLoopEnd) else noteEnd
+            val duration = ceil(timing.millisecondsBetween(note.startTick, end) / speed).toLong().coerceAtLeast(1)
             sessionScope.launch { delay(duration); synth.noteOff(note.pitch) }
         }
     }

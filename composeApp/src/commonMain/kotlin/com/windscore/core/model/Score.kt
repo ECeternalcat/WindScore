@@ -24,6 +24,7 @@ data class Score(
     val totalTicks: Long,
     val id: String = "",
     val fingerprint: Fingerprint = Fingerprint.EMPTY,
+    /** Keep 1 as the decode default for legacy caches; import explicitly stamps CURRENT_VERSION. */
     val version: Int = 1,
     /** 原始 MusicXML 文本（供 OSMD 看谱模式渲染；解析降维不需要）。 */
     @Transient
@@ -34,9 +35,11 @@ data class Score(
     val title: String = "",
     /** Whether legacy unversioned bookmarks use the same musical tick coordinates. */
     val legacyTimingCompatible: Boolean = true,
+    /** Empty in legacy fixed-tempo scores; otherwise sorted changes in canonical ticks. */
+    val tempoChanges: List<TempoChange> = emptyList(),
 ) {
     companion object {
-        const val CURRENT_VERSION = 3
+        const val CURRENT_VERSION = 4
         val EMPTY = Score(
             id = "",
             notes = emptyList(),
