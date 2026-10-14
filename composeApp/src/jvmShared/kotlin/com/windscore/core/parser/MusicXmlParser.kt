@@ -83,7 +83,7 @@ object MusicXmlParser {
         var tempo = 0
         val title = readTitle(doc)
 
-        data class TieKey(val part: Int, val voice: String, val spelling: String, val number: String?)
+        data class TieKey(val part: Int, val voice: String, val pitch: Int, val number: String?)
         data class RawNote(
             val pitch: Int,
             val stopKey: TieKey,
@@ -135,8 +135,8 @@ object MusicXmlParser {
                                     rawNotes.add(
                                         RawNote(
                                             pitch,
-                                            TieKey(pi, textOf(node, "voice")?.trim().orEmpty(), pitchSpelling(node), readTieNumber(node, "stop")),
-                                            TieKey(pi, textOf(node, "voice")?.trim().orEmpty(), pitchSpelling(node), readTieNumber(node, "start")),
+                                            TieKey(pi, textOf(node, "voice")?.trim().orEmpty(), pitch, readTieNumber(node, "stop")),
+                                            TieKey(pi, textOf(node, "voice")?.trim().orEmpty(), pitch, readTieNumber(node, "start")),
                                             staff, startTick, duration, tieStart, tieStop, fingering,
                                         )
                                     )
@@ -288,12 +288,6 @@ object MusicXmlParser {
         val duration = readDuration(el)
         require(duration >= 0) { "MusicXML duration must not be negative" }
         return Math.multiplyExact(duration, (divisions / sourceDivisions).toLong())
-    }
-
-    private fun pitchSpelling(note: Element): String {
-        val pitch = note.getElementsByTagName("pitch").item(0) as Element
-        val alter = textOf(pitch, "alter")?.trim()?.toIntOrNull() ?: 0
-        return "${textOf(pitch, "step")?.trim()}:$alter:${textOf(pitch, "octave")?.trim()}"
     }
 
     private fun readTieNumber(note: Element, type: String): String? {

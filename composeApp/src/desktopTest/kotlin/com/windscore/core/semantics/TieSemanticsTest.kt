@@ -46,10 +46,10 @@ class TieSemanticsTest {
     }
 
     @Test
-    fun enharmonicSameMidiPitchDoesNotSilentlyChangeTieIdentity() {
+    fun explicitEnharmonicTiePreservesOneSustainedSound() {
         val start = note("start").replace("<step>C</step>", "<step>C</step><alter>1</alter>")
         val stop = note("stop").replace("<step>C</step>", "<step>D</step><alter>-1</alter>")
-        assertEquals(2, parse("<part><measure>$start$stop</measure></part>").notes.size)
+        assertEquals(listOf(0L to 8L), parse("<part><measure>$start$stop</measure></part>").notes.map { it.startTick to it.durationTick })
     }
 
     private fun note(tie: String, voice: Int = 1, staff: Int = 1, duration: Int = 4,

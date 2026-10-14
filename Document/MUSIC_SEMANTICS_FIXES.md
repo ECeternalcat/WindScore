@@ -50,12 +50,12 @@ are outside the checkout under `/workspace/.windscore-setup`.
 
 ## Phase 2: tie identity and continuity
 
-Tie matching uses part, voice, spelled pitch, optional explicit tied number,
+Tie matching uses part, voice, sounding pitch, optional explicit tied number,
 and exact endpoint continuity. Staff is excluded. Multiple open unisons are
 retained rather than overwritten, and numbered stop/start chains may change
 numbers. Existing practice-hand assignment is retained from the attack.
 
-Ambiguity policy: voice changes, enharmonic spelling changes, gaps and unmatched
+Ambiguity policy: voice changes, gaps and unmatched
 stops remain independent attacks with an import warning. No cross-voice connection
 is guessed. Multiple equally eligible unnumbered ties produce a clear import
 error; explicit tied numbers resolve those unisons. These are conservative
@@ -65,3 +65,8 @@ Score parser version: 3; original source identity and historical data remain.
 Full desktop suite: **166 executed, 163 passed, 3 failed, 0 errors/skipped**.
 The remaining failures are the two loop regressions and tempo-change regression.
 Both original tie regressions and six focused tie edge-case tests pass.
+
+A follow-up check of the official MusicXML schema confirms explicit ties between
+enharmonically equivalent pitches are allowed. Tie identity therefore uses
+sounding pitch rather than spelling; the focused test covers C-sharp to D-flat.
+Source: https://github.com/w3c/musicxml/blob/master/schema/musicxml.xsd
