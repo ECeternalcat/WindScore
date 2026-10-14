@@ -111,23 +111,27 @@ class ScorePlayer(
                         }
                     }
 
-                    while (eventIndex < events.size && events[eventIndex].tick <= tickLong) {
-                        applyEvent(events[eventIndex])
+                    val currentLoop = loopRange
+                    val eventLimit = minOf(tickLong, currentLoop?.last ?: score.totalTicks)
+                    while (eventIndex < events.size && events[eventIndex].tick <= eventLimit) {
+                        val event = events[eventIndex]
+                        if (!event.on || currentLoop == null || (event.tick >= currentLoop.first && event.tick < currentLoop.last)) {
+                            applyEvent(event)
+                        }
                         eventIndex++
                     }
-                    
-                    val currentLoop = loopRange
+
                     if (currentLoop != null && tickLong >= currentLoop.last) {
                         // 1. Wait at the end of the loop so user can see the last notes
                         _tick.value = currentLoop.last
-                        _playingPitches.value = active.keys.toSet()
+                        silenceAll()
+                        _playingPitches.value = emptySet()
                         delay(500)
 
                         // 2. Snap back to the beginning of the loop
                         localTick = currentLoop.first.toDouble()
                         _tick.value = currentLoop.first
                         eventIndex = 0
-                        active.clear()
                         silenceAll()
                         while (eventIndex < events.size && events[eventIndex].tick < currentLoop.first) {
                             val e = events[eventIndex]
@@ -256,7 +260,8 @@ class ScorePlayer(
             active[e.pitch] = (active[e.pitch] ?: 0) + 1
             synth.noteOn(e.pitch, VELOCITY)
         } else {
-            val c = (active[e.pitch] ?: 0) - 1
+            val count = active[e.pitch] ?: return
+            val c = count - 1
             if (c <= 0) {
                 active.remove(e.pitch)
                 synth.noteOff(e.pitch)

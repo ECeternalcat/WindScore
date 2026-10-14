@@ -70,3 +70,22 @@ A follow-up check of the official MusicXML schema confirms explicit ties between
 enharmonically equivalent pitches are allowed. Tie identity therefore uses
 sounding pitch rather than spelling; the focused test covers C-sharp to D-flat.
 Source: https://github.com/w3c/musicxml/blob/master/schema/musicxml.xsd
+
+
+## Phase 3: loop endpoints and empty regions
+
+Playback dispatch is capped at B before wrapping; onsets at B or beyond are
+excluded even if a scheduler update overshoots. Sounding notes are released at B.
+Existing 500 ms end/start presentation pauses are retained. Off events without
+an active note no longer emit unrelated releases.
+
+Judgment seek/reset selects only groups inside `[A,B)`. Empty regions retain the
+selected range and position at B with no pending group, no hosted scheduling,
+and no performance-completion evidence. Clearing/resetting returns to full-score
+practice. Seek/reset clears stale transition evidence. No event representation
+or cache version change is needed for this phase.
+
+Full desktop suite (including the enharmonic tie refinement): **170 executed,
+169 passed, 1 failed, 0 errors/skipped**. Only the original tempo-change regression
+remains. Original loop regressions and focused overshoot, sustain cutoff,
+beyond-last-note, B-seek and zero-length-region checks pass.
