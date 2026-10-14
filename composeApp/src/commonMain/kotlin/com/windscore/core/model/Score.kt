@@ -32,9 +32,11 @@ data class Score(
     val supportsSheetView: Boolean = false,
     /** 乐谱标题，用于乐谱库列表显示。为空时由 UI 层显示本地化的“未命名乐谱”。 */
     val title: String = "",
+    /** Whether legacy unversioned bookmarks use the same musical tick coordinates. */
+    val legacyTimingCompatible: Boolean = true,
 ) {
     companion object {
-        const val CURRENT_VERSION = 1
+        const val CURRENT_VERSION = 2
         val EMPTY = Score(
             id = "",
             notes = emptyList(),

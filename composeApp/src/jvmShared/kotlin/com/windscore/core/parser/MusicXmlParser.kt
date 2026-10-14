@@ -79,7 +79,7 @@ object MusicXmlParser {
         val doc = factory.newDocumentBuilder().parse(ByteArrayInputStream(xmlBytes))
         doc.documentElement.normalize()
 
-        var divisions = 4
+        val (divisions, legacyTimingCompatible) = canonicalDivisions(doc)
         var tempo = 0
         val title = readTitle(doc)
 
@@ -102,6 +102,7 @@ object MusicXmlParser {
         val parts = doc.getElementsByTagName("part")
         for (pi in 0 until parts.length) {
             val part = parts.item(pi) as Element
+            var sourceDivisions = 4
             // 每个 part 重置时间轴游标，但 globalMaxTick 跨 part 累计，确保多 Part 总谱总时长正确
             tickCursor = 0L
             maxTick = 0L
@@ -116,7 +117,7 @@ object MusicXmlParser {
                         when (node.nodeName) {
                             "note" -> {
                                 val isChord = node.getElementsByTagName("chord").length > 0
-                                val duration = readDuration(node)
+                                val duration = normalizedDuration(node, sourceDivisions, divisions)
                                 val pitch = readPitch(node)
                                 val staff = readStaff(node)
                                 val (tieStart, tieStop) = readTies(node)
@@ -140,18 +141,18 @@ object MusicXmlParser {
                                 }
                             }
                             "backup" -> {
-                                val d = readDuration(node)
+                                val d = normalizedDuration(node, sourceDivisions, divisions)
                                 tickCursor -= d
                             }
                             "forward" -> {
-                                val d = readDuration(node)
+                                val d = normalizedDuration(node, sourceDivisions, divisions)
                                 tickCursor += d
                                 if (tickCursor > maxTick) maxTick = tickCursor
                             }
                             "attributes" -> {
                                 val divNode = node.getElementsByTagName("divisions")
                                 if (divNode.length > 0) {
-                                    divisions = (divNode.item(0) as Element).textContent.trim().toInt()
+                                    sourceDivisions = (divNode.item(0) as Element).textContent.trim().toInt()
                                 }
                             }
                             "direction" -> {
@@ -232,6 +233,8 @@ object MusicXmlParser {
         return Score(
             id = xmlHash,
             notes = finalNotes,
+            version = Score.CURRENT_VERSION,
+            legacyTimingCompatible = legacyTimingCompatible,
             divisions = divisions,
             tempo = tempo,
             totalTicks = maxOf(globalMaxTick, maxTick),
@@ -239,6 +242,45 @@ object MusicXmlParser {
             supportsSheetView = true,
             title = title,
         )
+    }
+
+    /** Exact common tick resolution; retain the original resolution for uniform inputs. */
+    private fun canonicalDivisions(doc: org.w3c.dom.Document): Pair<Int, Boolean> {
+        var resolution = 1L
+        val resolutions = mutableSetOf<Int>()
+        fun include(value: Int) {
+            require(value > 0) { "MusicXML divisions must be positive" }
+            var a = resolution
+            var b = value.toLong()
+            while (b != 0L) { val rest = a % b; a = b; b = rest }
+            resolution = Math.multiplyExact(resolution / a, value.toLong())
+            require(resolution <= Int.MAX_VALUE) { "MusicXML divisions exceed supported tick resolution" }
+            resolutions += value
+        }
+        val parts = doc.getElementsByTagName("part")
+        for (pi in 0 until parts.length) {
+            var current = 4
+            val measures = (parts.item(pi) as Element).getElementsByTagName("measure")
+            for (mi in 0 until measures.length) {
+                var node = measures.item(mi).firstChild
+                while (node != null) {
+                    if (node is Element) when (node.nodeName) {
+                        "attributes" -> {
+                            textOf(node, "divisions")?.let { current = it.trim().toInt(); include(current) }
+                        }
+                        "note", "backup", "forward" -> include(current)
+                    }
+                    node = node.nextSibling
+                }
+            }
+        }
+        return (if (resolutions.isEmpty()) 4 else resolution.toInt()) to (resolutions.size <= 1)
+    }
+
+    private fun normalizedDuration(el: Element, sourceDivisions: Int, divisions: Int): Long {
+        val duration = readDuration(el)
+        require(duration >= 0) { "MusicXML duration must not be negative" }
+        return Math.multiplyExact(duration, (divisions / sourceDivisions).toLong())
     }
 
     private fun readTitle(doc: org.w3c.dom.Document): String {

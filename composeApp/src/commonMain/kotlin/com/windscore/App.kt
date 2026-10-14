@@ -290,7 +290,7 @@ fun App(
         currentScore = finalScore
 
         if (restoreSettings) {
-            val restored = checkNotNull(scoreSettings)
+            val restored = checkNotNull(scoreSettings).restorePositionFor(finalScore)
             viewMode = restored.viewMode
             countdownEnabled = restored.countdownEnabled
             pendingLoopStart = restored.loopStartTick

@@ -9,9 +9,9 @@ import java.io.File
  */
 internal object SettingsStorage {
 
-    private val settingsDir: File get() = File(getAppStorageDir(), "settings")
 
-    fun load(scoreId: String): ScoreSettings {
+    fun load(scoreId: String, baseDir: File = File(getAppStorageDir())): ScoreSettings {
+        val settingsDir = File(baseDir, "settings")
         if (scoreId.isEmpty()) return ScoreSettings()
         val file = File(settingsDir, "$scoreId.json")
         return try {
@@ -31,13 +31,20 @@ internal object SettingsStorage {
         }
     }
 
-    fun save(scoreId: String, settings: ScoreSettings) {
+    fun save(scoreId: String, settings: ScoreSettings, baseDir: File = File(getAppStorageDir())) {
+        val settingsDir = File(baseDir, "settings")
         if (scoreId.isEmpty()) return
         try {
             if (!settingsDir.exists()) {
                 settingsDir.mkdirs()
             }
             val file = File(settingsDir, "$scoreId.json")
+            // Retain old unversioned coordinates before the first version-aware save.
+            val legacy = File(settingsDir, "$scoreId.legacy.json")
+            if (file.exists() && !legacy.exists() && settings.scoreVersion != null) {
+                val previous = runCatching { Json.decodeFromString(ScoreSettings.serializer(), file.readText()) }.getOrNull()
+                if (previous != null && previous.scoreVersion == null) legacy.atomicWriteBytes(file.readBytes())
+            }
             val jsonText = Json.encodeToString(ScoreSettings.serializer(), settings)
             file.atomicWriteText(jsonText)
         } catch (e: Exception) {

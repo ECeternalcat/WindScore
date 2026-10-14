@@ -65,7 +65,7 @@ internal object RecentsStorage {
                 val scoreToCache = score.copy(
                     id = xmlHash,
                     fingerprint = fingerprint,
-                    version = Score.CURRENT_VERSION,
+                    version = score.version,
                     supportsSheetView = true,
                 )
                 try {
