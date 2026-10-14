@@ -14,6 +14,20 @@ import kotlin.time.TimeSource
 
 class PlaybackTimingTest {
     @Test
+    fun exactReleaseSeekDoesNotRetriggerExpiredNotesOrCutAnOverlappingSustain() = runBlocking {
+        val score = Score(listOf(note(0, 60, 0, 10), note(1, 60, 5, 20), note(2, 62, 10)), 100, 120, 40)
+        Harness(score).use { h ->
+            h.player.seekTo(10)
+            h.player.play()
+            assertEquals(60, withTimeout(2_000) { h.onsets.receive() })
+            assertEquals(62, withTimeout(2_000) { h.onsets.receive() })
+            h.step(20, 14)
+            assertTrue(h.player.playingPitches.value.contains(60))
+            assertFalse(h.onsets.tryReceive().isSuccess)
+        }
+    }
+
+    @Test
     fun hostedSustainAcrossTempoChangeIsNotTruncatedAtFourSeconds() = runBlocking {
         val origin = TimeSource.Monotonic.markNow()
         val onsets = Channel<Long>(Channel.UNLIMITED)

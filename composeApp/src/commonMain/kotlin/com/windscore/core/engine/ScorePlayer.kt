@@ -196,7 +196,9 @@ class ScorePlayer(
         eventIndex = 0
         active.clear()
         val region = playbackRegion()
-        while (eventIndex < events.size && events[eventIndex].tick < target) {
+        // Apply exact-target releases before restoring sustains; exact-target attacks stay pending.
+        while (eventIndex < events.size && (events[eventIndex].tick < target ||
+                    (events[eventIndex].tick == target && !events[eventIndex].on))) {
             val event = events[eventIndex++]
             if (!region.containsNoteAt(event.onset)) continue
             val count = (active[event.pitch] ?: 0) + if (event.on) 1 else -1
