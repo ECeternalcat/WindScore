@@ -139,7 +139,10 @@ def reference(source):
         tempoChanges=[dict(tick=integer(t * 4), bpm=float(b), measure=m,
             milliseconds=float(milliseconds_at(t))) for t, b, m in tempos],
         measures=[dict(number=m["number"], startTick=integer(m["onset"] * 4),
-            durationTick=integer(m["duration"] * 4)) for m in measures], events=events)
+            durationTick=integer(m["duration"] * 4)) for m in measures], events=events,
+        writtenNotes=[dict(pitch=n["pitch"], startTick=integer(n["onset"] * 4),
+            durationTick=integer(n["duration"] * 4), staff=n["staff"], voice=n["voice"],
+            measure=n["measure"], source=n["source"]) for n in segments])
 
 
 def main():
@@ -154,7 +157,7 @@ def main():
         assert args.output.read_text() == encoded, "Reference fixture is stale"
     else:
         args.output.write_text(encoded)
-    print(json.dumps({k: v for k, v in data.items() if k not in ("events", "measures")}, indent=2))
+    print(json.dumps({k: v for k, v in data.items() if k not in ("events", "measures", "writtenNotes")}, indent=2))
     print("measure 165:", next(m for m in data["measures"] if m["number"] == "165"))
     print("final events:", [e for e in data["events"] if e["measure"] == "165"])
 

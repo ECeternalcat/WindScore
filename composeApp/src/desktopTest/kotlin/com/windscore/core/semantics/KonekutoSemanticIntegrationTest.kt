@@ -5,6 +5,7 @@ import com.windscore.core.engine.*
 import com.windscore.core.loadScore
 import com.windscore.core.model.TrackSelection
 import com.windscore.core.model.TrackType
+import com.windscore.core.model.PracticeMode
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.json.*
@@ -144,6 +145,40 @@ class KonekutoSemanticIntegrationTest {
                 assertTrue(duration in 3900.0..4400.0)
             }
         } finally { player.stop(); scope.cancel() }
+    }
+
+    @Test
+    fun finalChordWaitModeHostsTheOtherHandAtReferenceTempoAndSpeed() = runBlocking {
+        for ((mode, speed) in listOf(PracticeMode.RIGHT_ONLY to 1f, PracticeMode.LEFT_ONLY to 2f)) {
+            val origin=TimeSource.Monotonic.markNow()
+            val actual=mutableListOf<Pair<String,Double>>()
+            val scope=CoroutineScope(Dispatchers.Default+SupervisorJob())
+            val session=ScoreSession(loadScore(),recorder { actual += it to origin.elapsedNow().inWholeMicroseconds/1000.0 },scope,mode)
+            val active=if(mode==PracticeMode.RIGHT_ONLY) listOf(58,66) else listOf(30,42)
+            val hosted=if(mode==PracticeMode.RIGHT_ONLY) listOf(30,42) else listOf(58,66)
+            try {
+                session.setPracticeSpeed(speed)
+                session.seekTo(2632)
+                assertEquals(active.toSet(),session.pendingPitches)
+                session.onNoteOn(active.first())
+                delay(200)
+                assertEquals(2632L,session.currentTick, "waiting must not advance with wall time")
+                assertEquals(active.toSet(), session.pendingPitches) // UI advertises the entire waiting group
+                assertEquals(setOf(active.first()), session.heldPitches)
+                SessionLane.run { assertEquals(hosted.map { "on:$it" }.toSet(),actual.map { it.first }.toSet()) }
+                session.onNoteOn(active.last())
+                active.forEach(session::onNoteOff)
+                assertTrue(session.finished)
+                withTimeout(6500) { while(SessionLane.run { actual.count { it.first.startsWith("off:") } }<2) delay(10) }
+                SessionLane.run {
+                    assertEquals(hosted.map { "off:$it" }.toSet(),actual.filter { it.first.startsWith("off:") }.map { it.first }.toSet())
+                    val duration=actual.last().second-actual.first().second
+                    val wanted=(4*60000.0/58)/speed
+                    println("Measure 165 hosted $mode speed $speed: $duration ms; reference $wanted")
+                    assertEquals(wanted,duration,180.0)
+                }
+            } finally { session.close(); scope.cancel() }
+        }
     }
 
     private fun referenceAudioEvents(): List<Pair<String, Double>> {
