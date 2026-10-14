@@ -36,7 +36,7 @@ data class Score(
     val legacyTimingCompatible: Boolean = true,
 ) {
     companion object {
-        const val CURRENT_VERSION = 2
+        const val CURRENT_VERSION = 3
         val EMPTY = Score(
             id = "",
             notes = emptyList(),

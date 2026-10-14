@@ -83,8 +83,11 @@ object MusicXmlParser {
         var tempo = 0
         val title = readTitle(doc)
 
+        data class TieKey(val part: Int, val voice: String, val spelling: String, val number: String?)
         data class RawNote(
             val pitch: Int,
+            val stopKey: TieKey,
+            val startKey: TieKey,
             val staff: Int,
             val startTick: Long,
             val durationTick: Long,
@@ -130,7 +133,12 @@ object MusicXmlParser {
 
                                 if (pitch != null) {
                                     rawNotes.add(
-                                        RawNote(pitch, staff, startTick, duration, tieStart, tieStop, fingering)
+                                        RawNote(
+                                            pitch,
+                                            TieKey(pi, textOf(node, "voice")?.trim().orEmpty(), pitchSpelling(node), readTieNumber(node, "stop")),
+                                            TieKey(pi, textOf(node, "voice")?.trim().orEmpty(), pitchSpelling(node), readTieNumber(node, "start")),
+                                            staff, startTick, duration, tieStart, tieStop, fingering,
+                                        )
                                     )
                                 }
                                 // 和弦音符与休止符都不改变“主”时间推进规则：
@@ -183,38 +191,37 @@ object MusicXmlParser {
         )
 
         val merged = mutableListOf<MutableNote>()
-        // openTies: (pitch, staff) -> 当前正在延音的 MutableNote
-        val openTies = mutableMapOf<Pair<Int, Int>, MutableNote>()
+        // Staff is placement, not identity. Keep multiple open ties rather than overwriting unisons.
+        val openTies = mutableMapOf<TieKey, MutableList<MutableNote>>()
         var nextId = 0
 
         for (raw in rawNotes) {
-            val key = raw.pitch to raw.staff
-            var consumed = false
+            var continuation: MutableNote? = null
             if (raw.tieStop) {
-                val open = openTies[key]
-                if (open != null) {
-                    open.durationTick += raw.durationTick
-                    consumed = true
-                    if (!raw.tieStart) {
-                        openTies.remove(key)
-                    }
+                val open = openTies[raw.stopKey]
+                val candidates = open.orEmpty().filter {
+                    Math.addExact(it.startTick, it.durationTick) == raw.startTick
+                }
+                require(candidates.size <= 1) {
+                    "Ambiguous MusicXML tie at tick ${raw.startTick}, part ${raw.stopKey.part + 1}, " +
+                        "voice '${raw.stopKey.voice}', pitch ${raw.pitch}; distinguish overlapping ties with tied numbers"
+                }
+                continuation = candidates.singleOrNull()
+                if (continuation != null) {
+                    continuation.durationTick = Math.addExact(continuation.durationTick, raw.durationTick)
+                    open?.remove(continuation)
+                    if (open.isNullOrEmpty()) openTies.remove(raw.stopKey)
+                } else {
+                    // Excerpts, voice changes or broken chains must not swallow an independent attack.
+                    println("[MusicXML] Unmatched tie stop at tick ${raw.startTick}, voice '${raw.stopKey.voice}'")
                 }
             }
-            if (!consumed) {
-                val track = if (raw.staff == 2) TrackType.LEFT_HAND else TrackType.RIGHT_HAND
-                val entity = MutableNote(
-                    id = nextId++,
-                    pitch = raw.pitch,
-                    track = track,
-                    startTick = raw.startTick,
-                    durationTick = raw.durationTick,
-                    fingering = raw.fingering,
-                )
-                merged.add(entity)
-                if (raw.tieStart) {
-                    openTies[key] = entity
-                }
-            }
+            val entity = continuation ?: MutableNote(
+                id = nextId++, pitch = raw.pitch,
+                track = if (raw.staff == 2) TrackType.LEFT_HAND else TrackType.RIGHT_HAND,
+                startTick = raw.startTick, durationTick = raw.durationTick, fingering = raw.fingering,
+            ).also { merged.add(it) }
+            if (raw.tieStart) openTies.getOrPut(raw.startKey) { mutableListOf() }.add(entity)
         }
 
         val finalNotes = merged.map { m ->
@@ -281,6 +288,23 @@ object MusicXmlParser {
         val duration = readDuration(el)
         require(duration >= 0) { "MusicXML duration must not be negative" }
         return Math.multiplyExact(duration, (divisions / sourceDivisions).toLong())
+    }
+
+    private fun pitchSpelling(note: Element): String {
+        val pitch = note.getElementsByTagName("pitch").item(0) as Element
+        val alter = textOf(pitch, "alter")?.trim()?.toIntOrNull() ?: 0
+        return "${textOf(pitch, "step")?.trim()}:$alter:${textOf(pitch, "octave")?.trim()}"
+    }
+
+    private fun readTieNumber(note: Element, type: String): String? {
+        val tied = note.getElementsByTagName("tied")
+        for (i in 0 until tied.length) {
+            val mark = tied.item(i) as Element
+            if (mark.getAttribute("type") == type) {
+                return mark.getAttribute("number").takeIf { it.isNotBlank() }
+            }
+        }
+        return null
     }
 
     private fun readTitle(doc: org.w3c.dom.Document): String {
