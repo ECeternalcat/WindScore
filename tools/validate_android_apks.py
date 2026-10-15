@@ -18,7 +18,7 @@ def main():
         package = packages[0]
         assets = {}
         with zipfile.ZipFile(package) as archive:
-            for name in ("konekuto-claris.mxl", "opensheetmusicdisplay.min.js"):
+            for name in ("konekuto-claris.mxl", "opensheetmusicdisplay.min.js", "opensheetmusicdisplay.min.js.LICENSE.txt"):
                 actual = archive.read(f"assets/{name}")
                 assert actual == (ASSETS / name).read_bytes(), f"Packaged asset differs: {variant}/{name}"
                 assert actual == (ROOT / "composeApp/src/desktopMain/resources" / name).read_bytes()

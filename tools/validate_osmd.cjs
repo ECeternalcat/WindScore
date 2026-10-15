@@ -24,6 +24,12 @@ const server = http.createServer((req, res) => {
     for (const width of [1200, 800, 360]) {
       const page = await browser.newPage({viewport: {width, height: 800}});
       page.on('pageerror', e => console.error('page error', e));
+      const external=[];
+      const origin=`http://127.0.0.1:${server.address().port}`;
+      await page.route('**/*',route=> {
+        if(new URL(route.request().url()).origin!==origin) { external.push(route.request().url()); return route.abort(); }
+        return route.continue();
+      });
       await page.goto(`http://127.0.0.1:${server.address().port}/`);
       await page.waitForFunction(() => window.__renderTime >= 0 && window.__snapshotChunkCount > 0 && window.__snapshotChunksReady === window.__snapshotChunkCount, null, {timeout: 120000});
       const data = await page.evaluate(() => {
@@ -40,7 +46,13 @@ const server = http.createServer((req, res) => {
         }
         osmd.cursor.reset(); window.__cursorIdx=0;
         const times = window.__cursorTimes;
-        return {status: window.__status, renderMs: window.__renderTime, transform: document.getElementById('osmd').style.transform,
+        const finalTempos=osmd.Sheet.SourceMeasures[osmd.Sheet.SourceMeasures.length-1].TempoExpressions.map(t=>({
+          tick:Math.round(fracReal(t.AbsoluteTimestamp)*16),
+          bpm:t.EntriesList[0].Expression.TempoInBpm,
+          playbackTick:t.AbsolutePlaybackTimestamp ? Math.round(fracReal(t.AbsolutePlaybackTimestamp)*16) : null,
+          playbackBpm:t.PlaybackTempoInBpm ?? null
+        }));
+        return {status: window.__status, version: osmd.Version, finalTempos, renderMs: window.__renderTime, transform: document.getElementById('osmd').style.transform,
           svgCount: document.querySelectorAll('#osmd svg').length, pathCount: document.querySelectorAll('#osmd svg path').length,
           width: window.__snapshotChunkWidth, height: window.__snapshotTotalHeight,
           positions: window.__cursorPos, ticks: times.map(t => Math.round(t*16)), groups,
@@ -52,9 +64,16 @@ const server = http.createServer((req, res) => {
       await page.screenshot({path: path.join(output, `${width}-browser.png`)});
       fs.writeFileSync(path.join(output, `${width}-geometry.json`), JSON.stringify(data, null, 2));
       assert.equal(data.error, null);
+      assert.deepEqual(external,[], 'bundled renderer must work without remote requests');
       assert.equal(data.svgCount, 1, 'all score pages must be included in raster snapshot');
       assert.ok(data.pathCount > 1000);
       assert.deepEqual(data.groups.find(g => g.tick === 2632).pitches, [30,42,58,66]);
+      const expectedTempos=reference.tempoChanges.filter(t=>t.measure==='165').map(t=>({tick:t.tick,bpm:t.bpm}));
+      assert.deepEqual(data.finalTempos.map(t=>({tick:t.tick,bpm:t.bpm})),expectedTempos);
+      for(const tempo of data.finalTempos) if(tempo.playbackTick!==null) {
+        assert.equal(tempo.playbackTick,tempo.tick);
+        assert.equal(tempo.playbackBpm,tempo.bpm);
+      }
       const wanted = new Map();
       for (const note of reference.writtenNotes) {
         if (!wanted.has(note.startTick)) wanted.set(note.startTick, []);
@@ -92,6 +111,35 @@ const server = http.createServer((req, res) => {
         const [x,y,h] = data.positions.slice(i*3,i*3+3);
         assert.ok(x>=0 && x<data.width && y>=0 && y+h<=data.height+1, `cursor outside snapshot at ${data.ticks[i]}: ${x},${y},${h}`);
       }
+      const mapping=await page.evaluate(()=> {
+        const osmd=window.__osmd;
+        function inspect() {
+          osmd.cursor.reset(); const notes=[]; let safety=10000;
+          while(!osmd.cursor.iterator.EndReached && safety-->0) {
+            for(const voice of osmd.cursor.iterator.CurrentVoiceEntries) for(const note of voice.Notes) {
+              if(!note.Pitch)continue;
+              const g=osmd.EngravingRules.GNote(note);
+              const rect=g?.getSVGGElement?.()?.getBoundingClientRect();
+              notes.push({id:note.NoteToGraphicalNoteObjectId,mapped:g?.sourceNote===note,
+                svgId:g?.getSVGId?.(),x:rect?.x,y:rect?.y});
+            }
+            osmd.cursor.next();
+          }
+          osmd.cursor.reset(); return notes;
+        }
+        const before=inspect();osmd.updateGraphic();osmd.render();const after=inspect();
+        return {before,after};
+      });
+      assert.equal(mapping.before.length,reference.pitchedSegments);
+      assert.equal(new Set(mapping.before.map(n=>n.id)).size,reference.pitchedSegments);
+      assert.ok(mapping.before.every(n=>n.mapped && Number.isFinite(n.x) && Number.isFinite(n.y)));
+      assert.deepEqual(mapping.after.map(n=>n.id),mapping.before.map(n=>n.id));
+      for(let i=0;i<mapping.before.length;i++) {
+        assert.ok(Math.abs(mapping.before[i].x-mapping.after[i].x)<1 && Math.abs(mapping.before[i].y-mapping.after[i].y)<1,'same-size re-render must preserve note positions');
+      }
+      data.identity={notes:mapping.before.length,distinctSvgIds:new Set(mapping.before.map(n=>n.svgId)).size,
+        svgIdsChangedOnRerender:mapping.before.filter((n,i)=>n.svgId!==mapping.after[i].svgId).length};
+      fs.writeFileSync(path.join(output, `${width}-geometry.json`), JSON.stringify(data,null,2));
       results.push({width, renderMs: data.renderMs, groups: data.groups.length, height: data.height});
       await page.close();
     }

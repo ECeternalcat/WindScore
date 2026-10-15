@@ -1,0 +1,12 @@
+{
+  "version": "2.2.1",
+  "release": "https://github.com/opensheetmusicdisplay/opensheetmusicdisplay/releases/tag/2.2.1",
+  "publishedAt": "2026-10-12T13:00:02Z",
+  "license": "BSD-3-Clause",
+  "asset": "opensheetmusicdisplay.min.js",
+  "url": "https://github.com/opensheetmusicdisplay/opensheetmusicdisplay/releases/download/2.2.1/opensheetmusicdisplay.min.js",
+  "sha256": "537ed08f9c082ce0d785d21b80485b8d443cfb92ddc7a4ba4977804f09408cf4",
+  "sizeBytes": 1420498,
+  "previousVersion": "2.0.0",
+  "previousSha256": "6db4be76cfc1499cabe8bccb409ff0c261fe7aa22c002d93ed61f29817bf6f22"
+}

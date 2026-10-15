@@ -1,7 +1,7 @@
 package com.windscore.ui
 
 /**
- * OSMD 2.0 看谱模式 — 方案C：原生滚动，固定zoom。
+ * Bundled OSMD 看谱模式 — 方案C：原生滚动，固定zoom。
  *
  * - HTTP Server 提供 XML（不用 JS Bridge）
  * - endless 模式 + load 后设 pageWidth

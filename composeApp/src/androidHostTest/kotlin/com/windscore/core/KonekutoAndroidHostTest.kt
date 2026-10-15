@@ -6,12 +6,24 @@ import com.windscore.core.model.TrackType
 import com.windscore.core.parser.MusicXmlParser
 import kotlinx.serialization.json.*
 import java.io.File
+import java.security.MessageDigest
+import com.windscore.ui.sheetSnapshotCacheKey
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /** Runs the Android compilation's shared parser/domain code on a host JVM; no device claims. */
 class KonekutoAndroidHostTest {
+    @Test
+    fun androidOsmdAssetAndCacheFingerprintMatchThePinnedRelease() {
+        val root=if(File("composeApp").isDirectory) File(".") else File("..")
+        val manifest=Json.parseToJsonElement(File(root,"third_party/osmd/manifest.json").readText()).jsonObject
+        val bytes=File(root,"composeApp/src/androidMain/assets/opensheetmusicdisplay.min.js").readBytes()
+        val hash=MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+        assertEquals(manifest.getValue("sha256").jsonPrimitive.content,hash)
+        assertTrue(sheetSnapshotCacheKey("xml","html",bytes,"android-webview").contains(hash))
+        assertTrue(File(root,"composeApp/src/androidMain/assets/opensheetmusicdisplay.min.js.LICENSE.txt").isFile)
+    }
     @Test
     fun androidBundledAssetMatchesIndependentEventsTempoAndPractice() {
         val root=if(File("composeApp").isDirectory) File("composeApp") else File(".")
