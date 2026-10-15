@@ -94,10 +94,15 @@ class KonekutoRenderingTest {
             chunks.first().height, geometry.getValue("height").jsonPrimitive.int, steps,
             decodeNoteGeometry(noteText,benchmarkScore,rasterWidth,rasterHeight))
         val tick = mutableStateOf(2632L)
+        val view = mutableStateOf(com.windscore.ViewMode.SHEET_FULL)
+        val hand = mutableStateOf(com.windscore.core.model.TrackSelection.BOTH_HANDS)
+        val demonstrating = mutableStateOf(false)
         val score = loadScore()
         compose.setContent {
             WindScoreTheme { Row {
-                NativeSheetView(snapshot, { tick.value }, {}, {}, {}, modifier=Modifier.size(600.dp,500.dp).testTag("sheet"))
+                NativeSheetView(snapshot, { tick.value }, {}, {}, {}, modifier=Modifier.size(600.dp,500.dp).testTag("sheet"),
+                    targetCues=sheetTargetCuesAt(sheetTargetCueIndex(score,snapshot.noteGeometry,hand.value),
+                        view.value,demonstrating.value,tick.value))
                 PianoRoll(score, { tick.value }, modifier=Modifier.size(600.dp,500.dp).testTag("roll"), pulseIntensityProvider={0f})
             } }
         }
@@ -127,6 +132,35 @@ class KonekutoRenderingTest {
                 }
             }
         }
+        // Real OSMD heads, raster and Compose overlays: cues add target guidance only in the bridge view.
+        fun capture() = compose.onNodeWithTag("sheet").captureToImage().toPixelMap()
+        fun pinkPixels(pixels: PixelMap) = (0 until pixels.height).sumOf { y ->
+            (0 until pixels.width).count { x -> val c=pixels[x,y];c.red>c.green+0.15f && c.red>c.blue+0.08f }
+        }
+        val baseline=capture()
+        assertEquals(0,pinkPixels(baseline))
+        for(selection in com.windscore.core.model.TrackSelection.entries) {
+            compose.runOnIdle { view.value=com.windscore.ViewMode.SHEET_KEYBOARD;hand.value=selection }
+            compose.waitForIdle()
+            val index=sheetTargetCueIndex(score,snapshot.noteGeometry,selection)
+            assertEquals(if(selection==com.windscore.core.model.TrackSelection.BOTH_HANDS)4 else 2,index[2632L]?.size)
+            val cued=capture()
+            assertTrue(pinkPixels(cued)>12,"visible mapped target outlines for $selection")
+            writePixels(cued,File(output,"compose-targets-$selection.png"))
+        }
+        for(mode in listOf(com.windscore.ViewMode.SHEET_FULL,com.windscore.ViewMode.ROLL)) {
+            compose.runOnIdle { view.value=mode };compose.waitForIdle()
+            val clean=capture()
+            assertEquals(0,pinkPixels(clean))
+            assertTrue((0 until clean.height).all { y -> (0 until clean.width).all { x ->clean[x,y].toArgb()==baseline[x,y].toArgb() } })
+        }
+        compose.runOnIdle { view.value=com.windscore.ViewMode.SHEET_KEYBOARD;demonstrating.value=true }
+        compose.waitForIdle()
+        assertEquals(0,pinkPixels(capture()),"playback is not a user target judgment")
+        compose.runOnIdle { demonstrating.value=false;tick.value=2640L }
+        compose.waitForIdle()
+        assertEquals(0,pinkPixels(capture()),"the sustained final chord does not advertise another attack")
+
     }
 
     private fun writePixels(pixels: PixelMap, file: File) {

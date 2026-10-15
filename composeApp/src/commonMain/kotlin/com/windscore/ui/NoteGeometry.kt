@@ -23,5 +23,8 @@ data class NoteGeometrySnapshot(
     val status: String,
     val page: Int? = null,
     val rect: NoteHeadRect? = null,
+    /** Authoritative written-segment coordinates; absent in older disposable snapshots. */
+    val writtenTick: Long? = null,
+    val writtenDuration: Long? = null,
 )
 @Serializable data class NoteHeadRect(val x: Double, val y: Double, val width: Double, val height: Double)

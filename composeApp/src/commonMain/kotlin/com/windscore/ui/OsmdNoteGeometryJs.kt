@@ -58,7 +58,7 @@ window.WindScoreNoteGeometry={
      var ordinal=n.key.split('/')[1];if(!partIds.has(n.part))partIds.set(n.part,new Set());partIds.get(n.part).add(ordinal);
    });
    var entries=provenance.notes.map(function(w){
-     var result={writtenKey:w.key,performedId:w.performedId,status:'missing-source',page:null,rect:null};
+     var result={writtenKey:w.key,performedId:w.performedId,status:'missing-source',page:null,rect:null,writtenTick:w.tick,writtenDuration:w.duration};
      if(osmd.Version!=='2.2.1-release'||provenance.schema!==1){result.status='unsupported-renderer';return result;}
      if(!Number.isSafeInteger(w.tick)||!Number.isSafeInteger(w.duration)){result.status='unsupported-time';return result;}
      if(!/^[1-9][0-9]*$/.test(w.voice)||!Number.isSafeInteger(Number(w.voice))){result.status='unsupported-voice';return result;}

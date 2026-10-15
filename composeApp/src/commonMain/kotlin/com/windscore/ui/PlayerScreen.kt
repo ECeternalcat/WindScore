@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.sp
 import com.windscore.core.engine.ScoreSession
 import com.windscore.core.engine.ScoringPhase
 import com.windscore.core.traceState
+import com.windscore.core.model.trackSelection
 import com.windscore.core.model.PracticeMode
 import com.windscore.core.model.Score
 import com.windscore.ViewMode
@@ -830,6 +831,11 @@ private fun MainStage(
 
             var sheetSnapshot by remember(rawXml) { mutableStateOf<SheetSnapshot?>(null) }
 
+            val cueIndex = remember(session.score, sheetSnapshot?.noteGeometry, session.practiceMode.trackSelection()) {
+                sheetTargetCueIndex(session.score, sheetSnapshot?.noteGeometry, session.practiceMode.trackSelection())
+            }
+            val targetCues = sheetTargetCuesAt(cueIndex, viewMode, isPlaying, tick)
+
             // WebView 渲染器始终在后台静默运行
             if (rawXml != null) {
                 val sheetFraction = if (showSheetKb) 0.72f else 1f
@@ -915,6 +921,7 @@ private fun MainStage(
                             } else {
                                 NativeSheetView(
                                     snapshot = sheetSnapshot!!,
+                                    targetCues = targetCues,
                                     currentTickProvider = { tick },
                                     onSeek = onSeek,
                                     onStepForward = onStepForward,

@@ -43,7 +43,16 @@ internal fun decodeNoteGeometry(text: String?, score: Score?, width: Int, height
     val statuses = setOf("mapped", "missing-source", "unsupported-renderer", "unsupported-voice",
         "unsupported-time", "ambiguous-part", "ambiguous-source", "missing-graphical", "missing-page", "uncaptured-page",
         "ambiguous-head", "invalid-geometry")
+    val events = score.notes.associateBy { it.id }
     g.notes.forEach { n ->
+        if (n.writtenTick != null || n.writtenDuration != null) {
+            val start = requireNotNull(n.writtenTick)
+            val duration = requireNotNull(n.writtenDuration)
+            val event = events.getValue(n.performedId)
+            require(start >= event.startTick && duration >= 0 &&
+                start <= event.startTick + event.durationTick &&
+                duration <= event.startTick + event.durationTick - start)
+        }
         require(n.writtenKey.startsWith("${score.id}/p") && n.status in statuses)
         if (n.status == "mapped") {
             require(n.page == 0) // Current raster pipeline captures the first SVG only.
