@@ -58,6 +58,8 @@ class OsmdIdentityPrototypeTest {
             sidecar("cross-staff-chord",document(measure(note("C",4)+note("E",3,staff=2,chord=true)))),
             sidecar("voice-ties",document(measure(note("C",4,tie="start")+"<backup><duration>16</duration></backup>"+note("C",4,voice="2",tie="start"))+
                 measure(note("C",4,tie="stop")+"<backup><duration>16</duration></backup>"+note("C",4,voice="2",tie="stop")))),
+            sidecar("voice-ties-reversed",document(measure(note("C",4,tie="start")+"<backup><duration>16</duration></backup>"+note("C",4,voice="2",tie="start"))+
+                measure(note("C",4,voice="2",tie="stop")+"<backup><duration>16</duration></backup>"+note("C",4,tie="stop")))),
             sidecar("tie-chain",document(measure(note("C",4,tie="start"))+
                 measure(note("C",4,tie="stop").replace("<tie type=\"stop\"/>","<tie type=\"stop\"/><tie type=\"start\"/>")
                     .replace("</notations>","<tied type=\"start\"/></notations>"))+

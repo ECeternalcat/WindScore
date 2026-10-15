@@ -75,6 +75,7 @@ const server=http.createServer((req,res)=> {
               headRects,anchor,headCandidates,headRect:headCandidates.length===1?headCandidates[0]:null,
               tie:note.NoteTie?.Notes.map(n=>({voice:String(n.ParentVoiceEntry.ParentVoice.VoiceId),
                 tick:Math.round(fraction(n.getAbsoluteTimestamp())*4*f.divisions),staff:n.ParentStaff.ParentInstrument.Staves.indexOf(n.ParentStaff)+1})),
+              internalTieNumber:note.NoteTie?.TieNumber,
               xmlIdsRetained:Object.values(note).filter(v=>typeof v==='string' && v.startsWith('xml-note-'))};
             geometryMs+=performance.now()-geometryStart;
             entries.push(entry);
@@ -121,6 +122,8 @@ const server=http.createServer((req,res)=> {
         assert.equal(result.unsupported.length,fixture.expectedUnsupported);
         assert.deepEqual(result.missing,[],'structural mapping must not guess or drop supported notes');
         if(!fixture.expectedUnsupported)assert.equal(result.sourceCount,fixture.notes.length);
+        if(fixture.name==='voice-ties-reversed')assert.ok(result.allSource.some(n=>n.tie && new Set(n.tie.map(t=>t.voice)).size>1),
+          'document the bundled 2.2.1 cross-voice tie mismatch; never use that tie graph for event IDs');
         assert.equal(result.retainedSources,mode.name==='reload'?0:result.sourceCount,'source objects survive layout but not reload');
         assert.equal(result.mapped.length+result.ambiguous.length+result.unsupported.length,fixture.notes.length);
         assert.ok(result.mapped.every(n=>n.mapped && n.rect && n.rect.width>0 && n.rect.height>0 && n.svgIndex>=0 && n.page===n.svgIndex+1));
@@ -161,6 +164,7 @@ const server=http.createServer((req,res)=> {
       results.push({fixture:fixture.name,notes:fixture.notes.length,events:new Set(fixture.notes.map(n=>n.performedId)).size,
         mapped:first.mapped.length,ambiguous:first.ambiguous.length,unsupported:first.unsupported.length,
         distinctSvgIds:new Set(first.mapped.map(n=>n.svgId)).size,svgChurn,
+        crossVoiceTieObservations:first.allSource.filter(n=>n.tie && new Set(n.tie.map(t=>t.voice)).size>1).length,
         layouts:layouts.map(l=>({mode:l.mode,svgCount:l.svgCount,elapsedMs:l.elapsedMs,geometryMs:l.geometryMs,
           uniqueHeadGeometry:l.mapped.filter(n=>n.headRect).length,colorProbe:l.colorProbe,
           distinctHeadRects:new Set(l.mapped.filter(n=>n.headRect).map(n=>JSON.stringify([n.svgIndex,...['x','y','width','height'].map(k=>Math.round(n.headRect[k]*100)/100)]))).size})),
