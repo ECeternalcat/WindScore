@@ -40,6 +40,14 @@ class NoteGeometryBridgeTest {
         assertNull(decode(g.copy(notes=g.notes.map { it.copy(page=1) }),s))
         assertNull(decode(g.copy(notes=g.notes.map { it.copy(rect=NoteHeadRect(999.0,2.0,3.0,4.0)) }),s))
         assertNotNull(decode(g.copy(notes=g.notes.map { it.copy(status="ambiguous-source",rect=null) }),s))
+        val events=s.notes.associateBy { it.id }
+        val timed=g.copy(notes=g.notes.map {
+            val event=events.getValue(it.performedId)
+            it.copy(writtenTick=event.startTick,writtenDuration=event.durationTick)
+        })
+        assertNotNull(decode(timed,s))
+        assertNull(decode(timed.copy(notes=timed.notes.map { it.copy(writtenDuration=null) }),s))
+        assertNull(decode(timed.copy(notes=timed.notes.map { it.copy(writtenTick=Long.MAX_VALUE) }),s))
         assertNull(decodeNoteGeometry("broken",s,100,200))
     }
 
