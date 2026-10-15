@@ -1,0 +1,993 @@
+{
+  "browser": "154.0.8037.57",
+  "results": [
+    {
+      "fixture": "chord",
+      "notes": 3,
+      "events": 3,
+      "mapped": 3,
+      "ambiguous": 0,
+      "unsupported": 0,
+      "distinctSvgIds": 1,
+      "svgChurn": 3,
+      "crossVoiceTieObservations": 0,
+      "layouts": [
+        {
+          "mode": "initial",
+          "svgCount": 1,
+          "elapsedMs": 1.2999999970197678,
+          "geometryMs": 0.4000000059604645,
+          "uniqueHeadGeometry": 3,
+          "colorProbe": 3,
+          "distinctHeadRects": 3
+        },
+        {
+          "mode": "zoom",
+          "svgCount": 1,
+          "elapsedMs": 0.7000000029802322,
+          "geometryMs": 0.29999999701976776,
+          "uniqueHeadGeometry": 3,
+          "colorProbe": null,
+          "distinctHeadRects": 3
+        },
+        {
+          "mode": "relayout",
+          "svgCount": 1,
+          "elapsedMs": 0.9000000059604645,
+          "geometryMs": 0.3999999910593033,
+          "uniqueHeadGeometry": 3,
+          "colorProbe": null,
+          "distinctHeadRects": 3
+        },
+        {
+          "mode": "css-scale",
+          "svgCount": 1,
+          "elapsedMs": 1.0999999940395355,
+          "geometryMs": 0.09999999403953552,
+          "uniqueHeadGeometry": 3,
+          "colorProbe": null,
+          "distinctHeadRects": 3
+        },
+        {
+          "mode": "pages",
+          "svgCount": 1,
+          "elapsedMs": 0.6000000089406967,
+          "geometryMs": 0.20000000298023224,
+          "uniqueHeadGeometry": 3,
+          "colorProbe": null,
+          "distinctHeadRects": 3
+        },
+        {
+          "mode": "return",
+          "svgCount": 1,
+          "elapsedMs": 0.7000000029802322,
+          "geometryMs": 0,
+          "uniqueHeadGeometry": 3,
+          "colorProbe": null,
+          "distinctHeadRects": 3
+        },
+        {
+          "mode": "reload",
+          "svgCount": 1,
+          "elapsedMs": 0.6000000089406967,
+          "geometryMs": 0.09999999403953552,
+          "uniqueHeadGeometry": 3,
+          "colorProbe": null,
+          "distinctHeadRects": 3
+        }
+      ],
+      "xmlIdsRetained": 0
+    },
+    {
+      "fixture": "voices",
+      "notes": 2,
+      "events": 2,
+      "mapped": 2,
+      "ambiguous": 0,
+      "unsupported": 0,
+      "distinctSvgIds": 2,
+      "svgChurn": 2,
+      "crossVoiceTieObservations": 0,
+      "layouts": [
+        {
+          "mode": "initial",
+          "svgCount": 1,
+          "elapsedMs": 1.5999999940395355,
+          "geometryMs": 0.5,
+          "uniqueHeadGeometry": 2,
+          "colorProbe": null,
+          "distinctHeadRects": 2
+        },
+        {
+          "mode": "zoom",
+          "svgCount": 1,
+          "elapsedMs": 0.5999999940395355,
+          "geometryMs": 0.09999999403953552,
+          "uniqueHeadGeometry": 2,
+          "colorProbe": null,
+          "distinctHeadRects": 2
+        },
+        {
+          "mode": "relayout",
+          "svgCount": 1,
+          "elapsedMs": 0.5999999940395355,
+          "geometryMs": 0.09999999403953552,
+          "uniqueHeadGeometry": 2,
+          "colorProbe": null,
+          "distinctHeadRects": 2
+        },
+        {
+          "mode": "css-scale",
+          "svgCount": 1,
+          "elapsedMs": 0.6000000089406967,
+          "geometryMs": 0.10000000894069672,
+          "uniqueHeadGeometry": 2,
+          "colorProbe": null,
+          "distinctHeadRects": 2
+        },
+        {
+          "mode": "pages",
+          "svgCount": 1,
+          "elapsedMs": 0.5,
+          "geometryMs": 0.20000000298023224,
+          "uniqueHeadGeometry": 2,
+          "colorProbe": null,
+          "distinctHeadRects": 2
+        },
+        {
+          "mode": "return",
+          "svgCount": 1,
+          "elapsedMs": 0.5,
+          "geometryMs": 0.09999999403953552,
+          "uniqueHeadGeometry": 2,
+          "colorProbe": null,
+          "distinctHeadRects": 2
+        },
+        {
+          "mode": "reload",
+          "svgCount": 1,
+          "elapsedMs": 0.4000000059604645,
+          "geometryMs": 0,
+          "uniqueHeadGeometry": 2,
+          "colorProbe": null,
+          "distinctHeadRects": 2
+        }
+      ],
+      "xmlIdsRetained": 0
+    },
+    {
+      "fixture": "cross-staff",
+      "notes": 2,
+      "events": 1,
+      "mapped": 2,
+      "ambiguous": 0,
+      "unsupported": 0,
+      "distinctSvgIds": 2,
+      "svgChurn": 2,
+      "crossVoiceTieObservations": 0,
+      "layouts": [
+        {
+          "mode": "initial",
+          "svgCount": 1,
+          "elapsedMs": 2.5999999940395355,
+          "geometryMs": 0.699999988079071,
+          "uniqueHeadGeometry": 2,
+          "colorProbe": null,
+          "distinctHeadRects": 2
+        },
+        {
+          "mode": "zoom",
+          "svgCount": 1,
+          "elapsedMs": 0.800000011920929,
+          "geometryMs": 0.20000000298023224,
+          "uniqueHeadGeometry": 2,
+          "colorProbe": null,
+          "distinctHeadRects": 2
+        },
+        {
+          "mode": "relayout",
+          "svgCount": 1,
+          "elapsedMs": 0.7999999970197678,
+          "geometryMs": 0.20000000298023224,
+          "uniqueHeadGeometry": 2,
+          "colorProbe": null,
+          "distinctHeadRects": 2
+        },
+        {
+          "mode": "css-scale",
+          "svgCount": 1,
+          "elapsedMs": 0.699999988079071,
+          "geometryMs": 0.19999998807907104,
+          "uniqueHeadGeometry": 2,
+          "colorProbe": null,
+          "distinctHeadRects": 2
+        },
+        {
+          "mode": "pages",
+          "svgCount": 1,
+          "elapsedMs": 0.5999999940395355,
+          "geometryMs": 0.20000000298023224,
+          "uniqueHeadGeometry": 2,
+          "colorProbe": null,
+          "distinctHeadRects": 2
+        },
+        {
+          "mode": "return",
+          "svgCount": 1,
+          "elapsedMs": 0.800000011920929,
+          "geometryMs": 0.30000001192092896,
+          "uniqueHeadGeometry": 2,
+          "colorProbe": null,
+          "distinctHeadRects": 2
+        },
+        {
+          "mode": "reload",
+          "svgCount": 1,
+          "elapsedMs": 0.5,
+          "geometryMs": 0.10000000894069672,
+          "uniqueHeadGeometry": 2,
+          "colorProbe": null,
+          "distinctHeadRects": 2
+        }
+      ],
+      "xmlIdsRetained": 0
+    },
+    {
+      "fixture": "cross-staff-chord",
+      "notes": 2,
+      "events": 2,
+      "mapped": 2,
+      "ambiguous": 0,
+      "unsupported": 0,
+      "distinctSvgIds": 1,
+      "svgChurn": 2,
+      "crossVoiceTieObservations": 0,
+      "layouts": [
+        {
+          "mode": "initial",
+          "svgCount": 1,
+          "elapsedMs": 1.1000000089406967,
+          "geometryMs": 0.20000000298023224,
+          "uniqueHeadGeometry": 2,
+          "colorProbe": null,
+          "distinctHeadRects": 2
+        },
+        {
+          "mode": "zoom",
+          "svgCount": 1,
+          "elapsedMs": 0.9000000059604645,
+          "geometryMs": 0.30000001192092896,
+          "uniqueHeadGeometry": 2,
+          "colorProbe": null,
+          "distinctHeadRects": 2
+        },
+        {
+          "mode": "relayout",
+          "svgCount": 1,
+          "elapsedMs": 0.9000000059604645,
+          "geometryMs": 0.20000000298023224,
+          "uniqueHeadGeometry": 2,
+          "colorProbe": null,
+          "distinctHeadRects": 2
+        },
+        {
+          "mode": "css-scale",
+          "svgCount": 1,
+          "elapsedMs": 0.7000000029802322,
+          "geometryMs": 0.09999999403953552,
+          "uniqueHeadGeometry": 2,
+          "colorProbe": null,
+          "distinctHeadRects": 2
+        },
+        {
+          "mode": "pages",
+          "svgCount": 1,
+          "elapsedMs": 0.5999999940395355,
+          "geometryMs": 0.20000000298023224,
+          "uniqueHeadGeometry": 2,
+          "colorProbe": null,
+          "distinctHeadRects": 2
+        },
+        {
+          "mode": "return",
+          "svgCount": 1,
+          "elapsedMs": 0.3999999910593033,
+          "geometryMs": 0,
+          "uniqueHeadGeometry": 2,
+          "colorProbe": null,
+          "distinctHeadRects": 2
+        },
+        {
+          "mode": "reload",
+          "svgCount": 1,
+          "elapsedMs": 0.5,
+          "geometryMs": 0,
+          "uniqueHeadGeometry": 2,
+          "colorProbe": null,
+          "distinctHeadRects": 2
+        }
+      ],
+      "xmlIdsRetained": 0
+    },
+    {
+      "fixture": "voice-ties",
+      "notes": 4,
+      "events": 2,
+      "mapped": 4,
+      "ambiguous": 0,
+      "unsupported": 0,
+      "distinctSvgIds": 4,
+      "svgChurn": 4,
+      "crossVoiceTieObservations": 0,
+      "layouts": [
+        {
+          "mode": "initial",
+          "svgCount": 1,
+          "elapsedMs": 3.1000000089406967,
+          "geometryMs": 2.1000000089406967,
+          "uniqueHeadGeometry": 4,
+          "colorProbe": null,
+          "distinctHeadRects": 4
+        },
+        {
+          "mode": "zoom",
+          "svgCount": 1,
+          "elapsedMs": 0.8999999910593033,
+          "geometryMs": 0.20000000298023224,
+          "uniqueHeadGeometry": 4,
+          "colorProbe": null,
+          "distinctHeadRects": 4
+        },
+        {
+          "mode": "relayout",
+          "svgCount": 1,
+          "elapsedMs": 1,
+          "geometryMs": 0.29999999701976776,
+          "uniqueHeadGeometry": 4,
+          "colorProbe": null,
+          "distinctHeadRects": 4
+        },
+        {
+          "mode": "css-scale",
+          "svgCount": 1,
+          "elapsedMs": 0.6000000089406967,
+          "geometryMs": 0.10000000894069672,
+          "uniqueHeadGeometry": 4,
+          "colorProbe": null,
+          "distinctHeadRects": 4
+        },
+        {
+          "mode": "pages",
+          "svgCount": 1,
+          "elapsedMs": 1,
+          "geometryMs": 0.29999999701976776,
+          "uniqueHeadGeometry": 4,
+          "colorProbe": null,
+          "distinctHeadRects": 4
+        },
+        {
+          "mode": "return",
+          "svgCount": 1,
+          "elapsedMs": 0.6000000089406967,
+          "geometryMs": 0.20000000298023224,
+          "uniqueHeadGeometry": 4,
+          "colorProbe": null,
+          "distinctHeadRects": 4
+        },
+        {
+          "mode": "reload",
+          "svgCount": 1,
+          "elapsedMs": 0.5,
+          "geometryMs": 0.09999999403953552,
+          "uniqueHeadGeometry": 4,
+          "colorProbe": null,
+          "distinctHeadRects": 4
+        }
+      ],
+      "xmlIdsRetained": 0
+    },
+    {
+      "fixture": "voice-ties-reversed",
+      "notes": 4,
+      "events": 2,
+      "mapped": 4,
+      "ambiguous": 0,
+      "unsupported": 0,
+      "distinctSvgIds": 4,
+      "svgChurn": 4,
+      "crossVoiceTieObservations": 4,
+      "layouts": [
+        {
+          "mode": "initial",
+          "svgCount": 1,
+          "elapsedMs": 2.1000000089406967,
+          "geometryMs": 0.7999999970197678,
+          "uniqueHeadGeometry": 4,
+          "colorProbe": null,
+          "distinctHeadRects": 4
+        },
+        {
+          "mode": "zoom",
+          "svgCount": 1,
+          "elapsedMs": 1.2999999970197678,
+          "geometryMs": 0.10000000894069672,
+          "uniqueHeadGeometry": 4,
+          "colorProbe": null,
+          "distinctHeadRects": 4
+        },
+        {
+          "mode": "relayout",
+          "svgCount": 1,
+          "elapsedMs": 1.3999999910593033,
+          "geometryMs": 0.19999998807907104,
+          "uniqueHeadGeometry": 4,
+          "colorProbe": null,
+          "distinctHeadRects": 4
+        },
+        {
+          "mode": "css-scale",
+          "svgCount": 1,
+          "elapsedMs": 1,
+          "geometryMs": 0.20000000298023224,
+          "uniqueHeadGeometry": 4,
+          "colorProbe": null,
+          "distinctHeadRects": 4
+        },
+        {
+          "mode": "pages",
+          "svgCount": 1,
+          "elapsedMs": 1.0999999940395355,
+          "geometryMs": 0.29999999701976776,
+          "uniqueHeadGeometry": 4,
+          "colorProbe": null,
+          "distinctHeadRects": 4
+        },
+        {
+          "mode": "return",
+          "svgCount": 1,
+          "elapsedMs": 1,
+          "geometryMs": 0.20000000298023224,
+          "uniqueHeadGeometry": 4,
+          "colorProbe": null,
+          "distinctHeadRects": 4
+        },
+        {
+          "mode": "reload",
+          "svgCount": 1,
+          "elapsedMs": 0.5,
+          "geometryMs": 0,
+          "uniqueHeadGeometry": 4,
+          "colorProbe": null,
+          "distinctHeadRects": 4
+        }
+      ],
+      "xmlIdsRetained": 0
+    },
+    {
+      "fixture": "tie-chain",
+      "notes": 3,
+      "events": 1,
+      "mapped": 3,
+      "ambiguous": 0,
+      "unsupported": 0,
+      "distinctSvgIds": 3,
+      "svgChurn": 3,
+      "crossVoiceTieObservations": 0,
+      "layouts": [
+        {
+          "mode": "initial",
+          "svgCount": 1,
+          "elapsedMs": 1.7000000029802322,
+          "geometryMs": 0.699999988079071,
+          "uniqueHeadGeometry": 3,
+          "colorProbe": null,
+          "distinctHeadRects": 3
+        },
+        {
+          "mode": "zoom",
+          "svgCount": 1,
+          "elapsedMs": 2.0999999940395355,
+          "geometryMs": 0.20000000298023224,
+          "uniqueHeadGeometry": 3,
+          "colorProbe": null,
+          "distinctHeadRects": 3
+        },
+        {
+          "mode": "relayout",
+          "svgCount": 1,
+          "elapsedMs": 0.9000000059604645,
+          "geometryMs": 0.20000000298023224,
+          "uniqueHeadGeometry": 3,
+          "colorProbe": null,
+          "distinctHeadRects": 3
+        },
+        {
+          "mode": "css-scale",
+          "svgCount": 1,
+          "elapsedMs": 0.7999999970197678,
+          "geometryMs": 0.20000000298023224,
+          "uniqueHeadGeometry": 3,
+          "colorProbe": null,
+          "distinctHeadRects": 3
+        },
+        {
+          "mode": "pages",
+          "svgCount": 1,
+          "elapsedMs": 1.2999999970197678,
+          "geometryMs": 0.19999998807907104,
+          "uniqueHeadGeometry": 3,
+          "colorProbe": null,
+          "distinctHeadRects": 3
+        },
+        {
+          "mode": "return",
+          "svgCount": 1,
+          "elapsedMs": 0.7000000029802322,
+          "geometryMs": 0.09999999403953552,
+          "uniqueHeadGeometry": 3,
+          "colorProbe": null,
+          "distinctHeadRects": 3
+        },
+        {
+          "mode": "reload",
+          "svgCount": 1,
+          "elapsedMs": 0.7000000029802322,
+          "geometryMs": 0.10000000894069672,
+          "uniqueHeadGeometry": 3,
+          "colorProbe": null,
+          "distinctHeadRects": 3
+        }
+      ],
+      "xmlIdsRetained": 0
+    },
+    {
+      "fixture": "numbered-unison",
+      "notes": 4,
+      "events": 2,
+      "mapped": 0,
+      "ambiguous": 4,
+      "unsupported": 0,
+      "distinctSvgIds": 0,
+      "svgChurn": 0,
+      "crossVoiceTieObservations": 0,
+      "layouts": [
+        {
+          "mode": "initial",
+          "svgCount": 1,
+          "elapsedMs": 1.3999999910593033,
+          "geometryMs": 0.5,
+          "uniqueHeadGeometry": 0,
+          "colorProbe": null,
+          "distinctHeadRects": 0
+        },
+        {
+          "mode": "zoom",
+          "svgCount": 1,
+          "elapsedMs": 1.0999999940395355,
+          "geometryMs": 0.19999998807907104,
+          "uniqueHeadGeometry": 0,
+          "colorProbe": null,
+          "distinctHeadRects": 0
+        },
+        {
+          "mode": "relayout",
+          "svgCount": 1,
+          "elapsedMs": 0.9000000059604645,
+          "geometryMs": 0.20000000298023224,
+          "uniqueHeadGeometry": 0,
+          "colorProbe": null,
+          "distinctHeadRects": 0
+        },
+        {
+          "mode": "css-scale",
+          "svgCount": 1,
+          "elapsedMs": 0.5,
+          "geometryMs": 0.09999999403953552,
+          "uniqueHeadGeometry": 0,
+          "colorProbe": null,
+          "distinctHeadRects": 0
+        },
+        {
+          "mode": "pages",
+          "svgCount": 1,
+          "elapsedMs": 0.7000000029802322,
+          "geometryMs": 0.20000000298023224,
+          "uniqueHeadGeometry": 0,
+          "colorProbe": null,
+          "distinctHeadRects": 0
+        },
+        {
+          "mode": "return",
+          "svgCount": 1,
+          "elapsedMs": 0.6000000089406967,
+          "geometryMs": 0,
+          "uniqueHeadGeometry": 0,
+          "colorProbe": null,
+          "distinctHeadRects": 0
+        },
+        {
+          "mode": "reload",
+          "svgCount": 1,
+          "elapsedMs": 0.5999999940395355,
+          "geometryMs": 0.09999999403953552,
+          "uniqueHeadGeometry": 0,
+          "colorProbe": null,
+          "distinctHeadRects": 0
+        }
+      ],
+      "xmlIdsRetained": 0
+    },
+    {
+      "fixture": "same-voice-unison",
+      "notes": 2,
+      "events": 2,
+      "mapped": 0,
+      "ambiguous": 2,
+      "unsupported": 0,
+      "distinctSvgIds": 0,
+      "svgChurn": 0,
+      "crossVoiceTieObservations": 0,
+      "layouts": [
+        {
+          "mode": "initial",
+          "svgCount": 1,
+          "elapsedMs": 1.0999999940395355,
+          "geometryMs": 0.29999999701976776,
+          "uniqueHeadGeometry": 0,
+          "colorProbe": null,
+          "distinctHeadRects": 0
+        },
+        {
+          "mode": "zoom",
+          "svgCount": 1,
+          "elapsedMs": 0.699999988079071,
+          "geometryMs": 0.20000000298023224,
+          "uniqueHeadGeometry": 0,
+          "colorProbe": null,
+          "distinctHeadRects": 0
+        },
+        {
+          "mode": "relayout",
+          "svgCount": 1,
+          "elapsedMs": 0.5999999940395355,
+          "geometryMs": 0.10000000894069672,
+          "uniqueHeadGeometry": 0,
+          "colorProbe": null,
+          "distinctHeadRects": 0
+        },
+        {
+          "mode": "css-scale",
+          "svgCount": 1,
+          "elapsedMs": 2.6000000089406967,
+          "geometryMs": 0.19999998807907104,
+          "uniqueHeadGeometry": 0,
+          "colorProbe": null,
+          "distinctHeadRects": 0
+        },
+        {
+          "mode": "pages",
+          "svgCount": 1,
+          "elapsedMs": 0.7000000029802322,
+          "geometryMs": 0.29999999701976776,
+          "uniqueHeadGeometry": 0,
+          "colorProbe": null,
+          "distinctHeadRects": 0
+        },
+        {
+          "mode": "return",
+          "svgCount": 1,
+          "elapsedMs": 0.3999999910593033,
+          "geometryMs": 0.09999999403953552,
+          "uniqueHeadGeometry": 0,
+          "colorProbe": null,
+          "distinctHeadRects": 0
+        },
+        {
+          "mode": "reload",
+          "svgCount": 1,
+          "elapsedMs": 0.5999999940395355,
+          "geometryMs": 0.09999999403953552,
+          "uniqueHeadGeometry": 0,
+          "colorProbe": null,
+          "distinctHeadRects": 0
+        }
+      ],
+      "xmlIdsRetained": 0
+    },
+    {
+      "fixture": "string-voices",
+      "notes": 2,
+      "events": 2,
+      "mapped": 0,
+      "ambiguous": 0,
+      "unsupported": 2,
+      "distinctSvgIds": 0,
+      "svgChurn": 0,
+      "crossVoiceTieObservations": 0,
+      "layouts": [
+        {
+          "mode": "initial",
+          "svgCount": 1,
+          "elapsedMs": 1.7000000029802322,
+          "geometryMs": 0.7999999970197678,
+          "uniqueHeadGeometry": 0,
+          "colorProbe": null,
+          "distinctHeadRects": 0
+        },
+        {
+          "mode": "zoom",
+          "svgCount": 1,
+          "elapsedMs": 0.5999999940395355,
+          "geometryMs": 0.09999999403953552,
+          "uniqueHeadGeometry": 0,
+          "colorProbe": null,
+          "distinctHeadRects": 0
+        },
+        {
+          "mode": "relayout",
+          "svgCount": 1,
+          "elapsedMs": 0.7999999970197678,
+          "geometryMs": 0.19999998807907104,
+          "uniqueHeadGeometry": 0,
+          "colorProbe": null,
+          "distinctHeadRects": 0
+        },
+        {
+          "mode": "css-scale",
+          "svgCount": 1,
+          "elapsedMs": 2.2000000029802322,
+          "geometryMs": 0.19999998807907104,
+          "uniqueHeadGeometry": 0,
+          "colorProbe": null,
+          "distinctHeadRects": 0
+        },
+        {
+          "mode": "pages",
+          "svgCount": 1,
+          "elapsedMs": 1.300000011920929,
+          "geometryMs": 0.7000000029802322,
+          "uniqueHeadGeometry": 0,
+          "colorProbe": null,
+          "distinctHeadRects": 0
+        },
+        {
+          "mode": "return",
+          "svgCount": 1,
+          "elapsedMs": 0.5,
+          "geometryMs": 0.09999999403953552,
+          "uniqueHeadGeometry": 0,
+          "colorProbe": null,
+          "distinctHeadRects": 0
+        },
+        {
+          "mode": "reload",
+          "svgCount": 1,
+          "elapsedMs": 0.4000000059604645,
+          "geometryMs": 0,
+          "uniqueHeadGeometry": 0,
+          "colorProbe": null,
+          "distinctHeadRects": 0
+        }
+      ],
+      "xmlIdsRetained": 0
+    },
+    {
+      "fixture": "parts",
+      "notes": 2,
+      "events": 2,
+      "mapped": 2,
+      "ambiguous": 0,
+      "unsupported": 0,
+      "distinctSvgIds": 2,
+      "svgChurn": 2,
+      "crossVoiceTieObservations": 0,
+      "layouts": [
+        {
+          "mode": "initial",
+          "svgCount": 1,
+          "elapsedMs": 1.2999999970197678,
+          "geometryMs": 0.4000000059604645,
+          "uniqueHeadGeometry": 2,
+          "colorProbe": null,
+          "distinctHeadRects": 2
+        },
+        {
+          "mode": "zoom",
+          "svgCount": 1,
+          "elapsedMs": 1.0999999940395355,
+          "geometryMs": 0.19999998807907104,
+          "uniqueHeadGeometry": 2,
+          "colorProbe": null,
+          "distinctHeadRects": 2
+        },
+        {
+          "mode": "relayout",
+          "svgCount": 1,
+          "elapsedMs": 1.9000000059604645,
+          "geometryMs": 0.4000000059604645,
+          "uniqueHeadGeometry": 2,
+          "colorProbe": null,
+          "distinctHeadRects": 2
+        },
+        {
+          "mode": "css-scale",
+          "svgCount": 1,
+          "elapsedMs": 0.7000000029802322,
+          "geometryMs": 0.20000000298023224,
+          "uniqueHeadGeometry": 2,
+          "colorProbe": null,
+          "distinctHeadRects": 2
+        },
+        {
+          "mode": "pages",
+          "svgCount": 1,
+          "elapsedMs": 0.9000000059604645,
+          "geometryMs": 0.20000000298023224,
+          "uniqueHeadGeometry": 2,
+          "colorProbe": null,
+          "distinctHeadRects": 2
+        },
+        {
+          "mode": "return",
+          "svgCount": 1,
+          "elapsedMs": 0.6000000089406967,
+          "geometryMs": 0.10000000894069672,
+          "uniqueHeadGeometry": 2,
+          "colorProbe": null,
+          "distinctHeadRects": 2
+        },
+        {
+          "mode": "reload",
+          "svgCount": 1,
+          "elapsedMs": 0.5999999940395355,
+          "geometryMs": 0.09999999403953552,
+          "uniqueHeadGeometry": 2,
+          "colorProbe": null,
+          "distinctHeadRects": 2
+        }
+      ],
+      "xmlIdsRetained": 0
+    },
+    {
+      "fixture": "konekuto",
+      "notes": 2049,
+      "events": 1708,
+      "mapped": 2049,
+      "ambiguous": 0,
+      "unsupported": 0,
+      "distinctSvgIds": 1344,
+      "svgChurn": 2049,
+      "crossVoiceTieObservations": 0,
+      "layouts": [
+        {
+          "mode": "initial",
+          "svgCount": 1,
+          "elapsedMs": 117.79999999701977,
+          "geometryMs": 26.60000005364418,
+          "uniqueHeadGeometry": 2049,
+          "colorProbe": null,
+          "distinctHeadRects": 2049
+        },
+        {
+          "mode": "zoom",
+          "svgCount": 1,
+          "elapsedMs": 135.59999999403954,
+          "geometryMs": 30.40000008046627,
+          "uniqueHeadGeometry": 2049,
+          "colorProbe": null,
+          "distinctHeadRects": 2049
+        },
+        {
+          "mode": "relayout",
+          "svgCount": 1,
+          "elapsedMs": 126.79999999701977,
+          "geometryMs": 21.800000056624413,
+          "uniqueHeadGeometry": 2049,
+          "colorProbe": null,
+          "distinctHeadRects": 2049
+        },
+        {
+          "mode": "css-scale",
+          "svgCount": 1,
+          "elapsedMs": 168.90000000596046,
+          "geometryMs": 21.199999928474426,
+          "uniqueHeadGeometry": 2049,
+          "colorProbe": null,
+          "distinctHeadRects": 2049
+        },
+        {
+          "mode": "pages",
+          "svgCount": 5,
+          "elapsedMs": 116.30000001192093,
+          "geometryMs": 22.799999967217445,
+          "uniqueHeadGeometry": 2049,
+          "colorProbe": null,
+          "distinctHeadRects": 2049
+        },
+        {
+          "mode": "return",
+          "svgCount": 1,
+          "elapsedMs": 110,
+          "geometryMs": 18.700000002980232,
+          "uniqueHeadGeometry": 2049,
+          "colorProbe": null,
+          "distinctHeadRects": 2049
+        },
+        {
+          "mode": "reload",
+          "svgCount": 1,
+          "elapsedMs": 96.70000000298023,
+          "geometryMs": 22.80000002682209,
+          "uniqueHeadGeometry": 2049,
+          "colorProbe": null,
+          "distinctHeadRects": 2049
+        }
+      ],
+      "xmlIdsRetained": 0
+    }
+  ],
+  "osmdVersion": "2.2.1-release",
+  "assetSha256": "537ed08f9c082ce0d785d21b80485b8d443cfb92ddc7a4ba4977804f09408cf4",
+  "fixtureIdentity": {
+    "chord": {
+      "sourceHash": "3a79db2d9931b8f91d3923b65b27f283",
+      "scoreVersion": 4,
+      "divisions": 4
+    },
+    "voices": {
+      "sourceHash": "8033e247367cd34b9c9798c8b273d1e2",
+      "scoreVersion": 4,
+      "divisions": 4
+    },
+    "cross-staff": {
+      "sourceHash": "1ac8973f4d47244e0cc2649d94d0f363",
+      "scoreVersion": 4,
+      "divisions": 4
+    },
+    "cross-staff-chord": {
+      "sourceHash": "b21ea698fa0f7c47f0813ff614e70199",
+      "scoreVersion": 4,
+      "divisions": 4
+    },
+    "voice-ties": {
+      "sourceHash": "4756044dcf06b82ced03bfd1364f97e6",
+      "scoreVersion": 4,
+      "divisions": 4
+    },
+    "voice-ties-reversed": {
+      "sourceHash": "5a9d77162d745964cbb26cd55f1fa48c",
+      "scoreVersion": 4,
+      "divisions": 4
+    },
+    "tie-chain": {
+      "sourceHash": "11fa9901bece9a8741594043ab0292df",
+      "scoreVersion": 4,
+      "divisions": 4
+    },
+    "numbered-unison": {
+      "sourceHash": "3388e96c2e1ebe92e9d9b23ab89637db",
+      "scoreVersion": 4,
+      "divisions": 4
+    },
+    "same-voice-unison": {
+      "sourceHash": "6b5d5f9616ddfe162b890a33858d8b1c",
+      "scoreVersion": 4,
+      "divisions": 4
+    },
+    "string-voices": {
+      "sourceHash": "73c8241e38fe981205525fd194aeaa95",
+      "scoreVersion": 4,
+      "divisions": 4
+    },
+    "parts": {
+      "sourceHash": "110421188624fddd308d73b00ef6c27a",
+      "scoreVersion": 4,
+      "divisions": 4
+    },
+    "konekuto": {
+      "sourceHash": "2b3a2fc7070fdf848186ca02a57e20f8",
+      "scoreVersion": 4,
+      "divisions": 4
+    }
+  }
+}
