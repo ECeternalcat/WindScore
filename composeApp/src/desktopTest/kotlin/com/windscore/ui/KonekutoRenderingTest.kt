@@ -36,7 +36,7 @@ class KonekutoRenderingTest {
             System.getenv("WINDSCORE_RENDER_VALIDATION")=="1")
         val root = if (File("tools").isDirectory) File(".") else File("..")
         val output = File(root, "composeApp/build/validation/osmd").apply { mkdirs() }
-        File(output, "index.html").writeText(OsmdHtml.buildHtml(4, "Loading", "Loading failed"))
+        File(output, "index.html").writeText(OsmdHtml.buildHtml(4, "Loading", "Loading failed", importerProvenanceJson(loadScore().rawXml!!,loadScore())))
         File(output, "score.xml").writeText(loadScore().rawXml!!)
         File(output, "osmd.js").writeBytes(javaClass.getResourceAsStream("/opensheetmusicdisplay.min.js")!!.readBytes())
         File(output, "reference.json").writeBytes(javaClass.getResourceAsStream("/konekuto-reference.json")!!.readBytes())
@@ -47,6 +47,42 @@ class KonekutoRenderingTest {
             assertEquals(0, process.exitValue(), File(output, "browser.log").readText())
         } finally { if (process.isAlive) process.destroyForcibly() }
 
+        // Native bridge costs measured independently of browser collection and PNG decoding.
+        val noteText=File(output,"1200-notes.json").readText()
+        val benchmarkScore=loadScore()
+        val rasterDimensions=Json.parseToJsonElement(File(output,"1200-geometry.json").readText()).jsonObject
+        val rasterWidth=rasterDimensions.getValue("width").jsonPrimitive.int
+        val rasterHeight=rasterDimensions.getValue("height").jsonPrimitive.int
+        val nativeSamples=buildJsonArray {
+            repeat(5) {
+                val bean=java.lang.management.ManagementFactory.getThreadMXBean() as? com.sun.management.ThreadMXBean
+                val thread=Thread.currentThread().threadId()
+                val before=bean?.getThreadAllocatedBytes(thread) ?: 0L
+                val started=System.nanoTime()
+                val decoded=decodeNoteGeometry(noteText,benchmarkScore,rasterWidth,rasterHeight)
+                kotlin.test.assertNotNull(decoded)
+                add(buildJsonObject {
+                    put("decodeMs",(System.nanoTime()-started)/1e6)
+                    put("allocatedBytes",(bean?.getThreadAllocatedBytes(thread) ?: 0L)-before)
+                })
+            }
+        }
+        val parserSamples=buildJsonArray {
+            repeat(5) {
+                for(enriched in listOf(false,true)) {
+                    val started=System.nanoTime()
+                    if(enriched) com.windscore.core.parser.MusicXmlParser.parseXmlWithProvenance(benchmarkScore.rawXml!!.toByteArray())
+                    else com.windscore.core.parser.MusicXmlParser.parseXml(benchmarkScore.rawXml!!.toByteArray())
+                    add(buildJsonObject {put("provenance",enriched);put("elapsedMs",(System.nanoTime()-started)/1e6)})
+                }
+            }
+        }
+        File(output,"native-note-benchmark.json").writeText(buildJsonObject {
+            put("decodeSamples",nativeSamples);put("parserSamples",parserSamples)
+            put("geometryJsonBytes",noteText.toByteArray().size)
+            put("provenanceJsonBytes",importerProvenanceJson(benchmarkScore.rawXml!!,benchmarkScore)!!.toByteArray().size)
+        }.toString())
+
         val geometry = Json.parseToJsonElement(File(output, "1200-geometry.json").readText()).jsonObject
         val ticks = geometry.getValue("ticks").jsonArray.map { it.jsonPrimitive.long }
         val positions = geometry.getValue("positions").jsonArray.map { it.jsonPrimitive.float }
@@ -55,7 +91,8 @@ class KonekutoRenderingTest {
             .sortedBy { it.name.substringAfter("chunk-").substringBefore('.').toInt() }
             .map { ImageIO.read(it).toComposeImageBitmap() }
         val snapshot = SheetSnapshot(chunks, geometry.getValue("width").jsonPrimitive.int,
-            chunks.first().height, geometry.getValue("height").jsonPrimitive.int, steps)
+            chunks.first().height, geometry.getValue("height").jsonPrimitive.int, steps,
+            decodeNoteGeometry(noteText,benchmarkScore,rasterWidth,rasterHeight))
         val tick = mutableStateOf(2632L)
         val score = loadScore()
         compose.setContent {

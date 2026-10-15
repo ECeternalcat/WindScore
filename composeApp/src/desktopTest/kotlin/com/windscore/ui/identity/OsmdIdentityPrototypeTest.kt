@@ -1,16 +1,15 @@
 package com.windscore.ui.identity
 
+import com.windscore.ui.OsmdNoteGeometryJs
 import com.windscore.core.loadScore
 import com.windscore.core.model.TrackType
 import com.windscore.core.parser.MusicXmlParser
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.*
 import org.junit.Assume.assumeTrue
 import java.io.File
 import java.util.concurrent.TimeUnit
-import javax.xml.parsers.DocumentBuilderFactory
-import org.w3c.dom.Element
 import kotlin.test.*
 
 private val prototypeJson=Json { encodeDefaults=true }
@@ -45,6 +44,29 @@ class OsmdIdentityPrototypeTest {
         assertEquals(1708,f.notes.map { it.performedId }.toSet().size)
         assertEquals(341,f.notes.size-f.notes.map { it.performedId }.toSet().size)
         assertEquals(f.notes.size,f.notes.map { it.key }.toSet().size)
+        val reference=Json.parseToJsonElement(javaClass.getResource("/konekuto-reference.json")!!.readText()).jsonObject
+        val score=loadScore()
+        val oracleWritten=reference.getValue("writtenNotes").jsonArray
+        assertEquals(oracleWritten.size,f.notes.size)
+        for((index,n) in f.notes.withIndex()) {
+            val expected=oracleWritten[index].jsonObject
+            assertEquals(expected.getValue("pitch").jsonPrimitive.int,n.pitch)
+            assertEquals(expected.getValue("startTick").jsonPrimitive.long,n.tick)
+            assertEquals(expected.getValue("durationTick").jsonPrimitive.long,n.duration)
+            assertEquals(expected.getValue("voice").jsonPrimitive.content,n.voice)
+            assertEquals(expected.getValue("staff").jsonPrimitive.int,n.staff)
+        }
+        // The independent oracle assigns written segments to events without consulting OSMD.
+        for(event in reference.getValue("events").jsonArray.map { it.jsonObject }) {
+            val actual=score.notes.single {
+                it.pitch==event.getValue("pitch").jsonPrimitive.int &&
+                it.startTick==event.getValue("startTick").jsonPrimitive.long &&
+                it.durationTick==event.getValue("durationTick").jsonPrimitive.long &&
+                it.track==(if(event.getValue("staff").jsonPrimitive.int==2)TrackType.LEFT_HAND else TrackType.RIGHT_HAND)
+            }
+            for(source in event.getValue("sourceNotes").jsonArray)
+                assertEquals(actual.id,f.notes[source.jsonPrimitive.int].performedId)
+        }
     }
 
     @Test
@@ -54,6 +76,12 @@ class OsmdIdentityPrototypeTest {
         val fixtures=listOf(
             sidecar("chord",document(measure(note("C",4)+note("E",4,chord=true)+note("G",4,chord=true)))),
             sidecar("voices",document(unisons())),
+            sidecar("divisions",document(measure(note("C",4))+
+                measure("<attributes><divisions>8</divisions></attributes>"+note("D",4).replace("<duration>16</duration>","<duration>32</duration>")))),
+            sidecar("enharmonic-tie",document(
+                measure(note("C",4,tie="start").replace("</step>","</step><alter>1</alter>"))+
+                measure(note("D",4,tie="stop").replace("</step>","</step><alter>-1</alter>")))),
+            sidecar("missing-voice",document(measure(note("C",4).replace("<voice>1</voice>",""))),unsupported=1),
             sidecar("cross-staff",document(crossStaff())),
             sidecar("cross-staff-chord",document(measure(note("C",4)+note("E",3,staff=2,chord=true)))),
             sidecar("voice-ties",document(measure(note("C",4,tie="start")+"<backup><duration>16</duration></backup>"+note("C",4,voice="2",tie="start"))+
@@ -72,6 +100,7 @@ class OsmdIdentityPrototypeTest {
         )
         val root=if(File("tools").isDirectory) File(".") else File("..")
         val output=File(root,"composeApp/build/validation/osmd-identity").apply { mkdirs() }
+        File(output,"geometry.js").writeText(OsmdNoteGeometryJs.source)
         File(output,"fixtures.json").writeText(prototypeJson.encodeToString(fixtures))
         File(output,"osmd.js").writeBytes(javaClass.getResourceAsStream("/opensheetmusicdisplay.min.js")!!.readBytes())
         val process=ProcessBuilder("node",File(root,"tools/prototypes/osmd_identity.cjs").absolutePath,output.absolutePath)

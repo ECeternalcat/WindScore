@@ -16,6 +16,7 @@ import javax.imageio.ImageIO
 import kotlinx.serialization.json.*
 import org.junit.Assume.assumeTrue
 import kotlin.test.Test
+import kotlin.test.assertNotNull
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -32,7 +33,7 @@ class KonekutoJavaFxTest {
         assumeTrue("JavaFX integration requires DISPLAY on Linux", !System.getProperty("os.name").startsWith("Linux") || System.getenv("DISPLAY")!=null)
         try { Platform.startup {} } catch (_: IllegalStateException) {}
         Platform.setImplicitExit(false)
-        val html=OsmdHtml.buildHtml(4,"Loading","Loading failed").toByteArray()
+        val html=OsmdHtml.buildHtml(4,"Loading","Loading failed", importerProvenanceJson(loadScore().rawXml!!,loadScore())).toByteArray()
         val xml=loadScore().rawXml!!.toByteArray()
         val js=javaClass.getResourceAsStream("/opensheetmusicdisplay.min.js")!!.readBytes()
         val server=HttpServer.create(InetSocketAddress("127.0.0.1",0),0)
@@ -58,6 +59,12 @@ class KonekutoJavaFxTest {
             assertTrue(ready, fx { view.engine.executeScript("document.body.textContent").toString() })
             val json=fx { view.engine.executeScript("JSON.stringify({width:window.__snapshotChunkWidth,height:window.__snapshotTotalHeight,times:window.__cursorTimes,positions:window.__cursorPos,chunks:window.__snapshotChunks,renderMs:window.__renderTime,error:window.__snapshotError||null})").toString() }
             val data=Json.parseToJsonElement(json).jsonObject
+            val geometryText=fx { view.engine.executeScript("JSON.stringify(window.WindScoreNoteGeometry.forSnapshot(window.__snapshotGeneration))").toString() }
+            val geometry=assertNotNull(decodeNoteGeometry(geometryText,loadScore(),
+                data.getValue("width").jsonPrimitive.int,data.getValue("height").jsonPrimitive.int))
+            assertEquals(2049,geometry.notes.size)
+            assertTrue(geometry.notes.all { it.status=="mapped" })
+            assertEquals(1708,geometry.notes.map { it.performedId }.toSet().size)
             assertEquals(JsonNull,data["error"])
             val root=if(File("tools").isDirectory) File(".") else File("..")
             val output=File(root,"composeApp/build/validation/javafx").apply { mkdirs() }

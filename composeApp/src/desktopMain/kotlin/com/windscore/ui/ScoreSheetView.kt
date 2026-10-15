@@ -52,6 +52,7 @@ actual fun ScoreSheetView(
     onStepForward: () -> Unit,
     onStepBackward: () -> Unit,
     onSnapshot: ((SheetSnapshot) -> Unit)?,
+    identityScore: com.windscore.core.model.Score?,
 ) {
     val tr = com.windscore.ui.i18n.strings()
     var state by remember { mutableStateOf<LoadState>(LoadState.Loading) }
@@ -93,7 +94,7 @@ actual fun ScoreSheetView(
     val serverData = serverInfo.first
     val port = serverInfo.second.address.port
 
-    LaunchedEffect(rawXml) { serverData.xml = rawXml }
+    LaunchedEffect(rawXml, identityScore) { serverData.xml = rawXml }
     LaunchedEffect(divisions, tr.loadingScore, tr.loadingFailed) {
         serverData.html = OsmdHtml.buildHtml(divisions, tr.loadingScore, tr.loadingFailed)
     }
@@ -139,14 +140,14 @@ actual fun ScoreSheetView(
     )
 
     // Single LaunchedEffect: load -> poll -> cursor sync (在后台 Dispatchers.Default 运行，避免 latch.await 阻塞 Compose UI 线程导致动画卡顿)
-    LaunchedEffect(rawXml) {
+    LaunchedEffect(rawXml, identityScore) {
         val uiContext = coroutineContext
         withContext(Dispatchers.Default) {
             renderDone.set(false)
 
             // Check cache
             val htmlText = OsmdHtml.buildHtml(divisions, tr.loadingScore, tr.loadingFailed)
-            val cacheKey = sheetSnapshotCacheKey(rawXml, htmlText, serverData.osmdJsBytes, "javafx-23")
+            val cacheKey = sheetSnapshotCacheKey(rawXml, htmlText, serverData.osmdJsBytes, "javafx-23") + "_" + noteIdentityCacheSuffix(identityScore)
             val cacheDir = File(com.windscore.core.getCacheDir(), cacheKey)
 
             val handler = snapshotHandler
@@ -155,7 +156,7 @@ actual fun ScoreSheetView(
                 if (metaFile.exists()) {
                     try {
                         val metaJson = metaFile.readText(Charsets.UTF_8)
-                        val snapshot = parseSnapshotCache(cacheDir, metaJson)
+                        val snapshot = parseSnapshotCache(cacheDir, metaJson, identityScore)
                         if (snapshot != null) {
                             withContext(uiContext) {
                                 onRenderTime(0.0)
@@ -176,7 +177,7 @@ actual fun ScoreSheetView(
             if (initFailed.get() || wv == null) return@withContext
             val webView = wv // 定义只读 val 避免闭包内 Smart Cast 失败
 
-            serverData.html = OsmdHtml.buildHtml(divisions, tr.loadingScore, tr.loadingFailed)
+            serverData.html = OsmdHtml.buildHtml(divisions, tr.loadingScore, tr.loadingFailed, importerProvenanceJson(rawXml, identityScore))
             serverData.xml = rawXml
 
             Platform.runLater { runCatching { webView.engine.load("http://127.0.0.1:$port/index.html") } }
@@ -218,13 +219,14 @@ actual fun ScoreSheetView(
                     delay(300)
                     snapshotWaited += 300
                     val latch = java.util.concurrent.CountDownLatch(1)
-                    val readyBox = intArrayOf(0, 0, 0, 0) // [ready, count, width, totalHeight]
+                    val readyBox = intArrayOf(0, 0, 0, 0, -1) // [ready, count, width, totalHeight, generation]
                     Platform.runLater {
                         runCatching {
                             readyBox[0] = (webView.engine.executeScript("(window.__snapshotChunksReady||0)") as? Number)?.toInt() ?: 0
                             readyBox[1] = (webView.engine.executeScript("(window.__snapshotChunkCount||0)") as? Number)?.toInt() ?: 0
                             readyBox[2] = (webView.engine.executeScript("(window.__snapshotChunkWidth||0)") as? Number)?.toInt() ?: 0
                             readyBox[3] = (webView.engine.executeScript("(window.__snapshotTotalHeight||0)") as? Number)?.toInt() ?: 0
+                            readyBox[4] = (webView.engine.executeScript("window.__snapshotGeneration") as? Number)?.toInt() ?: -1
                         }
                         latch.countDown()
                     }
@@ -259,10 +261,12 @@ actual fun ScoreSheetView(
                         }
                         try {
                             val steps = parseCursorSteps(posJson, timesJson, divisions)
-                            val snapshot = SheetSnapshot(chunks, readyBox[2], firstH, readyBox[3], steps)
+                            val geometryText = runLaterAndGet { webView.engine.executeScript("JSON.stringify(window.WindScoreNoteGeometry.forSnapshot(${readyBox[4]}))")?.toString() ?: "null" }
+                            val geometry = decodeNoteGeometry(geometryText, identityScore, readyBox[2], readyBox[3], readyBox[4])
+                            val snapshot = SheetSnapshot(chunks, readyBox[2], firstH, readyBox[3], steps, geometry)
                             
                             // Save to cache asynchronously
-                            saveSnapshotCache(cacheDir, readyBox[2], firstH, readyBox[3], steps, rawPngBytesList)
+                            saveSnapshotCache(cacheDir, readyBox[2], firstH, readyBox[3], steps, rawPngBytesList, geometry)
 
                             withContext(uiContext) {
                                 handler.invoke(snapshot)
@@ -357,7 +361,7 @@ private fun <T> runLaterAndGet(block: () -> T): T {
     return result.get(3, java.util.concurrent.TimeUnit.SECONDS)
 }
 
-private fun parseSnapshotCache(cacheDir: java.io.File, json: String): SheetSnapshot? {
+private fun parseSnapshotCache(cacheDir: java.io.File, json: String, identityScore: com.windscore.core.model.Score?): SheetSnapshot? {
     try {
         val width = "\"width\"\\s*:\\s*(\\d+)".toRegex().find(json)?.groupValues?.get(1)?.toIntOrNull() ?: return null
         val firstH = "\"firstH\"\\s*:\\s*(\\d+)".toRegex().find(json)?.groupValues?.get(1)?.toIntOrNull() ?: return null
@@ -383,7 +387,7 @@ private fun parseSnapshotCache(cacheDir: java.io.File, json: String): SheetSnaps
             index++
         }
         if (chunks.isEmpty()) return null
-        return SheetSnapshot(chunks, width, firstH, totalHeight, steps)
+        return SheetSnapshot(chunks, width, firstH, totalHeight, steps, readNoteGeometry(cacheDir, identityScore, width, totalHeight))
     } catch (e: Exception) {
         println("[OSMD] Error parsing cache: ${e.message}")
         return null
@@ -396,7 +400,8 @@ private fun saveSnapshotCache(
     firstH: Int,
     totalHeight: Int,
     steps: List<CursorStep>,
-    rawPngBytesList: List<ByteArray>
+    rawPngBytesList: List<ByteArray>,
+    geometry: NoteGeometrySnapshot?,
 ) {
     val cacheRoot = cacheDir.parentFile ?: return
     val tempDir = java.io.File(cacheRoot, ".${cacheDir.name}.${System.nanoTime()}.tmp")
@@ -430,6 +435,7 @@ private fun saveSnapshotCache(
         
         val metaFile = java.io.File(tempDir, "meta.json")
         metaFile.writeText(sb.toString(), Charsets.UTF_8)
+        writeNoteGeometry(tempDir, cacheDir.name, width, totalHeight, geometry)
         if (cacheDir.exists()) cacheDir.deleteRecursively()
         check(tempDir.renameTo(cacheDir)) { "Failed to publish snapshot cache" }
         trimSnapshotCaches(cacheRoot, cacheDir)

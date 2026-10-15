@@ -835,6 +835,7 @@ private fun MainStage(
                 val sheetFraction = if (showSheetKb) 0.72f else 1f
                 ScoreSheetView(
                     rawXml = rawXml,
+                    identityScore = session.score,
                     currentTickProvider = { tick },
                     modifier = Modifier.fillMaxWidth().fillMaxHeight(sheetFraction)
                         .offset(x = 99999.dp),

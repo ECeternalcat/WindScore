@@ -16,7 +16,9 @@ internal object OsmdHtml {
         divisions: Int,
         loadingText: String,
         loadingFailedText: String,
+        provenanceJson: String? = null,
     ): String {
+        val safeProvenance = provenanceJson?.replace("<", "\\u003c") ?: "null"
         val safeLoadingText = escapeJs(loadingText)
         val safeLoadingFailedText = escapeJs(loadingFailedText)
         return """
@@ -43,6 +45,8 @@ internal object OsmdHtml {
             <div id="osmd"></div>
             <div id="err"></div>
             <script>
+                ${OsmdNoteGeometryJs.source}
+                window.__provenance=$safeProvenance;
                 window.__osmd=null;
                 window.__renderTime=-1;
                 window.__status="init";
@@ -98,6 +102,13 @@ internal object OsmdHtml {
                     var rect=svg.getBoundingClientRect();
                     var w=Math.ceil(rect.width/scale)||osmdEl.scrollWidth;
                     var h=Math.ceil(rect.height/scale)||osmdEl.scrollHeight;
+                    var generation=window.__layoutGeneration||0;
+                    window.__snapshotGeneration=generation;
+                    window.__noteGeometry=null;
+                    try{
+                        if(window.__provenance)window.__noteGeometry=window.WindScoreNoteGeometry.collect(
+                            window.__osmd,window.__provenance,osmdEl,1);
+                    }catch(e){window.__noteGeometryError=String(e);}
                     var CHUNK=4000;
                     var numChunks=Math.ceil(h/CHUNK);
                     window.__snapshotChunks=new Array(numChunks);
@@ -121,11 +132,12 @@ internal object OsmdHtml {
                         (function(idx,context,canvasEl,dataUrl){
                             var img=new Image();
                             img.onload=function(){
+                                if(generation!==(window.__layoutGeneration||0))return;
                                 context.drawImage(img,0,0);
                                 try{window.__snapshotChunks[idx]=canvasEl.toDataURL('image/png');}catch(e){window.__snapshotError='chunk'+idx+':'+e.message;}
                                 window.__snapshotChunksReady++;
                             };
-                            img.onerror=function(){window.__snapshotError='img load error chunk'+idx;window.__snapshotChunksReady++;};
+                            img.onerror=function(){if(generation!==(window.__layoutGeneration||0))return;window.__snapshotError='img load error chunk'+idx;window.__snapshotChunksReady++;};
                             var blob=new Blob([dataUrl],{type:'image/svg+xml;charset=utf-8'});
                             img.src=URL.createObjectURL(blob);
                         })(i,ctx,canvas,svgData);
@@ -339,6 +351,7 @@ internal object OsmdHtml {
                                     drawPartNames:false
                                 });
                                 window.__osmd=osmd;
+                                window.WindScoreNoteGeometry.install(osmd);
                                 setStatus("parse "+(xml.length/1024).toFixed(0)+"KB");
                                 var t0=Date.now();
                                 osmd.load(xml).then(function(){

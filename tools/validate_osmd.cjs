@@ -56,9 +56,36 @@ const server = http.createServer((req, res) => {
           svgCount: document.querySelectorAll('#osmd svg').length, pathCount: document.querySelectorAll('#osmd svg path').length,
           width: window.__snapshotChunkWidth, height: window.__snapshotTotalHeight,
           positions: window.__cursorPos, ticks: times.map(t => Math.round(t*16)), groups,
+          noteGeometry:window.__noteGeometry, geometryError:window.__noteGeometryError||null,
           chunks: window.__snapshotChunks, error: window.__snapshotError || null};
       });
       const chunks = data.chunks; delete data.chunks;
+      const geometry=data.noteGeometry;delete data.noteGeometry;
+      assert.equal(data.geometryError,null);
+      assert.equal(geometry.notes.length,2049);
+      assert.equal(geometry.notes.filter(n=>n.status==='mapped').length,2049);
+      assert.equal(new Set(geometry.notes.map(n=>n.performedId)).size,1708);
+      assert.equal(geometry.pages[0].width,data.width);
+      assert.equal(geometry.pages[0].height,data.height);
+      fs.writeFileSync(path.join(output,`${width}-notes.json`),JSON.stringify(geometry));
+      const cdp=await page.context().newCDPSession(page);
+      await cdp.send('Performance.enable');
+      const samples=[];
+      for(let i=0;i<5;i++){
+        await page.evaluate(()=>{window.__noteGeometry=null;});
+        await cdp.send('HeapProfiler.collectGarbage');
+        const before=(await cdp.send('Performance.getMetrics')).metrics.find(m=>m.name==='JSHeapUsedSize').value;
+        const sample=await page.evaluate(()=>{
+          const g=window.WindScoreNoteGeometry.collect(window.__osmd,window.__provenance,document.getElementById('osmd'),1);
+          window.__noteGeometry=g;
+          return {elapsedMs:g.elapsedMs,serializedBytes:new TextEncoder().encode(JSON.stringify(g)).length};
+        });
+        await cdp.send('HeapProfiler.collectGarbage');
+        const after=(await cdp.send('Performance.getMetrics')).metrics.find(m=>m.name==='JSHeapUsedSize').value;
+        samples.push({...sample,retainedHeapDelta:after-before});
+      }
+      data.noteGeometryBenchmark=samples;
+
       console.log(JSON.stringify({...data, positions: data.positions.slice(-12), ticks: data.ticks.slice(-4), groups: data.groups.slice(-3)}));
       chunks.forEach((chunk, i) => fs.writeFileSync(path.join(output, `${width}-chunk-${i}.png`), Buffer.from(chunk.split(',')[1], 'base64')));
       await page.screenshot({path: path.join(output, `${width}-browser.png`)});
@@ -111,6 +138,11 @@ const server = http.createServer((req, res) => {
         const [x,y,h] = data.positions.slice(i*3,i*3+3);
         assert.ok(x>=0 && x<data.width && y>=0 && y+h<=data.height+1, `cursor outside snapshot at ${data.ticks[i]}: ${x},${y},${h}`);
       }
+      assert.deepEqual(await page.evaluate(()=>{
+        const generation=window.__snapshotGeneration;
+        return [!!window.WindScoreNoteGeometry.forSnapshot(generation),
+          window.WindScoreNoteGeometry.forSnapshot(generation+1)];
+      }),[true,null]);
       const mapping=await page.evaluate(()=> {
         const osmd=window.__osmd;
         function inspect() {
@@ -140,6 +172,17 @@ const server = http.createServer((req, res) => {
       data.identity={notes:mapping.before.length,distinctSvgIds:new Set(mapping.before.map(n=>n.svgId)).size,
         svgIdsChangedOnRerender:mapping.before.filter((n,i)=>n.svgId!==mapping.after[i].svgId).length};
       fs.writeFileSync(path.join(output, `${width}-geometry.json`), JSON.stringify(data,null,2));
+      assert.equal(await page.evaluate(()=>window.WindScoreNoteGeometry.forSnapshot(window.__snapshotGeneration)),null,
+        'rerender above invalidates snapshot-scoped geometry');
+      // Pending PNG callbacks from a previous layout must never publish into the next one.
+      await page.evaluate(()=>{
+        window.captureSnapshot();
+        window.__osmd.render();
+      });
+      await page.waitForTimeout(200);
+      assert.deepEqual(await page.evaluate(()=>({
+        geometry:window.__noteGeometry,ready:window.__snapshotChunksReady,count:window.__snapshotChunkCount
+      })),{geometry:null,ready:0,count:0});
       results.push({width, renderMs: data.renderMs, groups: data.groups.length, height: data.height});
       await page.close();
     }

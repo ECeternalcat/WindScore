@@ -5,6 +5,9 @@ import com.windscore.core.engine.ScoreTiming
 import com.windscore.core.model.TrackType
 import com.windscore.core.parser.MusicXmlParser
 import kotlinx.serialization.json.*
+import kotlinx.serialization.encodeToString
+import com.windscore.ui.importerProvenanceJson
+import com.windscore.ui.decodeJavascriptString
 import java.io.File
 import java.security.MessageDigest
 import com.windscore.ui.sheetSnapshotCacheKey
@@ -14,6 +17,18 @@ import kotlin.test.assertTrue
 
 /** Runs the Android compilation's shared parser/domain code on a host JVM; no device claims. */
 class KonekutoAndroidHostTest {
+    @Test fun androidImporterSidecarAndEscapedJavascriptBridgePreserveIdentity() {
+        val root=if(File("composeApp").isDirectory) File("composeApp") else File(".")
+        val score=MusicXmlParser.parse(File(root,"src/androidMain/assets/konekuto-claris.mxl").readBytes())
+        val imported=MusicXmlParser.parseXmlWithProvenance(score.rawXml!!.toByteArray())
+        assertEquals(score,imported.score)
+        assertEquals(2049,imported.provenance.notes.size)
+        assertEquals(score.notes.map { it.id }.toSet(),imported.provenance.notes.map { it.performedId }.toSet())
+        val text=importerProvenanceJson(score.rawXml!!,score)!!
+        assertEquals(text,decodeJavascriptString(Json.encodeToString(text)))
+        kotlin.test.assertNull(importerProvenanceJson(score.rawXml!!,score.copy(version=1)))
+    }
+
     @Test
     fun androidOsmdAssetAndCacheFingerprintMatchThePinnedRelease() {
         val root=if(File("composeApp").isDirectory) File(".") else File("..")

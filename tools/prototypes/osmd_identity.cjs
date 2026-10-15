@@ -4,13 +4,14 @@ let playwright;
 try {playwright=require('playwright');} catch(_) {playwright=require(process.env.WINDSCORE_PLAYWRIGHT||'/opt/codex/runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright');}
 const output=path.resolve(process.argv[2]),fixtures=JSON.parse(fs.readFileSync(path.join(output,'fixtures.json')));
 const server=http.createServer((req,res)=> {
-  if(req.url==='/osmd.js') {res.setHeader('Content-Type','application/javascript');res.end(fs.readFileSync(path.join(output,'osmd.js')));}
-  else {res.setHeader('Content-Type','text/html');res.end('<!doctype html><style>body{margin:0}#score{width:1000px}</style><script src="/osmd.js"></script><div id="score"></div>');}
+  if(req.url==='/geometry.js'){res.setHeader('Content-Type','application/javascript');res.end(fs.readFileSync(path.join(output,'geometry.js')));}
+  else if(req.url==='/osmd.js') {res.setHeader('Content-Type','application/javascript');res.end(fs.readFileSync(path.join(output,'osmd.js')));}
+  else {res.setHeader('Content-Type','text/html');res.end('<!doctype html><style>body{margin:0}#score{width:1000px}</style><script src="/osmd.js"></script><script src="/geometry.js"></script><div id="score"></div>');}
 });
 (async()=> {
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   const origin=`http://127.0.0.1:${server.address().port}`;
-  const browser=await playwright.chromium.launch({executablePath:process.env.WINDSCORE_CHROMIUM||'/usr/bin/chromium',headless:true,args:['--no-sandbox']});
+  const browser=await playwright.chromium.launch({executablePath:process.env.WINDSCORE_CHROMIUM||'/usr/bin/chromium',headless:true,args:['--no-sandbox','--enable-precise-memory-info']});
   const results=[];
   try {
     for(const fixture of fixtures) {
@@ -21,6 +22,7 @@ const server=http.createServer((req,res)=> {
       console.log('loaded '+fixture.name);
       await page.evaluate(async f=> {
         window.osmd=new opensheetmusicdisplay.OpenSheetMusicDisplay('score',{autoResize:false,drawTitle:false,drawPartNames:false});
+        window.WindScoreNoteGeometry.install(window.osmd);
         const doc=new DOMParser().parseFromString(f.xml.replace(/<!DOCTYPE[^>]*>/i,''),'application/xml');
         await window.osmd.load(doc); // short XML strings without a declaration are otherwise treated as URLs
         window.osmd.render();
@@ -112,12 +114,57 @@ const server=http.createServer((req,res)=> {
           document.getElementById('score').style.transform=`scale(${m.cssScale||1})`;
           document.getElementById('score').style.transformOrigin='top left';
           window.osmd.setOptions({pageFormat:m.pageFormat});window.osmd.Zoom=m.zoom;
-          window.osmd.updateGraphic();window.osmd.render();return window.collect();
+          window.osmd.updateGraphic();window.osmd.render();
+          if(window.__noteGeometry!==null)throw Error('layout must invalidate previous mapping');
+          const diagnostic=window.collect();
+          const provenance={...window.fixture,schema:1};
+          const heapBefore=performance.memory?.usedJSHeapSize||null;
+          const geometry=window.WindScoreNoteGeometry.collect(window.osmd,provenance,document.getElementById('score'),Infinity);
+          window.__noteGeometry=geometry;
+          const heapAfter=performance.memory?.usedJSHeapSize||null;
+          const firstPage=window.WindScoreNoteGeometry.collect(window.osmd,provenance,document.getElementById('score'),1);
+          return {...diagnostic,production:geometry,firstPage,
+            overhead:{elapsedMs:geometry.elapsedMs,bytes:new TextEncoder().encode(JSON.stringify(geometry)).length,
+              heapBefore,heapAfter,heapDelta:heapBefore?heapAfter-heapBefore:null}};
+
         },mode);
         fs.writeFileSync(path.join(output,`${fixture.name}-${mode.name}.json`),JSON.stringify(result,null,2));
         console.log(JSON.stringify({fixture:fixture.name,mode:mode.name,sources:result.sourceCount,mapped:result.mapped.length,
           ambiguous:result.ambiguous.length,unsupported:result.unsupported.length,missing:result.missing.slice(0,2),svgCount:result.svgCount,elapsedMs:result.elapsedMs}));
         assert.equal(result.version,'2.2.1-release');
+        const production=result.production;
+        assert.equal(production.notes.length,fixture.notes.length);
+        if(mode.name==='initial'){
+          const statuses=await page.evaluate(()=>{
+            const f={...window.fixture,schema:1};
+            const collect=notes=>window.WindScoreNoteGeometry.collect(window.osmd,{...f,notes},document.getElementById('score'),Infinity).notes.map(n=>n.status);
+            const first=f.notes[0];
+            return {
+              voices:collect([{...first,voice:'01'},{...first,voice:''},{...first,voice:'9007199254740993'}]),
+              unsafeTime:collect([{...first,tick:Number.MAX_SAFE_INTEGER+1}]),
+              missing:collect([{...first,voice:'1',pitch:200}]),
+              duplicateParts:collect([{...first,voice:'1'},{...first,voice:'1',key:first.key.replace('/p0/','/p99/')}])
+            };
+          });
+          assert.deepEqual(statuses.voices,['unsupported-voice','unsupported-voice','unsupported-voice']);
+          assert.deepEqual(statuses.unsafeTime,['unsupported-time']);
+          assert.deepEqual(statuses.missing,['missing-source']);
+          assert.deepEqual(statuses.duplicateParts,['ambiguous-part','ambiguous-part']);
+        }
+        assert.equal(production.notes.filter(n=>n.status==='mapped').length,result.mapped.length);
+        assert.equal(production.notes.filter(n=>n.status==='ambiguous-source').length,fixture.expectedAmbiguous);
+        assert.equal(production.notes.filter(n=>n.status==='unsupported-voice').length,fixture.expectedUnsupported);
+        for(const note of production.notes.filter(n=>n.status==='mapped')){
+          const old=result.mapped.find(n=>n.writtenKey===note.writtenKey);
+          assert.equal(note.performedId,old.performedId);
+          assert.equal(note.page,old.svgIndex);
+          for(const k of ['x','y','width','height'])
+            assert.ok(Math.abs(note.rect[k]-old.headRect[k]/(mode.cssScale||1))<0.01,'snapshot pixel normalization');
+        }
+        assert.equal(result.firstPage.notes.filter(n=>n.status==='uncaptured-page').length,
+          production.notes.filter(n=>n.status==='mapped'&&n.page>0).length);
+        assert.ok(result.firstPage.notes.filter(n=>n.status==='uncaptured-page').every(n=>n.rect===null));
+
         assert.equal(result.ambiguous.length,fixture.expectedAmbiguous);
         assert.equal(result.unsupported.length,fixture.expectedUnsupported);
         assert.deepEqual(result.missing,[],'structural mapping must not guess or drop supported notes');
@@ -166,6 +213,7 @@ const server=http.createServer((req,res)=> {
         distinctSvgIds:new Set(first.mapped.map(n=>n.svgId)).size,svgChurn,
         crossVoiceTieObservations:first.allSource.filter(n=>n.tie && new Set(n.tie.map(t=>t.voice)).size>1).length,
         layouts:layouts.map(l=>({mode:l.mode,svgCount:l.svgCount,elapsedMs:l.elapsedMs,geometryMs:l.geometryMs,
+          productionOverhead:l.overhead,
           uniqueHeadGeometry:l.mapped.filter(n=>n.headRect).length,colorProbe:l.colorProbe,
           distinctHeadRects:new Set(l.mapped.filter(n=>n.headRect).map(n=>JSON.stringify([n.svgIndex,...['x','y','width','height'].map(k=>Math.round(n.headRect[k]*100)/100)]))).size})),
         xmlIdsRetained:first.allSource.flatMap(n=>n.xmlIdsRetained).length});
