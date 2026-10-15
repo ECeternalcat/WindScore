@@ -1,5 +1,7 @@
 # Importer provenance and layout-scoped note geometry
 
+**Follow-up:** Current-attack target cues now consume this metadata only in Score + keyboard. See [Three-view practice improvements](LEARNING_VIEWS_IMPLEMENTATION.md). The report below records the original metadata-only implementation and its measurements.
+
 This implementation adds optional snapshot metadata. It does not enable highlighting, change the cursor or falling-note drawing, replace OSMD, or modify playback/practice behavior.
 
 ## Identity and compatibility
