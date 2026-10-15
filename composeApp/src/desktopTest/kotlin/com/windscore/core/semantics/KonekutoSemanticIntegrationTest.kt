@@ -204,7 +204,7 @@ class KonekutoSemanticIntegrationTest {
     private fun recorder(record: (String) -> Unit) = object : AudioSynth {
         override fun start() = Unit
         override fun stop() = Unit
-        override fun noteOn(channel: Int, pitch: Int, velocity: Int) { if (channel == 0) record("on:$pitch") }
-        override fun noteOff(channel: Int, pitch: Int) { if (channel == 0) record("off:$pitch") }
+        override fun noteOn(channel: Int, pitch: Int, velocity: Int) { if (channel == 0) SessionLane.run { record("on:$pitch") } }
+        override fun noteOff(channel: Int, pitch: Int) { if (channel == 0) SessionLane.run { record("off:$pitch") } }
     }
 }
