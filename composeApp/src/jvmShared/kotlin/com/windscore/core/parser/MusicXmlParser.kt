@@ -1,5 +1,8 @@
 package com.windscore.core.parser
 
+import com.windscore.core.model.ImportedScore
+import com.windscore.core.model.ScoreProvenance
+import com.windscore.core.model.WrittenNote
 import com.windscore.core.model.NoteEntity
 import com.windscore.core.model.Score
 import com.windscore.core.model.TempoChange
@@ -75,7 +78,11 @@ object MusicXmlParser {
             (bytes[2].toInt() and 0xFF) == 0x03 &&
             (bytes[3].toInt() and 0xFF) == 0x04
 
-    fun parseXml(xmlBytes: ByteArray): Score {
+    fun parseXml(xmlBytes: ByteArray): Score = parseXmlInternal(xmlBytes, false).score
+
+    fun parseXmlWithProvenance(xmlBytes: ByteArray): ImportedScore = parseXmlInternal(xmlBytes, true)
+
+    private fun parseXmlInternal(xmlBytes: ByteArray, captureProvenance: Boolean): ImportedScore {
         require(xmlBytes.size <= MAX_ZIP_ENTRY_BYTES) { "MusicXML 内容过大" }
         require(hasOnlySafeMusicXmlDoctype(xmlBytes)) { "MusicXML 包含不安全的 DOCTYPE" }
         val factory = secureDocumentBuilderFactory()
@@ -89,6 +96,7 @@ object MusicXmlParser {
 
         data class TieKey(val part: Int, val voice: String, val pitch: Int, val number: String?)
         data class RawNote(
+            val written: WrittenNote?,
             val pitch: Int,
             val stopKey: TieKey,
             val startKey: TieKey,
@@ -118,11 +126,13 @@ object MusicXmlParser {
             val measures = part.getElementsByTagName("measure")
             for (mi in 0 until measures.length) {
                 val measure = measures.item(mi) as Element
+                var noteOrdinal = 0
                 var node: Node? = measure.firstChild
                 while (node != null) {
                     if (node is Element) {
                         when (node.nodeName) {
                             "note" -> {
+                                val ordinal = noteOrdinal++
                                 val isChord = node.getElementsByTagName("chord").length > 0
                                 val duration = normalizedDuration(node, sourceDivisions, divisions)
                                 val pitch = readPitch(node)
@@ -138,6 +148,14 @@ object MusicXmlParser {
                                 if (pitch != null) {
                                     rawNotes.add(
                                         RawNote(
+                                            if (captureProvenance) WrittenNote(
+                                                key = "p$pi/m$mi/n$ordinal", xmlId = node.getAttribute("id"),
+                                                part = part.getAttribute("id"), measure = mi, ordinal = ordinal,
+                                                voice = textOf(node, "voice")?.trim().orEmpty(), staff = staff,
+                                                tick = startTick, duration = duration, pitch = pitch, performedId = -1,
+                                                tieStart = tieStart, tieStop = tieStop,
+                                                startNumber = readTieNumber(node, "start"), stopNumber = readTieNumber(node, "stop"),
+                                            ) else null,
                                             pitch,
                                             TieKey(pi, textOf(node, "voice")?.trim().orEmpty(), pitch, readTieNumber(node, "stop")),
                                             TieKey(pi, textOf(node, "voice")?.trim().orEmpty(), pitch, readTieNumber(node, "start")),
@@ -210,6 +228,7 @@ object MusicXmlParser {
         // Staff is placement, not identity. Keep multiple open ties rather than overwriting unisons.
         val openTies = mutableMapOf<TieKey, MutableList<MutableNote>>()
         var nextId = 0
+        val written = mutableListOf<WrittenNote>()
 
         for (raw in rawNotes) {
             var continuation: MutableNote? = null
@@ -237,6 +256,7 @@ object MusicXmlParser {
                 track = if (raw.staff == 2) TrackType.LEFT_HAND else TrackType.RIGHT_HAND,
                 startTick = raw.startTick, durationTick = raw.durationTick, fingering = raw.fingering,
             ).also { merged.add(it) }
+            raw.written?.let { written.add(it.copy(performedId = entity.id)) }
             if (raw.tieStart) openTies.getOrPut(raw.startKey) { mutableListOf() }.add(entity)
         }
 
@@ -262,7 +282,7 @@ object MusicXmlParser {
 
         val xmlText = xmlBytes.toString(Charsets.UTF_8)
         val xmlHash = com.windscore.core.calculateMd5(xmlText)
-        return Score(
+        val score = Score(
             id = xmlHash,
             notes = finalNotes,
             version = Score.CURRENT_VERSION,
@@ -275,6 +295,8 @@ object MusicXmlParser {
             supportsSheetView = true,
             title = title,
         )
+        return ImportedScore(score, ScoreProvenance(xmlHash, score.version, divisions,
+            written.map { it.copy(key = "$xmlHash/${it.key}") }))
     }
 
     /** Exact common tick resolution; retain the original resolution for uniform inputs. */

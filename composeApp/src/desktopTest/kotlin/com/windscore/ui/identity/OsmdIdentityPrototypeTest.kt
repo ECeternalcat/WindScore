@@ -15,7 +15,7 @@ import kotlin.test.*
 
 private val prototypeJson=Json { encodeDefaults=true }
 
-/** Research only: reproduces allocation for a verified sidecar; it is not a second production parser. */
+/** Adversarial rendering fixtures now consume authoritative importer provenance. */
 class OsmdIdentityPrototypeTest {
     @Serializable
     data class Written(val key: String, val xmlId: String, val part: String, val measure: Int,
@@ -83,74 +83,12 @@ class OsmdIdentityPrototypeTest {
     }
 
     private fun sidecar(name: String, xml: String, ambiguous: Int=0, unsupported: Int=0): Fixture {
-        val score=MusicXmlParser.parseXml(xml.toByteArray()) // authoritative existing IDs, never rewritten
-        val factory=DocumentBuilderFactory.newInstance().apply {
-            setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd",false)
-            setFeature("http://xml.org/sax/features/external-general-entities",false)
-            setFeature("http://xml.org/sax/features/external-parameter-entities",false)
-        }
-        val doc=factory.newDocumentBuilder().parse(xml.byteInputStream())
-        fun Element.text(tag: String, fallback: String="")=getElementsByTagName(tag).item(0)?.textContent?.trim()?:fallback
-        fun Element.number(type: String): String? {
-            val marks=getElementsByTagName("tied")
-            return (0 until marks.length).map { marks.item(it) as Element }.firstOrNull { it.getAttribute("type")==type }
-                ?.getAttribute("number")?.takeIf { it.isNotBlank() }
-        }
-        val written=mutableListOf<Written>()
-        val parts=doc.getElementsByTagName("part")
-        for(pi in 0 until parts.length) {
-            val part=parts.item(pi) as Element
-            var resolution=4; var tick=0L; var chordTick=0L
-            val measures=part.getElementsByTagName("measure")
-            for(mi in 0 until measures.length) {
-                val children=measures.item(mi).childNodes;var ordinal=0
-                for(ci in 0 until children.length) {
-                    val el=children.item(ci) as? Element?:continue
-                    val duration=el.text("duration","0").toLong()*(score.divisions/resolution)
-                    when(el.tagName) {
-                        "attributes" -> resolution=el.text("divisions",resolution.toString()).toInt()
-                        "backup" -> tick-=duration
-                        "forward" -> tick+=duration
-                        "note" -> {
-                            val index=ordinal++
-                            val chord=el.getElementsByTagName("chord").length>0
-                            val start=if(chord)chordTick else tick.also { chordTick=it }
-                            if(el.getElementsByTagName("pitch").length>0 && el.getElementsByTagName("rest").length==0) {
-                                val pitch=(el.text("octave").toInt()+1)*12+
-                                    mapOf("C" to 0,"D" to 2,"E" to 4,"F" to 5,"G" to 7,"A" to 9,"B" to 11).getValue(el.text("step"))+
-                                    el.text("alter","0").toInt()
-                                val marks=el.getElementsByTagName("tie")
-                                val ties=(0 until marks.length).map { (marks.item(it) as Element).getAttribute("type") }
-                                written+=Written("${score.id}/p$pi/m$mi/n$index",el.getAttribute("id"),part.getAttribute("id"),mi,index,
-                                    el.text("voice"),el.text("staff","1").toInt(),start,duration,pitch,
-                                    tieStart="start" in ties,tieStop="stop" in ties,startNumber=el.number("start"),stopNumber=el.number("stop"))
-                            }
-                            if(!chord)tick+=duration
-                        }
-                    }
-                }
-            }
-        }
-        // Prototype-only replay of the documented allocation contract, checked against the real parser below.
-        data class Open(val root: Written,var end: Long)
-        val opens=mutableMapOf<List<Any?>,MutableList<Open>>()
-        val roots=mutableListOf<Open>()
-        for(n in written) {
-            fun key(number: String?)=listOf(n.part,n.voice,n.pitch,number)
-            val stop=opens[key(n.stopNumber)].orEmpty().filter { it.end==n.tick }
-            require(!n.tieStop || stop.size<=1)
-            val matched=if(n.tieStop)stop.singleOrNull() else null
-            val root=matched?.also { opens[key(n.stopNumber)]?.remove(it);it.end=n.tick+n.duration }
-                ?: Open(n,n.tick+n.duration).also { n.performedId=roots.size;roots+=it }
-            n.performedId=root.root.performedId
-            if(n.tieStart)opens.getOrPut(key(n.startNumber)) { mutableListOf() }+=root
-        }
-        assertEquals(score.notes.size,roots.size)
-        for(root in roots) {
-            val actual=score.notes.single { it.id==root.root.performedId }
-            assertEquals(listOf(root.root.pitch.toLong(),root.root.tick,root.end-root.root.tick),
-                listOf(actual.pitch.toLong(),actual.startTick,actual.durationTick))
-            assertEquals(if(root.root.staff==2)TrackType.LEFT_HAND else TrackType.RIGHT_HAND,actual.track)
+        val imported=MusicXmlParser.parseXmlWithProvenance(xml.toByteArray())
+        val score=imported.score
+        assertEquals(MusicXmlParser.parseXml(xml.toByteArray()),score)
+        val written=imported.provenance.notes.map {
+            Written(it.key,it.xmlId,it.part,it.measure,it.ordinal,it.voice,it.staff,it.tick,it.duration,
+                it.pitch,it.performedId,it.tieStart,it.tieStop,it.startNumber,it.stopNumber)
         }
         return Fixture(name,xml,score.divisions,score.id,score.version,written,ambiguous,unsupported)
     }
