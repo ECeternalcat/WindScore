@@ -65,7 +65,7 @@ internal object RecentsStorage {
                 val scoreToCache = score.copy(
                     id = xmlHash,
                     fingerprint = fingerprint,
-                    version = Score.CURRENT_VERSION,
+                    version = score.version,
                     supportsSheetView = true,
                 )
                 try {
@@ -138,7 +138,13 @@ internal object RecentsStorage {
                 } else {
                     // 2. 降级：重新解析 XML
                     val xmlBytes = xmlFile.readBytes()
-                    val parsedScore = MusicXmlParser.parse(xmlBytes)
+                    val parsedScore = try {
+                        MusicXmlParser.parse(xmlBytes)
+                    } catch (error: Exception) {
+                        // A newly diagnosed import issue must not hide unrelated valid scores.
+                        println("[Storage] Cannot rebuild score $scoreId: ${error.message}")
+                        continue
+                    }
                     val fingerprint = Fingerprint(xmlFile.length(), xmlFile.lastModified())
                     val finalScore = parsedScore.copy(
                         id = scoreId,
@@ -184,6 +190,14 @@ internal object RecentsStorage {
     }
 
     private fun writeCache(cacheFile: File, score: Score) {
+        if (cacheFile.exists()) {
+            val previous = runCatching { readCache(cacheFile).score }.getOrNull()
+            if (previous != null && previous.version > 0 && previous.version < score.version) {
+                // Historical attempts reference the old parser's ticks/groups, not the corrected model.
+                val archive = File(cacheFile.parentFile, "${cacheFile.name}.v${previous.version}")
+                if (!archive.exists()) archive.atomicWriteBytes(cacheFile.readBytes())
+            }
+        }
         val envelope = ScoreCacheEnvelope(ScoreCacheEnvelope.CURRENT_SCHEMA_VERSION, score)
         cacheFile.atomicWriteBytes(Cbor.encodeToByteArray(ScoreCacheEnvelope.serializer(), envelope))
     }

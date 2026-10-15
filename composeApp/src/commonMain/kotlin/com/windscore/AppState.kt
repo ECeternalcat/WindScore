@@ -26,6 +26,8 @@ internal fun createScoreSettings(
     currentTick: Long,
     activeLoopRange: LongRange?,
 ): ScoreSettings = ScoreSettings(
+    scoreVersion = score.version,
+    divisions = score.divisions,
     practiceMode = practiceMode,
     viewMode = viewMode,
     speedMultiplier = playbackSpeed.toDouble(),
@@ -35,3 +37,15 @@ internal fun createScoreSettings(
     countdownEnabled = countdownEnabled,
     currentTick = currentTick.takeIf { it < score.totalTicks } ?: 0L,
 )
+
+/** Old variable-divisions bookmarks cannot be repaired by one scale factor. */
+internal fun ScoreSettings.restorePositionFor(score: Score): ScoreSettings {
+    if ((scoreVersion ?: 1) < 2 && !score.legacyTimingCompatible) {
+        return copy(currentTick = 0, loopStartTick = null, loopEndTick = null)
+    }
+    val oldDivisions = divisions ?: return this
+    if (oldDivisions <= 0 || oldDivisions == score.divisions) return this
+    fun scale(tick: Long): Long = (tick.toDouble() * score.divisions / oldDivisions).toLong()
+    return copy(currentTick = scale(currentTick), loopStartTick = loopStartTick?.let(::scale),
+        loopEndTick = loopEndTick?.let(::scale))
+}

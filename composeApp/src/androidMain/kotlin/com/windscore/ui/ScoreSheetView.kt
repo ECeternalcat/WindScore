@@ -19,8 +19,9 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
-import com.windscore.core.calculateMd5
 import com.windscore.core.getCacheDir
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.ByteArrayInputStream
@@ -40,6 +41,7 @@ actual fun ScoreSheetView(
     onStepForward: () -> Unit,
     onStepBackward: () -> Unit,
     onSnapshot: ((SheetSnapshot) -> Unit)?,
+    identityScore: com.windscore.core.model.Score?,
 ) {
     val context = LocalContext.current
     val tr = com.windscore.ui.i18n.strings()
@@ -94,19 +96,19 @@ actual fun ScoreSheetView(
     }
 
     // 渲染流程：先查缓存 → 命中则直接回传；否则加载 WebView 渲染、截图、回传并写缓存。
-    LaunchedEffect(rawXml) {
+    LaunchedEffect(rawXml, identityScore) {
         val handler = snapshotHandler
         val htmlText = OsmdHtml.buildHtml(divisions, tr.loadingScore, tr.loadingFailed)
-        val xmlHash = calculateMd5(rawXml)
-        val htmlHash = calculateMd5(htmlText)
-        val cacheKey = "${xmlHash}_$htmlHash"
+        val cacheKey = sheetSnapshotCacheKey(rawXml, htmlText, osmdJsBytes, "android-webview") + "_" + noteIdentityCacheSuffix(identityScore)
         val cacheDir = File(getCacheDir(), cacheKey)
 
         // 1. 缓存命中：直接回传，跳过 WebView 渲染
         if (handler != null && File(cacheDir, "meta.json").exists()) {
-            val snapshot = runCatching {
-                parseSnapshotCache(cacheDir, File(cacheDir, "meta.json").readText(Charsets.UTF_8))
-            }.getOrNull()
+            val snapshot = withContext(Dispatchers.IO) {
+                runCatching {
+                    parseSnapshotCache(cacheDir, File(cacheDir, "meta.json").readText(Charsets.UTF_8), identityScore)
+                }.getOrNull()
+            }
             if (snapshot != null) {
                 onRenderTime(0.0)
                 handler(snapshot)
@@ -115,8 +117,11 @@ actual fun ScoreSheetView(
             }
         }
 
+        val renderHtml = withContext(Dispatchers.Default) {
+            OsmdHtml.buildHtml(divisions, tr.loadingScore, tr.loadingFailed, importerProvenanceJson(rawXml, identityScore))
+        }
         // 2. 缓存未命中：加载页面
-        webView.loadDataWithBaseURL("http://127.0.0.1:8080/", htmlText, "text/html", "utf-8", null)
+        webView.loadDataWithBaseURL("http://127.0.0.1:8080/", renderHtml, "text/html", "utf-8", null)
 
         // 3. 等待 OSMD 渲染完成
         var waited = 0
@@ -142,6 +147,7 @@ actual fun ScoreSheetView(
         while (sw < 60000) {
             delay(300)
             sw += 300
+            val generation = webView.evalJs("window.__snapshotGeneration")?.toIntOrNull() ?: -1
             val ready = webView.evalJs("(window.__snapshotChunksReady||0)")?.unquote()?.toIntOrNull() ?: 0
             val count = webView.evalJs("(window.__snapshotChunkCount||0)")?.unquote()?.toIntOrNull() ?: 0
             if (count > 0 && ready >= count) {
@@ -162,10 +168,16 @@ actual fun ScoreSheetView(
                     val posJson = webView.evalJs("JSON.stringify(window.__cursorPos||[])")?.unquote() ?: "[]"
                     val timesJson = webView.evalJs("JSON.stringify(window.__cursorTimes||[])")?.unquote() ?: "[]"
                     val steps = parseCursorSteps(posJson, timesJson, divisions)
-                    handler(SheetSnapshot(chunks, width, firstH, totalH, steps))
+                    val geometryText = decodeJavascriptString(webView.evalJs("JSON.stringify(window.WindScoreNoteGeometry.forSnapshot($generation))"))
+                    val geometry = withContext(Dispatchers.Default) {
+                        decodeNoteGeometry(geometryText, identityScore, width, totalH, generation)
+                    }
+                    handler(SheetSnapshot(chunks, width, firstH, totalH, steps, geometry))
                     println("[OSMD] Snapshot: ${width}x${totalH}, ${chunks.size} chunks, ${steps.size} steps")
                     // 5. 写入缓存
-                    saveSnapshotCache(cacheDir, width, firstH, totalH, steps, rawPngBytesList)
+                    withContext(Dispatchers.IO) {
+                        saveSnapshotCache(cacheDir, width, firstH, totalH, steps, rawPngBytesList, geometry)
+                    }
                 } else {
                     val err = webView.evalJs("(window.__snapshotError||'')")?.unquote() ?: ""
                     println("[OSMD] Snapshot produced no chunks (err=$err)")
@@ -219,7 +231,7 @@ private fun loadOsmdJsBase64(context: android.content.Context): String {
 
 // —— 快照缓存（与 Desktop 同格式：chunk_*.png + meta.json，按 xmlHash_htmlHash 命名）——
 
-private fun parseSnapshotCache(cacheDir: File, json: String): SheetSnapshot? {
+private fun parseSnapshotCache(cacheDir: File, json: String, identityScore: com.windscore.core.model.Score?): SheetSnapshot? {
     return try {
         val width = "\"width\"\\s*:\\s*(\\d+)".toRegex().find(json)?.groupValues?.get(1)?.toIntOrNull() ?: return null
         val firstH = "\"firstH\"\\s*:\\s*(\\d+)".toRegex().find(json)?.groupValues?.get(1)?.toIntOrNull() ?: return null
@@ -246,7 +258,7 @@ private fun parseSnapshotCache(cacheDir: File, json: String): SheetSnapshot? {
             index++
         }
         if (chunks.isEmpty()) return null
-        SheetSnapshot(chunks, width, firstH, totalHeight, steps)
+        SheetSnapshot(chunks, width, firstH, totalHeight, steps, readNoteGeometry(cacheDir, identityScore, width, totalHeight))
     } catch (e: Exception) {
         println("[OSMD] Error parsing cache: ${e.message}")
         null
@@ -260,6 +272,7 @@ private fun saveSnapshotCache(
     totalHeight: Int,
     steps: List<CursorStep>,
     rawPngBytesList: List<ByteArray>,
+    geometry: NoteGeometrySnapshot?,
 ) {
     val cacheRoot = cacheDir.parentFile ?: return
     val tempDir = File(cacheRoot, ".${cacheDir.name}.${System.nanoTime()}.tmp")
@@ -289,6 +302,7 @@ private fun saveSnapshotCache(
         sb.append("}")
 
         File(tempDir, "meta.json").writeText(sb.toString(), Charsets.UTF_8)
+        writeNoteGeometry(tempDir, cacheDir.name, width, totalHeight, geometry)
         if (cacheDir.exists()) cacheDir.deleteRecursively()
         check(tempDir.renameTo(cacheDir)) { "Failed to publish snapshot cache" }
         trimSnapshotCaches(cacheRoot, cacheDir)

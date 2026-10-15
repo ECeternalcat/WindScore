@@ -1,0 +1,372 @@
+{
+  "dateUTC": "2026-10-15",
+  "branch": "work",
+  "codeCommit": "5b2cd8ffcf03ed7e0973790ffb3df340cc9c1544",
+  "renderer": "OSMD 2.2.1-release",
+  "browser": "154.0.8037.57",
+  "nativeRendering": "JavaFX 23 WebView on Linux dummy Xorg; Compose raster tests",
+  "testResults": {
+    "desktopTest": {
+      "tests": 211,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "testAndroidHostTest": {
+      "tests": 112,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "fixtureCount": 15,
+  "fixtureLayoutCases": 105,
+  "bundledWrittenNotes": 2049,
+  "bundledPerformedEvents": 1708,
+  "originalSixRegressionSourceUnchanged": true,
+  "originalSixRegressionSourceSha256": "7753cef6ab34448c6b718584e0ed7658a6ede9d1f169e79203149378e8bfadda",
+  "android": {
+    "assembleDebug": "passed",
+    "assembleRelease": "passed (unsigned APK)",
+    "lintDebug": "passed with existing warnings",
+    "lintWarnings": [
+      "OldTargetApi",
+      "GradleDependency",
+      "MissingApplicationIcon"
+    ],
+    "appUnitTests": "NO-SOURCE",
+    "connectedTask": "completed; no instrumented tests or attached devices; not device validation",
+    "assetAndFourMidiAbiPackaging": "verified by tools/validate_android_apks.py"
+  },
+  "geometryCollection": {
+    "1200": {
+      "collectionMs": {
+        "min": 17.799999997019768,
+        "median": 19.5,
+        "max": 23.80000001192093
+      },
+      "retainedGeometryHeapBytes": {
+        "min": 230764,
+        "median": 230988,
+        "max": 233072
+      },
+      "samples": [
+        {
+          "elapsedMs": 23.599999994039536,
+          "serializedBytes": 424684,
+          "retainedHeapDelta": 233072
+        },
+        {
+          "elapsedMs": 23.80000001192093,
+          "serializedBytes": 424683,
+          "retainedHeapDelta": 232216
+        },
+        {
+          "elapsedMs": 18.19999998807907,
+          "serializedBytes": 424683,
+          "retainedHeapDelta": 230764
+        },
+        {
+          "elapsedMs": 17.799999997019768,
+          "serializedBytes": 424684,
+          "retainedHeapDelta": 230952
+        },
+        {
+          "elapsedMs": 19.5,
+          "serializedBytes": 424670,
+          "retainedHeapDelta": 230988
+        }
+      ]
+    },
+    "800": {
+      "collectionMs": {
+        "min": 18.200000002980232,
+        "median": 21,
+        "max": 22.5
+      },
+      "retainedGeometryHeapBytes": {
+        "min": 230856,
+        "median": 231360,
+        "max": 233312
+      },
+      "samples": [
+        {
+          "elapsedMs": 21,
+          "serializedBytes": 423055,
+          "retainedHeapDelta": 233312
+        },
+        {
+          "elapsedMs": 21.200000002980232,
+          "serializedBytes": 423071,
+          "retainedHeapDelta": 231664
+        },
+        {
+          "elapsedMs": 20,
+          "serializedBytes": 423055,
+          "retainedHeapDelta": 231124
+        },
+        {
+          "elapsedMs": 18.200000002980232,
+          "serializedBytes": 423071,
+          "retainedHeapDelta": 230856
+        },
+        {
+          "elapsedMs": 22.5,
+          "serializedBytes": 423057,
+          "retainedHeapDelta": 231360
+        }
+      ]
+    },
+    "360": {
+      "collectionMs": {
+        "min": 20.200000002980232,
+        "median": 21.400000005960464,
+        "max": 35.5
+      },
+      "retainedGeometryHeapBytes": {
+        "min": 230688,
+        "median": 231360,
+        "max": 233216
+      },
+      "samples": [
+        {
+          "elapsedMs": 35.5,
+          "serializedBytes": 420832,
+          "retainedHeapDelta": 233216
+        },
+        {
+          "elapsedMs": 20.299999997019768,
+          "serializedBytes": 420846,
+          "retainedHeapDelta": 232396
+        },
+        {
+          "elapsedMs": 21.400000005960464,
+          "serializedBytes": 420846,
+          "retainedHeapDelta": 230824
+        },
+        {
+          "elapsedMs": 20.200000002980232,
+          "serializedBytes": 420846,
+          "retainedHeapDelta": 230688
+        },
+        {
+          "elapsedMs": 24.5,
+          "serializedBytes": 420832,
+          "retainedHeapDelta": 231360
+        }
+      ]
+    }
+  },
+  "native": {
+    "decodeSamples": [
+      {
+        "decodeMs": 12.980633,
+        "allocatedBytes": 4571216
+      },
+      {
+        "decodeMs": 9.414641,
+        "allocatedBytes": 4520528
+      },
+      {
+        "decodeMs": 7.793021,
+        "allocatedBytes": 4520528
+      },
+      {
+        "decodeMs": 9.788987,
+        "allocatedBytes": 4520528
+      },
+      {
+        "decodeMs": 8.611787,
+        "allocatedBytes": 4520528
+      }
+    ],
+    "parserSamples": [
+      {
+        "provenance": false,
+        "elapsedMs": 63.628621
+      },
+      {
+        "provenance": true,
+        "elapsedMs": 53.45088
+      },
+      {
+        "provenance": false,
+        "elapsedMs": 45.621995
+      },
+      {
+        "provenance": true,
+        "elapsedMs": 39.187694
+      },
+      {
+        "provenance": false,
+        "elapsedMs": 46.196845
+      },
+      {
+        "provenance": true,
+        "elapsedMs": 34.690898
+      },
+      {
+        "provenance": false,
+        "elapsedMs": 31.822728
+      },
+      {
+        "provenance": true,
+        "elapsedMs": 34.870249
+      },
+      {
+        "provenance": false,
+        "elapsedMs": 30.746465
+      },
+      {
+        "provenance": true,
+        "elapsedMs": 41.598437
+      }
+    ],
+    "geometryJsonBytes": 424682,
+    "provenanceJsonBytes": 508366
+  },
+  "nativeDecodeMs": {
+    "min": 7.793021,
+    "median": 9.414641,
+    "max": 12.980633
+  },
+  "nativeDecodeAllocatedBytes": {
+    "min": 4520528,
+    "median": 4520528,
+    "max": 4571216
+  },
+  "parserMs": {
+    "False": {
+      "min": 30.746465,
+      "median": 45.621995,
+      "max": 63.628621
+    },
+    "True": {
+      "min": 34.690898,
+      "median": 39.187694,
+      "max": 53.45088
+    }
+  },
+  "abSummary": {
+    "False": {
+      "readyMs": {
+        "min": 3143.270768999999,
+        "median": 3558.8310739999997,
+        "max": 4235.004213
+      },
+      "heapUsedBytes": {
+        "min": 23328240,
+        "median": 23365868,
+        "max": 23386560
+      },
+      "coldCollectionMs": {
+        "min": 0,
+        "median": 0,
+        "max": 0
+      }
+    },
+    "True": {
+      "readyMs": {
+        "min": 3029.5860589999975,
+        "median": 3631.373529999999,
+        "max": 3708.0739139999996
+      },
+      "heapUsedBytes": {
+        "min": 24145228,
+        "median": 24150736,
+        "max": 24154120
+      },
+      "coldCollectionMs": {
+        "min": 30.200000002980232,
+        "median": 32,
+        "max": 41
+      }
+    }
+  },
+  "abPairedRetainedHeapDifferenceBytes": {
+    "min": 764176,
+    "median": 788252,
+    "max": 816988
+  },
+  "abRaw": {
+    "browser": "154.0.8037.57",
+    "samples": [
+      {
+        "pair": 0,
+        "enabled": false,
+        "readyMs": 4235.004213,
+        "heapUsedBytes": 23328240,
+        "rasterHash": "81858037bb308c579daa887552c4235a4914ab7eade185df60e70ea6e585e8c0",
+        "renderMs": 2173,
+        "geometryMs": 0,
+        "mapped": 0,
+        "geometryError": null
+      },
+      {
+        "pair": 0,
+        "enabled": true,
+        "readyMs": 3708.0739139999996,
+        "heapUsedBytes": 24145228,
+        "rasterHash": "81858037bb308c579daa887552c4235a4914ab7eade185df60e70ea6e585e8c0",
+        "renderMs": 1528,
+        "geometryMs": 30.200000002980232,
+        "mapped": 2049,
+        "geometryError": null
+      },
+      {
+        "pair": 1,
+        "enabled": true,
+        "readyMs": 3631.373529999999,
+        "heapUsedBytes": 24154120,
+        "rasterHash": "81858037bb308c579daa887552c4235a4914ab7eade185df60e70ea6e585e8c0",
+        "renderMs": 1563,
+        "geometryMs": 41,
+        "mapped": 2049,
+        "geometryError": null
+      },
+      {
+        "pair": 1,
+        "enabled": false,
+        "readyMs": 3558.8310739999997,
+        "heapUsedBytes": 23365868,
+        "rasterHash": "81858037bb308c579daa887552c4235a4914ab7eade185df60e70ea6e585e8c0",
+        "renderMs": 1631,
+        "geometryMs": 0,
+        "mapped": 0,
+        "geometryError": null
+      },
+      {
+        "pair": 2,
+        "enabled": false,
+        "readyMs": 3143.270768999999,
+        "heapUsedBytes": 23386560,
+        "rasterHash": "81858037bb308c579daa887552c4235a4914ab7eade185df60e70ea6e585e8c0",
+        "renderMs": 1635,
+        "geometryMs": 0,
+        "mapped": 0,
+        "geometryError": null
+      },
+      {
+        "pair": 2,
+        "enabled": true,
+        "readyMs": 3029.5860589999975,
+        "heapUsedBytes": 24150736,
+        "rasterHash": "81858037bb308c579daa887552c4235a4914ab7eade185df60e70ea6e585e8c0",
+        "renderMs": 1556,
+        "geometryMs": 32,
+        "mapped": 2049,
+        "geometryError": null
+      }
+    ]
+  },
+  "rasterOutputIdenticalAcrossAllSixAbRuns": true,
+  "limitations": [
+    "No physical Android/WebView, MIDI keyboard or audio loopback test",
+    "Production raster still captures first SVG only; later pages explicitly uncaptured-page",
+    "Identical unisons and noncanonical/nonnumeric/missing voices deliberately remain ambiguous or unsupported",
+    "Chromium heap and JVM allocation measurements do not measure native retained/peak RSS, Android Bitmap or GPU memory",
+    "Cold-load timings have overlapping ranges; three pairs do not establish a stable latency budget",
+    "Benchmark excludes native HTML generation, bridge transport and PNG decoding from browser-ready timing",
+    "Grace/cue/microtonal/transposing and other unusual MusicXML cases are not comprehensively validated"
+  ]
+}

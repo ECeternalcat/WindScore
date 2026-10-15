@@ -20,6 +20,30 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class PracticeRecordingControllerTest {
+    @Test
+    fun tempoMetadataRetainsDecimalFixedTempoButDoesNotClaimOneBpmForAMap() = runBlocking {
+        for (changing in listOf(false, true)) {
+            val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+            val storage = FakeDataSource()
+            val controller = PracticeRecordingController(scope, dataSource = storage, clock = FakeClock())
+            try {
+                val changes = if (changing) listOf(
+                    com.windscore.core.model.TempoChange(0, 120.0), com.windscore.core.model.TempoChange(100, 60.0),
+                ) else listOf(com.windscore.core.model.TempoChange(0, 120.5))
+                controller.beginPracticeSession(conditions(speed = 0.5f).copy(
+                    score = score().copy(tempo = 121, tempoChanges = changes, version = Score.CURRENT_VERSION),
+                ))
+                controller.onMidiEvent(MidiEvent.NoteOn(60, 100))
+                controller.endSession()
+                controller.awaitPendingWrites()
+                val context = storage.saved.single().context
+                assertEquals(if (changing) null else 60, context.requestedTempo)
+                assertEquals(if (changing) null else 60, context.effectiveHostedTempo)
+                assertEquals(Score.CURRENT_VERSION, context.scoreVersion)
+            } finally { controller.close(); scope.cancel() }
+        }
+    }
+
 
     private class FakeClock : MonotonicMicrosClock {
         var micros = 0L

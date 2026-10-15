@@ -256,7 +256,12 @@ class PracticeRecordingController(
         val score = conditions.score
         val region = if (type == AttemptType.SCORING) 0L..score.totalTicks else conditions.loopRange ?: 0L..score.totalTicks
         val speed = if (type == AttemptType.SCORING) 1f else conditions.speed
-        val tempo = score.tempo.takeIf { it > 0 }?.let { (it * speed).roundToInt() }?.takeIf { it > 0 }
+        val initialBpm = score.tempoChanges.firstOrNull { it.tick == 0L }?.bpm
+            ?: (score.tempo.takeIf { it > 0 } ?: 120).toDouble()
+        val fixedTempo = (score.tempoChanges.map { it.bpm } + initialBpm).distinct().size <= 1
+        val tempo = if (fixedTempo && (score.tempo > 0 || score.tempoChanges.isNotEmpty())) {
+            (initialBpm * speed).roundToInt().takeIf { it > 0 }
+        } else null
         return PracticeContext(
             scoreId = score.id, scoreVersion = score.version,
             regionStartTick = region.first, regionEndTick = region.last,
@@ -265,7 +270,7 @@ class PracticeRecordingController(
             practiceModeType = conditions.viewMode.toPracticeModeType(), attemptType = type,
             startedAt = wallClockMillis(), startTick = conditions.session?.currentTick ?: conditions.startTick,
             divisions = score.divisions, speed = speed,
-            effectiveHostedTempo = if (speed > 0) ((score.tempo.takeIf { it > 0 } ?: 120) * speed).roundToInt() else null,
+            effectiveHostedTempo = if (speed > 0 && fixedTempo) (initialBpm * speed).roundToInt() else null,
         )
     }
 }

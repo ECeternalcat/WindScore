@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.sp
 import com.windscore.core.engine.ScoreSession
 import com.windscore.core.engine.ScoringPhase
 import com.windscore.core.traceState
+import com.windscore.core.model.trackSelection
 import com.windscore.core.model.PracticeMode
 import com.windscore.core.model.Score
 import com.windscore.ViewMode
@@ -365,7 +366,7 @@ fun PlayerScreen(
                                             modifier = Modifier.fillMaxSize(),
                                             verticalArrangement = Arrangement.spacedBy(WindScoreSpacing.md)
                                         ) {
-                                            StatusCard(session = session)
+                                            StatusCard(session = session, viewMode = viewMode)
                                             ControlSidebar(
                                                 session = session,
                                                 practiceMode = practiceMode,
@@ -641,7 +642,7 @@ private fun CollapsedPanelHandle(onClick: () -> Unit, modifier: Modifier = Modif
 }
 
 @Composable
-private fun PlayerControlBar(
+internal fun PlayerControlBar(
     session: ScoreSession,
     practiceMode: PracticeMode,
     viewMode: ViewMode,
@@ -685,16 +686,10 @@ private fun PlayerControlBar(
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(s.view, style = MaterialTheme.typography.labelSmall, color = labelColor)
                 Row(horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)) {
-                    CircularIconButton(onClick = { onViewChange(ViewMode.ROLL) }, selected = viewMode == ViewMode.ROLL) {
-                        Icon(painterResource(Res.drawable.piano_keys_thin), s.pianoRoll, Modifier.size(20.dp))
-                    }
+                    ViewModeButton(ViewMode.ROLL, viewMode == ViewMode.ROLL) { onViewChange(ViewMode.ROLL) }
                     if (scoreHasSheet) {
-                        CircularIconButton(onClick = { onViewChange(ViewMode.SHEET_KEYBOARD) }, selected = viewMode == ViewMode.SHEET_KEYBOARD) {
-                            Icon(painterResource(Res.drawable.book_open_text_thin), s.readSheet, Modifier.size(20.dp))
-                        }
-                        CircularIconButton(onClick = { onViewChange(ViewMode.SHEET_FULL) }, selected = viewMode == ViewMode.SHEET_FULL) {
-                            Icon(painterResource(Res.drawable.music_notes_thin), s.viewSheet, Modifier.size(20.dp))
-                        }
+                        ViewModeButton(ViewMode.SHEET_KEYBOARD, viewMode == ViewMode.SHEET_KEYBOARD) { onViewChange(ViewMode.SHEET_KEYBOARD) }
+                        ViewModeButton(ViewMode.SHEET_FULL, viewMode == ViewMode.SHEET_FULL) { onViewChange(ViewMode.SHEET_FULL) }
                     }
                 }
             }
@@ -731,7 +726,7 @@ private fun PlayerControlBar(
         val pending = ss.pendingPitches.joinToString { pitchName(it) }
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.md)) {
             Text(
-                text = if (ss.finished) s.finishedAccuracy(session.scorePercent()) else s.toPlayPending(pending),
+                text = if (ss.finished) s.finishedAccuracy(session.scorePercent()) else if (viewMode == ViewMode.SHEET_FULL) s.progressTick(ss.progress, ss.groupCount, ss.currentTick, session.score.totalTicks) else s.toPlayPending(pending),
                 style = MaterialTheme.typography.bodySmall,
                 color = if (ss.finished) windScoreColors().semanticSuccess else windScoreColors().ink,
                 maxLines = 1,
@@ -756,7 +751,7 @@ private fun StatusLine(session: ScoreSession, viewMode: ViewMode = ViewMode.ROLL
     ) {
         val pending = ss.pendingPitches.joinToString { pitchName(it) }
         Text(
-            if (ss.finished) s.finishedAccuracy(session.scorePercent()) else s.toPlayPending(pending),
+            if (ss.finished) s.finishedAccuracy(session.scorePercent()) else if (viewMode == ViewMode.SHEET_FULL) s.progressTick(ss.progress, ss.groupCount, ss.currentTick, session.score.totalTicks) else s.toPlayPending(pending),
             style = MaterialTheme.typography.bodySmall,
             color = if (ss.finished) windScoreColors().semanticSuccess else windScoreColors().ink,
         )
@@ -830,11 +825,17 @@ private fun MainStage(
 
             var sheetSnapshot by remember(rawXml) { mutableStateOf<SheetSnapshot?>(null) }
 
+            val cueIndex = remember(session.score, sheetSnapshot?.noteGeometry, session.practiceMode.trackSelection()) {
+                sheetTargetCueIndex(session.score, sheetSnapshot?.noteGeometry, session.practiceMode.trackSelection())
+            }
+            val targetCues = sheetTargetCuesAt(cueIndex, viewMode, isPlaying, tick)
+
             // WebView 渲染器始终在后台静默运行
             if (rawXml != null) {
                 val sheetFraction = if (showSheetKb) 0.72f else 1f
                 ScoreSheetView(
                     rawXml = rawXml,
+                    identityScore = session.score,
                     currentTickProvider = { tick },
                     modifier = Modifier.fillMaxWidth().fillMaxHeight(sheetFraction)
                         .offset(x = 99999.dp),
@@ -914,6 +915,7 @@ private fun MainStage(
                             } else {
                                 NativeSheetView(
                                     snapshot = sheetSnapshot!!,
+                                    targetCues = if (isKb) targetCues else emptyList(),
                                     currentTickProvider = { tick },
                                     onSeek = onSeek,
                                     onStepForward = onStepForward,
@@ -968,7 +970,7 @@ private fun MainStage(
 }
 
 @Composable
-private fun StatusCard(session: ScoreSession, modifier: Modifier = Modifier) {
+internal fun StatusCard(session: ScoreSession, viewMode: ViewMode, modifier: Modifier = Modifier) {
     val s = strings()
     val ss = session.state.collectAsState().value
     val pending = ss.pendingPitches.joinToString { pitchName(it) }.ifEmpty { s.none }
@@ -989,8 +991,8 @@ private fun StatusCard(session: ScoreSession, modifier: Modifier = Modifier) {
 
         Spacer(Modifier.height(2.dp))
 
-        // 该弹
-        Column {
+        // Independent sheet reading keeps progress/results but does not reveal pitch answers.
+        if (viewMode != ViewMode.SHEET_FULL || ss.finished) Column {
             Text(
                 text = s.toPlay,
                 style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),

@@ -19,4 +19,5 @@ expect fun ScoreSheetView(
     onStepForward: () -> Unit = {},
     onStepBackward: () -> Unit = {},
     onSnapshot: ((SheetSnapshot) -> Unit)? = null,
+    identityScore: com.windscore.core.model.Score? = null,
 )

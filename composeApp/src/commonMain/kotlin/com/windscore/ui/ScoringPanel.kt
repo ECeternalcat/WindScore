@@ -127,16 +127,10 @@ fun ScoringSetupPanel(
         ) {
             Text(s.scoringView, style = MaterialTheme.typography.labelSmall, color = windScoreColors().ink.copy(alpha = 0.5f))
             Row(horizontalArrangement = Arrangement.spacedBy(WindScoreSpacing.xs)) {
-                CircularIconButton(onClick = { onViewChange(ViewMode.ROLL) }, selected = viewMode == ViewMode.ROLL) {
-                    Icon(painterResource(Res.drawable.piano_keys_thin), s.pianoRoll, Modifier.size(20.dp))
-                }
+                ViewModeButton(ViewMode.ROLL, viewMode == ViewMode.ROLL) { onViewChange(ViewMode.ROLL) }
                 if (scoreHasSheet) {
-                    CircularIconButton(onClick = { onViewChange(ViewMode.SHEET_KEYBOARD) }, selected = viewMode == ViewMode.SHEET_KEYBOARD) {
-                        Icon(painterResource(Res.drawable.book_open_text_thin), s.readSheet, Modifier.size(20.dp))
-                    }
-                    CircularIconButton(onClick = { onViewChange(ViewMode.SHEET_FULL) }, selected = viewMode == ViewMode.SHEET_FULL) {
-                        Icon(painterResource(Res.drawable.music_notes_thin), s.viewSheet, Modifier.size(20.dp))
-                    }
+                    ViewModeButton(ViewMode.SHEET_KEYBOARD, viewMode == ViewMode.SHEET_KEYBOARD) { onViewChange(ViewMode.SHEET_KEYBOARD) }
+                    ViewModeButton(ViewMode.SHEET_FULL, viewMode == ViewMode.SHEET_FULL) { onViewChange(ViewMode.SHEET_FULL) }
                 }
             }
         }

@@ -1,0 +1,860 @@
+{
+  "node": "v24.19.0",
+  "browser": "154.0.8037.57",
+  "runs": 5,
+  "warmups": 1,
+  "assets": {
+    "old": {
+      "bytes": 1262636,
+      "sha256": "6db4be76cfc1499cabe8bccb409ff0c261fe7aa22c002d93ed61f29817bf6f22"
+    },
+    "new": {
+      "bytes": 1420498,
+      "sha256": "537ed08f9c082ce0d785d21b80485b8d443cfb92ddc7a4ba4977804f09408cf4"
+    }
+  },
+  "results": [
+    {
+      "variant": "new",
+      "width": 1200,
+      "run": 0,
+      "loadMs": 481.6000000014901,
+      "renderMs": [
+        764.1000000014901,
+        541.0999999977648
+      ],
+      "updateMs": [
+        319.80000000074506,
+        126.89999999850988,
+        117.90000000223517
+      ],
+      "pipelineStart": 393.9000000022352,
+      "readyMs": 2324.2999999970198,
+      "snapshotMs": 3809.2999999970198,
+      "navigationToSnapshotMs": 4203.199999999255,
+      "version": "2.2.1-release",
+      "appRenderMs": 2209,
+      "height": 7898,
+      "chunks": 2,
+      "cursorSteps": 987,
+      "paths": 9885,
+      "pngBytes": 1496910,
+      "heapBytes": 27675271,
+      "error": null
+    },
+    {
+      "variant": "old",
+      "width": 1200,
+      "run": 0,
+      "loadMs": 406.69999999925494,
+      "renderMs": [
+        1401.4000000022352,
+        991.1999999992549
+      ],
+      "updateMs": [
+        189,
+        133.39999999850988,
+        264.8999999985099
+      ],
+      "pipelineStart": 354.1000000014901,
+      "readyMs": 3791.099999997765,
+      "snapshotMs": 4694,
+      "navigationToSnapshotMs": 5048.10000000149,
+      "version": "2.0.0-release",
+      "appRenderMs": 3392,
+      "height": 7864,
+      "chunks": 2,
+      "cursorSteps": 987,
+      "paths": 9884,
+      "pngBytes": 1495062,
+      "heapBytes": 69273295,
+      "error": null
+    },
+    {
+      "variant": "old",
+      "width": 1200,
+      "run": 1,
+      "loadMs": 741.3999999985099,
+      "renderMs": [
+        1638.300000000745,
+        963.6000000014901
+      ],
+      "updateMs": [
+        290.80000000074506,
+        265.69999999925494,
+        149.60000000149012
+      ],
+      "pipelineStart": 463,
+      "readyMs": 4475.89999999851,
+      "snapshotMs": 5366.79999999702,
+      "navigationToSnapshotMs": 5829.89999999851,
+      "version": "2.0.0-release",
+      "appRenderMs": 3944,
+      "height": 7864,
+      "chunks": 2,
+      "cursorSteps": 987,
+      "paths": 9884,
+      "pngBytes": 1495062,
+      "heapBytes": 74727652,
+      "error": null
+    },
+    {
+      "variant": "new",
+      "width": 1200,
+      "run": 1,
+      "loadMs": 413.80000000074506,
+      "renderMs": [
+        892.5999999977648,
+        674.5
+      ],
+      "updateMs": [
+        197.70000000298023,
+        111,
+        119.29999999701977
+      ],
+      "pipelineStart": 937.6999999992549,
+      "readyMs": 2516.599999997765,
+      "snapshotMs": 3616,
+      "navigationToSnapshotMs": 4553.699999999255,
+      "version": "2.2.1-release",
+      "appRenderMs": 2388,
+      "height": 7898,
+      "chunks": 2,
+      "cursorSteps": 987,
+      "paths": 9885,
+      "pngBytes": 1496910,
+      "heapBytes": 27334028,
+      "error": null
+    },
+    {
+      "variant": "new",
+      "width": 1200,
+      "run": 2,
+      "loadMs": 503.4000000022352,
+      "renderMs": [
+        705.2999999970198,
+        562.8000000007451
+      ],
+      "updateMs": [
+        351.4000000022352,
+        144.20000000298023,
+        127.80000000074506
+      ],
+      "pipelineStart": 276,
+      "readyMs": 2463.800000000745,
+      "snapshotMs": 3983.60000000149,
+      "navigationToSnapshotMs": 4259.60000000149,
+      "version": "2.2.1-release",
+      "appRenderMs": 2216,
+      "height": 7898,
+      "chunks": 2,
+      "cursorSteps": 987,
+      "paths": 9885,
+      "pngBytes": 1496910,
+      "heapBytes": 27423711,
+      "error": null
+    },
+    {
+      "variant": "old",
+      "width": 1200,
+      "run": 2,
+      "loadMs": 458.5,
+      "renderMs": [
+        1060.800000000745,
+        1175.800000000745
+      ],
+      "updateMs": [
+        226,
+        150.30000000074506,
+        119.90000000223517
+      ],
+      "pipelineStart": 256.80000000074506,
+      "readyMs": 3752.10000000149,
+      "snapshotMs": 4816.89999999851,
+      "navigationToSnapshotMs": 5073.699999999255,
+      "version": "2.0.0-release",
+      "appRenderMs": 3168,
+      "height": 7864,
+      "chunks": 2,
+      "cursorSteps": 987,
+      "paths": 9884,
+      "pngBytes": 1495062,
+      "heapBytes": 72773321,
+      "error": null
+    },
+    {
+      "variant": "old",
+      "width": 1200,
+      "run": 3,
+      "loadMs": 546.1999999992549,
+      "renderMs": [
+        1185.3999999985099,
+        1210.199999999255
+      ],
+      "updateMs": [
+        325.4000000022352,
+        258.6000000014901,
+        256.1000000014901
+      ],
+      "pipelineStart": 439.29999999701977,
+      "readyMs": 4306.5,
+      "snapshotMs": 5159,
+      "navigationToSnapshotMs": 5598.29999999702,
+      "version": "2.0.0-release",
+      "appRenderMs": 3719,
+      "height": 7864,
+      "chunks": 2,
+      "cursorSteps": 987,
+      "paths": 9884,
+      "pngBytes": 1495062,
+      "heapBytes": 76724079,
+      "error": null
+    },
+    {
+      "variant": "new",
+      "width": 1200,
+      "run": 3,
+      "loadMs": 299.6000000014901,
+      "renderMs": [
+        567.8999999985099,
+        339.1000000014901
+      ],
+      "updateMs": [
+        167.69999999925494,
+        98.69999999925494,
+        112.69999999925494
+      ],
+      "pipelineStart": 451.5,
+      "readyMs": 1697.7000000029802,
+      "snapshotMs": 2552.900000002235,
+      "navigationToSnapshotMs": 3004.400000002235,
+      "version": "2.2.1-release",
+      "appRenderMs": 1596,
+      "height": 7898,
+      "chunks": 2,
+      "cursorSteps": 987,
+      "paths": 9885,
+      "pngBytes": 1496910,
+      "heapBytes": 27398110,
+      "error": null
+    },
+    {
+      "variant": "new",
+      "width": 1200,
+      "run": 4,
+      "loadMs": 273.30000000074506,
+      "renderMs": [
+        534,
+        364.29999999701977
+      ],
+      "updateMs": [
+        144.70000000298023,
+        94,
+        114.80000000074506
+      ],
+      "pipelineStart": 361.5,
+      "readyMs": 1705.6000000014901,
+      "snapshotMs": 2651.10000000149,
+      "navigationToSnapshotMs": 3012.699999999255,
+      "version": "2.2.1-release",
+      "appRenderMs": 1574,
+      "height": 7898,
+      "chunks": 2,
+      "cursorSteps": 987,
+      "paths": 9885,
+      "pngBytes": 1496910,
+      "heapBytes": 27412240,
+      "error": null
+    },
+    {
+      "variant": "old",
+      "width": 1200,
+      "run": 4,
+      "loadMs": 467.30000000074506,
+      "renderMs": [
+        1145.0999999977648,
+        1109.199999999255
+      ],
+      "updateMs": [
+        213.10000000149012,
+        123.10000000149012,
+        147
+      ],
+      "pipelineStart": 315.5,
+      "readyMs": 3613.199999999255,
+      "snapshotMs": 4636.39999999851,
+      "navigationToSnapshotMs": 4952,
+      "version": "2.0.0-release",
+      "appRenderMs": 3180,
+      "height": 7864,
+      "chunks": 2,
+      "cursorSteps": 987,
+      "paths": 9884,
+      "pngBytes": 1495062,
+      "heapBytes": 72854746,
+      "error": null
+    },
+    {
+      "variant": "new",
+      "width": 800,
+      "run": 0,
+      "loadMs": 261.4000000022352,
+      "renderMs": [
+        525.1000000014901,
+        361.19999999925494
+      ],
+      "updateMs": [
+        138.10000000149012,
+        82.59999999776483,
+        100.70000000298023
+      ],
+      "pipelineStart": 292.4000000022352,
+      "readyMs": 1597.800000000745,
+      "snapshotMs": 3255.39999999851,
+      "navigationToSnapshotMs": 3547.800000000745,
+      "version": "2.2.1-release",
+      "appRenderMs": 1497,
+      "height": 13583,
+      "chunks": 4,
+      "cursorSteps": 987,
+      "paths": 10170,
+      "pngBytes": 1727010,
+      "heapBytes": 34445514,
+      "error": null
+    },
+    {
+      "variant": "old",
+      "width": 800,
+      "run": 0,
+      "loadMs": 387.5,
+      "renderMs": [
+        1038.4000000022352,
+        818.9000000022352
+      ],
+      "updateMs": [
+        197.39999999850988,
+        115.59999999776483,
+        130.69999999925494
+      ],
+      "pipelineStart": 258.30000000074506,
+      "readyMs": 3126.699999999255,
+      "snapshotMs": 4795.39999999851,
+      "navigationToSnapshotMs": 5053.699999999255,
+      "version": "2.0.0-release",
+      "appRenderMs": 2663,
+      "height": 13507,
+      "chunks": 4,
+      "cursorSteps": 987,
+      "paths": 10169,
+      "pngBytes": 1725078,
+      "heapBytes": 27529884,
+      "error": null
+    },
+    {
+      "variant": "old",
+      "width": 800,
+      "run": 1,
+      "loadMs": 424.20000000298023,
+      "renderMs": [
+        1134.699999999255,
+        895.1000000014901
+      ],
+      "updateMs": [
+        200.90000000223517,
+        107.19999999925494,
+        117.29999999701977
+      ],
+      "pipelineStart": 298.80000000074506,
+      "readyMs": 3353.5,
+      "snapshotMs": 5231,
+      "navigationToSnapshotMs": 5529.89999999851,
+      "version": "2.0.0-release",
+      "appRenderMs": 2859,
+      "height": 13507,
+      "chunks": 4,
+      "cursorSteps": 987,
+      "paths": 10169,
+      "pngBytes": 1725078,
+      "heapBytes": 27504392,
+      "error": null
+    },
+    {
+      "variant": "new",
+      "width": 800,
+      "run": 1,
+      "loadMs": 325.69999999925494,
+      "renderMs": [
+        592.3000000007451,
+        356.5999999977648
+      ],
+      "updateMs": [
+        155.90000000223517,
+        82.80000000074506,
+        86.90000000223517
+      ],
+      "pipelineStart": 321.6000000014901,
+      "readyMs": 1753.800000000745,
+      "snapshotMs": 3338.699999999255,
+      "navigationToSnapshotMs": 3660.300000000745,
+      "version": "2.2.1-release",
+      "appRenderMs": 1621,
+      "height": 13583,
+      "chunks": 4,
+      "cursorSteps": 987,
+      "paths": 10170,
+      "pngBytes": 1727010,
+      "heapBytes": 34590518,
+      "error": null
+    },
+    {
+      "variant": "new",
+      "width": 800,
+      "run": 2,
+      "loadMs": 301.0999999977648,
+      "renderMs": [
+        635.3999999985099,
+        423.19999999925494
+      ],
+      "updateMs": [
+        152,
+        101.19999999925494,
+        112.60000000149012
+      ],
+      "pipelineStart": 318,
+      "readyMs": 1863.8999999985099,
+      "snapshotMs": 3360.699999999255,
+      "navigationToSnapshotMs": 3678.800000000745,
+      "version": "2.2.1-release",
+      "appRenderMs": 1741,
+      "height": 13583,
+      "chunks": 4,
+      "cursorSteps": 987,
+      "paths": 10170,
+      "pngBytes": 1727010,
+      "heapBytes": 34510718,
+      "error": null
+    },
+    {
+      "variant": "old",
+      "width": 800,
+      "run": 2,
+      "loadMs": 372.19999999925494,
+      "renderMs": [
+        997.8000000007451,
+        846.1000000014901
+      ],
+      "updateMs": [
+        170.30000000074506,
+        102.39999999850988,
+        115.39999999850988
+      ],
+      "pipelineStart": 295,
+      "readyMs": 3013.89999999851,
+      "snapshotMs": 4678.199999999255,
+      "navigationToSnapshotMs": 4973.199999999255,
+      "version": "2.0.0-release",
+      "appRenderMs": 2613,
+      "height": 13507,
+      "chunks": 4,
+      "cursorSteps": 987,
+      "paths": 10169,
+      "pngBytes": 1725078,
+      "heapBytes": 27498804,
+      "error": null
+    },
+    {
+      "variant": "old",
+      "width": 800,
+      "run": 3,
+      "loadMs": 383.9000000022352,
+      "renderMs": [
+        1073.5,
+        867.5999999977648
+      ],
+      "updateMs": [
+        193.10000000149012,
+        123.19999999925494,
+        128.80000000074506
+      ],
+      "pipelineStart": 272.80000000074506,
+      "readyMs": 3152.900000002235,
+      "snapshotMs": 4790.5,
+      "navigationToSnapshotMs": 5063.300000000745,
+      "version": "2.0.0-release",
+      "appRenderMs": 2755,
+      "height": 13507,
+      "chunks": 4,
+      "cursorSteps": 987,
+      "paths": 10169,
+      "pngBytes": 1725078,
+      "heapBytes": 27500636,
+      "error": null
+    },
+    {
+      "variant": "new",
+      "width": 800,
+      "run": 3,
+      "loadMs": 458.3999999985099,
+      "renderMs": [
+        675.1000000014901,
+        342.5
+      ],
+      "updateMs": [
+        337.0999999977648,
+        170.39999999850988,
+        82.30000000074506
+      ],
+      "pipelineStart": 345.80000000074506,
+      "readyMs": 2044.199999999255,
+      "snapshotMs": 3499.400000002235,
+      "navigationToSnapshotMs": 3845.2000000029802,
+      "version": "2.2.1-release",
+      "appRenderMs": 1896,
+      "height": 13583,
+      "chunks": 4,
+      "cursorSteps": 987,
+      "paths": 10170,
+      "pngBytes": 1727010,
+      "heapBytes": 34600136,
+      "error": null
+    },
+    {
+      "variant": "new",
+      "width": 800,
+      "run": 4,
+      "loadMs": 262,
+      "renderMs": [
+        504.79999999701977,
+        399.8999999985099
+      ],
+      "updateMs": [
+        140.19999999925494,
+        86,
+        94
+      ],
+      "pipelineStart": 320.5999999977648,
+      "readyMs": 1630.300000000745,
+      "snapshotMs": 3135.400000002235,
+      "navigationToSnapshotMs": 3456,
+      "version": "2.2.1-release",
+      "appRenderMs": 1531,
+      "height": 13583,
+      "chunks": 4,
+      "cursorSteps": 987,
+      "paths": 10170,
+      "pngBytes": 1727010,
+      "heapBytes": 34503922,
+      "error": null
+    },
+    {
+      "variant": "old",
+      "width": 800,
+      "run": 4,
+      "loadMs": 400.19999999925494,
+      "renderMs": [
+        1088.699999999255,
+        827.3000000007451
+      ],
+      "updateMs": [
+        200,
+        118.10000000149012,
+        125.69999999925494
+      ],
+      "pipelineStart": 265.3999999985099,
+      "readyMs": 3155.39999999851,
+      "snapshotMs": 4941.199999999255,
+      "navigationToSnapshotMs": 5206.599999997765,
+      "version": "2.0.0-release",
+      "appRenderMs": 2741,
+      "height": 13507,
+      "chunks": 4,
+      "cursorSteps": 987,
+      "paths": 10169,
+      "pngBytes": 1725078,
+      "heapBytes": 27476820,
+      "error": null
+    },
+    {
+      "variant": "new",
+      "width": 360,
+      "run": 0,
+      "loadMs": 295.4000000022352,
+      "renderMs": [
+        682.1999999992549,
+        456.19999999925494
+      ],
+      "updateMs": [
+        169.70000000298023,
+        97.30000000074506,
+        113.10000000149012
+      ],
+      "pipelineStart": 318.29999999701977,
+      "readyMs": 1961.1000000014901,
+      "snapshotMs": 6900.20000000298,
+      "navigationToSnapshotMs": 7218.5,
+      "version": "2.2.1-release",
+      "appRenderMs": 1846,
+      "height": 41360,
+      "chunks": 11,
+      "cursorSteps": 987,
+      "paths": 11848,
+      "pngBytes": 2694837,
+      "heapBytes": 30984690,
+      "error": null
+    },
+    {
+      "variant": "old",
+      "width": 360,
+      "run": 0,
+      "loadMs": 347.3999999985099,
+      "renderMs": [
+        1159.5,
+        965.8000000007451
+      ],
+      "updateMs": [
+        165,
+        105.59999999776483,
+        115.39999999850988
+      ],
+      "pipelineStart": 338.8999999985099,
+      "readyMs": 3420.5,
+      "snapshotMs": 8452.900000002235,
+      "navigationToSnapshotMs": 8791.800000000745,
+      "version": "2.0.0-release",
+      "appRenderMs": 2931,
+      "height": 41284,
+      "chunks": 11,
+      "cursorSteps": 987,
+      "paths": 11847,
+      "pngBytes": 2692317,
+      "heapBytes": 29783022,
+      "error": null
+    },
+    {
+      "variant": "old",
+      "width": 360,
+      "run": 1,
+      "loadMs": 352,
+      "renderMs": [
+        1175.9000000022352,
+        1081.5999999977648
+      ],
+      "updateMs": [
+        175.89999999850988,
+        109.19999999925494,
+        268.6000000014901
+      ],
+      "pipelineStart": 276.19999999925494,
+      "readyMs": 3596.800000000745,
+      "snapshotMs": 8528,
+      "navigationToSnapshotMs": 8804.199999999255,
+      "version": "2.0.0-release",
+      "appRenderMs": 3214,
+      "height": 41284,
+      "chunks": 11,
+      "cursorSteps": 987,
+      "paths": 11847,
+      "pngBytes": 2692317,
+      "heapBytes": 29721658,
+      "error": null
+    },
+    {
+      "variant": "new",
+      "width": 360,
+      "run": 1,
+      "loadMs": 251.10000000149012,
+      "renderMs": [
+        662.1000000014901,
+        409.6000000014901
+      ],
+      "updateMs": [
+        131.30000000074506,
+        78.5,
+        102.80000000074506
+      ],
+      "pipelineStart": 283.5,
+      "readyMs": 1808.8999999985099,
+      "snapshotMs": 6713.800000000745,
+      "navigationToSnapshotMs": 6997.300000000745,
+      "version": "2.2.1-release",
+      "appRenderMs": 1708,
+      "height": 41360,
+      "chunks": 11,
+      "cursorSteps": 987,
+      "paths": 11848,
+      "pngBytes": 2694837,
+      "heapBytes": 31032238,
+      "error": null
+    },
+    {
+      "variant": "new",
+      "width": 360,
+      "run": 2,
+      "loadMs": 290.5,
+      "renderMs": [
+        723.1999999992549,
+        481.80000000074506
+      ],
+      "updateMs": [
+        159.80000000074506,
+        99.69999999925494,
+        120.19999999925494
+      ],
+      "pipelineStart": 365,
+      "readyMs": 2041.5,
+      "snapshotMs": 6932.60000000149,
+      "navigationToSnapshotMs": 7297.60000000149,
+      "version": "2.2.1-release",
+      "appRenderMs": 1930,
+      "height": 41360,
+      "chunks": 11,
+      "cursorSteps": 987,
+      "paths": 11848,
+      "pngBytes": 2694837,
+      "heapBytes": 30897424,
+      "error": null
+    },
+    {
+      "variant": "old",
+      "width": 360,
+      "run": 2,
+      "loadMs": 349.3999999985099,
+      "renderMs": [
+        1501.800000000745,
+        1092.800000000745
+      ],
+      "updateMs": [
+        176.19999999925494,
+        99.30000000074506,
+        147.89999999850988
+      ],
+      "pipelineStart": 237.5,
+      "readyMs": 3837.10000000149,
+      "snapshotMs": 9262,
+      "navigationToSnapshotMs": 9499.5,
+      "version": "2.0.0-release",
+      "appRenderMs": 3412,
+      "height": 41284,
+      "chunks": 11,
+      "cursorSteps": 987,
+      "paths": 11847,
+      "pngBytes": 2692317,
+      "heapBytes": 29761562,
+      "error": null
+    },
+    {
+      "variant": "old",
+      "width": 360,
+      "run": 3,
+      "loadMs": 438.9000000022352,
+      "renderMs": [
+        1333.199999999255,
+        1032.2999999970198
+      ],
+      "updateMs": [
+        225.69999999925494,
+        133.5,
+        184.20000000298023
+      ],
+      "pipelineStart": 284.30000000074506,
+      "readyMs": 3850.39999999851,
+      "snapshotMs": 9205.599999997765,
+      "navigationToSnapshotMs": 9489.89999999851,
+      "version": "2.0.0-release",
+      "appRenderMs": 3339,
+      "height": 41284,
+      "chunks": 11,
+      "cursorSteps": 987,
+      "paths": 11847,
+      "pngBytes": 2692317,
+      "heapBytes": 29766666,
+      "error": null
+    },
+    {
+      "variant": "new",
+      "width": 360,
+      "run": 3,
+      "loadMs": 319.70000000298023,
+      "renderMs": [
+        712.3000000007451,
+        414.9000000022352
+      ],
+      "updateMs": [
+        182,
+        105.40000000223517,
+        93.5
+      ],
+      "pipelineStart": 309.79999999701977,
+      "readyMs": 1971.6000000014901,
+      "snapshotMs": 7289.300000000745,
+      "navigationToSnapshotMs": 7599.199999999255,
+      "version": "2.2.1-release",
+      "appRenderMs": 1858,
+      "height": 41360,
+      "chunks": 11,
+      "cursorSteps": 987,
+      "paths": 11848,
+      "pngBytes": 2694837,
+      "heapBytes": 30966844,
+      "error": null
+    },
+    {
+      "variant": "new",
+      "width": 360,
+      "run": 4,
+      "loadMs": 293.8999999985099,
+      "renderMs": [
+        586.2999999970198,
+        448.1000000014901
+      ],
+      "updateMs": [
+        163.80000000074506,
+        82.80000000074506,
+        84.69999999925494
+      ],
+      "pipelineStart": 321.9000000022352,
+      "readyMs": 1801.699999999255,
+      "snapshotMs": 7068.099999997765,
+      "navigationToSnapshotMs": 7390.10000000149,
+      "version": "2.2.1-release",
+      "appRenderMs": 1699,
+      "height": 41360,
+      "chunks": 11,
+      "cursorSteps": 987,
+      "paths": 11848,
+      "pngBytes": 2694837,
+      "heapBytes": 30883780,
+      "error": null
+    },
+    {
+      "variant": "old",
+      "width": 360,
+      "run": 4,
+      "loadMs": 421.19999999925494,
+      "renderMs": [
+        1279.9000000022352,
+        1003.3000000007451
+      ],
+      "updateMs": [
+        212.69999999925494,
+        126.59999999776483,
+        188
+      ],
+      "pipelineStart": 295.70000000298023,
+      "readyMs": 3715.599999997765,
+      "snapshotMs": 8781.29999999702,
+      "navigationToSnapshotMs": 9077,
+      "version": "2.0.0-release",
+      "appRenderMs": 3232,
+      "height": 41284,
+      "chunks": 11,
+      "cursorSteps": 987,
+      "paths": 11847,
+      "pngBytes": 2692317,
+      "heapBytes": 29730170,
+      "error": null
+    }
+  ],
+  "productionTemplateCommit": "afdd22b",
+  "sourceSha256": "693c312c97a12e672124fc367aa3e52a4ae44cb1a2257f85f20133fba407042c"
+}

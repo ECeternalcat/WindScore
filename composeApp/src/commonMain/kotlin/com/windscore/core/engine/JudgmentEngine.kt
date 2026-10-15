@@ -62,6 +62,7 @@ class JudgmentEngine(
     fun drainCompletedGroups(): List<CompletedGroup> = completedGroups.toList().also { completedGroups.clear() }
 
     private var groupIndex = 0
+    private var boundaryTick: Long? = null
     private val activeKeys = mutableSetOf<Int>()
     /** Session-local note hit state; score data remains immutable and shareable. */
     private val hitNoteIds = mutableSetOf<Int>()
@@ -82,7 +83,7 @@ class JudgmentEngine(
 
     /** 当前游标 tick = 当前组的 startTick；全部完成则为 totalTicks。 */
     val currentTick: Long
-        get() = if (groupIndex < groups.size) groups[groupIndex].first().startTick else totalTicks
+        get() = boundaryTick ?: if (groupIndex < groups.size) groups[groupIndex].first().startTick else totalTicks
 
     val isFinished: Boolean get() = groupIndex >= groups.size
 
@@ -123,6 +124,7 @@ class JudgmentEngine(
     /** 清除 A/B 循环。 */
     fun clearLoop() {
         loopEnabled = false
+        boundaryTick = null
     }
 
     /**
@@ -160,6 +162,7 @@ class JudgmentEngine(
      * 将游标跳到 >= [targetTick] 的第一个组，之前的组标记为已命中。
      */
     fun seekTo(targetTick: Long) {
+        completedGroups.clear()
         activeKeys.clear()
         freshKeys.clear()
         for (i in groupWrongCounts.indices) groupWrongCounts[i] = 0
@@ -169,11 +172,11 @@ class JudgmentEngine(
         val constrainedTick = playbackRegion().constrain(targetTick)
         val targetIdx = findGroupIndexAtOrAfter(constrainedTick).let { if (it < 0) groups.size else it }
         hitNoteIds.clear()
-        groups.take(targetIdx).forEach { group -> group.forEach { hitNoteIds.add(it.id) } }
-        cleanHitCount = (0 until targetIdx).sumOf { i ->
-            groups[i].count { isActiveTrack(it.track) }
-        }
+        val preceding = groups.takeWhile { it.first().startTick < constrainedTick }
+        preceding.forEach { group -> group.forEach { hitNoteIds.add(it.id) } }
+        cleanHitCount = preceding.sumOf { group -> group.count { isActiveTrack(it.track) } }
         groupIndex = targetIdx.coerceIn(0, groups.size)
+        boundaryTick = if (groupIndex >= groups.size && loopEnabled) loopEndTick else null
         lastArrivedGroupIndex = groupIndex - 1
     }
 
@@ -240,6 +243,7 @@ class JudgmentEngine(
     }
 
     fun reset(): List<NoteEntity> {
+        completedGroups.clear()
         activeKeys.clear()
         freshKeys.clear()
         hitNoteIds.clear()
@@ -247,7 +251,8 @@ class JudgmentEngine(
         currentGroupDirty = false
         cleanHitCount = 0
         wrongPressCount = 0
-        groupIndex = if (loopEnabled) findGroupIndexAtOrAfter(loopStartTick) else 0
+        groupIndex = if (loopEnabled) findGroupIndexAtOrAfter(loopStartTick).let { if (it < 0) groups.size else it } else 0
+        boundaryTick = if (groupIndex >= groups.size && loopEnabled) loopEndTick else null
         lastArrivedGroupIndex = groupIndex - 1
         return emptyList()
     }
@@ -343,6 +348,7 @@ class JudgmentEngine(
         val targetIndex = findGroupIndexAtOrAfter(loopStartTick)
         if (targetIndex < 0) return // 无效循环，保持当前位置
         groupIndex = targetIndex
+        boundaryTick = null
         lastArrivedGroupIndex = groupIndex - 1
         currentGroupDirty = false
         // 清按键池：循环回卷后要求长辈重新按下，避免因为一直按着导致无限自循环
@@ -359,7 +365,7 @@ class JudgmentEngine(
 
     /** 找到第一个起始 tick >= [tick] 的组索引；没有则返回 -1。 */
     private fun findGroupIndexAtOrAfter(tick: Long): Int =
-        groups.indexOfFirst { it.first().startTick >= tick }
+        groups.indexOfFirst { it.first().startTick >= tick && playbackRegion().containsNoteAt(it.first().startTick) }
 
     private fun playbackRegion(): PlaybackRegion = PlaybackRegion(
         scoreStart = 0L,

@@ -12,6 +12,7 @@ data class SheetSnapshot(
     val chunkHeight: Int,
     val totalHeight: Int,
     val cursorSteps: List<CursorStep>,
+    val noteGeometry: NoteGeometrySnapshot? = null,
 ) {
     val hasValidGeometry: Boolean
         get() = chunks.isNotEmpty() && chunkWidth > 0 && chunkHeight > 0 && totalHeight > 0

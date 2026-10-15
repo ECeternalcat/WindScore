@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.input.pointer.pointerInput
@@ -39,6 +40,7 @@ fun NativeSheetView(
     pendingLoopStart: Long? = null,
     loopRange: LongRange? = null,
     modifier: Modifier = Modifier,
+    targetCues: List<NoteHeadRect> = emptyList(),
 ) {
     if (!snapshot.hasValidGeometry) {
         Canvas(modifier.fillMaxSize()) {}
@@ -147,6 +149,19 @@ fun NativeSheetView(
         val contentBottom = (totalH - scrollY) * scale
         if (contentBottom < viewH) {
             drawRect(Color.White, Offset(0f, contentBottom), Size(viewW, viewH - contentBottom))
+        }
+
+        // Thin target outlines; the existing blue cursor remains drawn above them.
+        for (rect in targetCues) {
+            val y = (rect.y.toFloat() - scrollY) * scale
+            if (y + rect.height * scale >= 0 && y <= viewH) {
+                drawOval(
+                    color = PRACTICE_TARGET_COLOR.copy(alpha = 0.7f),
+                    topLeft = Offset((rect.x - 2).toFloat() * scale, y - 2 * scale),
+                    size = Size((rect.width + 4).toFloat() * scale, (rect.height + 4).toFloat() * scale),
+                    style = Stroke(width = 1.2f * scale),
+                )
+            }
         }
 
         // 光标

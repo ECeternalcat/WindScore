@@ -13,4 +13,6 @@ data class ScoreSettings(
     val metronomeVol: Int = 0,
     val countdownEnabled: Boolean = false,
     val currentTick: Long = 0L,
+    val scoreVersion: Int? = null,
+    val divisions: Int? = null,
 )

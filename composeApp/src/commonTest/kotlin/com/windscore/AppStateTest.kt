@@ -11,6 +11,27 @@ import kotlin.test.assertTrue
 
 class AppStateTest {
     @Test
+    fun legacyVariableDivisionsBookmarksAreNotRestoredAsCorrectedCoordinates() {
+        val original = ScoreSettings(currentTick = 4, loopStartTick = 4, loopEndTick = 12, speedMultiplier = 0.5)
+        val restored = original.restorePositionFor(score("a", "Score", 100).copy(legacyTimingCompatible = false))
+        assertEquals(0L, restored.currentTick)
+        assertNull(restored.loopStartTick)
+        assertNull(restored.loopEndTick)
+        assertEquals(0.5, restored.speedMultiplier)
+        assertEquals(4L, original.currentTick)
+        assertEquals(original, original.restorePositionFor(score("a", "Score", 100)))
+    }
+
+    @Test
+    fun versionedBookmarkCoordinatesCanBeRescaledWithoutChangingPreferences() {
+        val settings = ScoreSettings(scoreVersion = 2, divisions = 4, currentTick = 4, loopStartTick = 4, loopEndTick = 8)
+        val restored = settings.restorePositionFor(score("a", "Score", 100).copy(divisions = 8))
+        assertEquals(8L, restored.currentTick)
+        assertEquals(8L, restored.loopStartTick)
+        assertEquals(16L, restored.loopEndTick)
+    }
+
+    @Test
     fun scoreIdentityUsesStableIdBeforeMetadata() {
         val first = score(id = "a", title = "Same", ticks = 8)
         val second = score(id = "b", title = "Same", ticks = 8)

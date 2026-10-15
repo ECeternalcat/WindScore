@@ -10,6 +10,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.DrawScope
 
+internal val PRACTICE_TARGET_COLOR = Color(0xFFD92F73)
+
 private val WHITE_PITCH_CLASSES = setOf(0, 2, 4, 5, 7, 9, 11)
 
 internal enum class PracticeKeyState { IDLE, HOSTED, TARGET, HELD }
@@ -136,7 +138,7 @@ private object KeyboardColors {
     val whiteKey = Color(0xFFFAFAF8)
     val blackKey = Color(0xFF202124)
     val targetWhite = Color(0xFFFFD7E7)
-    val targetBlack = Color(0xFFD92F73)
+    val targetBlack = PRACTICE_TARGET_COLOR
     val hostedWhite = Color(0xFFD3D6D2)
     val hostedBlack = Color(0xFF737773)
     val heldWhite = Color(0xFFBEE4A7)

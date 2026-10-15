@@ -20,12 +20,11 @@ class ScorePlayer(
     val score: Score,
     private val synth: AudioSynth,
     private val scope: CoroutineScope,
+    private val nowMillis: () -> Long = kotlin.time.TimeSource.Monotonic.markNow().let { mark ->
+        { mark.elapsedNow().inWholeMilliseconds }
+    },
 ) {
-    private val tps: Double = run {
-        val tempo = score.tempo.takeIf { it > 0 } ?: 120
-        val div = score.divisions.takeIf { it > 0 } ?: 4
-        tempo * div / 60.0
-    }
+    private val timing = ScoreTiming(score)
 
     private val _tick = MutableStateFlow(0L)
     val tick: StateFlow<Long> = _tick
@@ -39,157 +38,142 @@ class ScorePlayer(
     private val _playingPitches = MutableStateFlow<Set<Int>>(emptySet())
     val playingPitches: StateFlow<Set<Int>> = _playingPitches
 
-    private data class Event(val tick: Long, val on: Boolean, val pitch: Int)
+    private data class Event(val tick: Long, val on: Boolean, val pitch: Int, val onset: Long)
 
     private val events: List<Event> = buildList {
         score.notes.forEach { n ->
-            add(Event(n.startTick, true, n.pitch))
-            add(Event(n.startTick + n.durationTick, false, n.pitch))
+            add(Event(n.startTick, true, n.pitch, n.startTick))
+            add(Event(n.startTick + n.durationTick, false, n.pitch, n.startTick))
         }
         // 同 tick 先 off 后 on
-        sortBy { it.tick * 2L + (if (it.on) 1L else 0L) }
+        sortWith(compareBy<Event> { it.tick }.thenBy { it.on })
     }
 
     private var eventIndex = 0
     private val active = mutableMapOf<Int, Int>() // pitch -> 活跃计数
     private var job: Job? = null
     private var localTick: Double = 0.0
+    private var generation = 0L
 
     /** Playback speed multiplier (e.g. 0.5 for half speed, 1.0 for original, 1.5 for fast) */
     var speedMultiplier: Double = 1.0
 
     var loopRange: LongRange? = null
-        set(value) {
+        set(value) = SessionLane.run {
             val normalized = playbackRegion(value).normalizedLoop()
-            if (field == normalized) return
-            field = normalized
-            seekTo(_tick.value)
+            if (field != normalized) {
+                field = normalized
+                seekTo(_tick.value)
+            }
         }
 
     /** Metronome volume (0 to 100). Default is 50. */
     var metronomeVolume: Int = 50
 
-    fun play() {
-        if (_playing.value) return
+    fun play(): Unit = SessionLane.run {
+        if (_playing.value) return@run
         if (_finished.value || _tick.value >= score.totalTicks) reset()
         synth.start()
+        rebuildAt(_tick.value)
+        if (loopRange?.last != _tick.value) active.keys.forEach { synth.noteOn(it, VELOCITY) }
         _playing.value = true
         _finished.value = false
+        val runGeneration = ++generation
+        var lastMs = nowMillis()
+        var lastBeat = (_tick.value / (score.divisions.takeIf { it > 0 } ?: 4)) - 1
         job = scope.launch(Dispatchers.Default) {
-            val clock = kotlin.time.TimeSource.Monotonic
-            val startMark = clock.markNow()
-            var lastMs = startMark.elapsedNow().inWholeMilliseconds
-            localTick = _tick.value.toDouble()
-            var lastBeat = (localTick.toLong() / (score.divisions.takeIf { it > 0 } ?: 4)) - 1
             try {
-                while (isActive && _playing.value && localTick < score.totalTicks) {
+                while (SessionLane.run { runGeneration == generation && _playing.value && localTick < score.totalTicks }) {
                     delay(LOOP_MS)
-                    val now = startMark.elapsedNow().inWholeMilliseconds
-                    var dt = (now - lastMs) / 1000.0
-                    if (dt > 0.1) {
-                        dt = 0.05 // Cap to 50ms to prevent note blasting/skipping during system lags
-                    }
-                    lastMs = now
-                    localTick += tps * dt * speedMultiplier
-                    val tickLong = localTick.toLong()
-
-                    val divisions = score.divisions.takeIf { it > 0 } ?: 4
-                    val currentBeat = tickLong / divisions
-                    if (currentBeat > lastBeat) {
-                        lastBeat = currentBeat
-                        if (metronomeVolume > 0) {
-                            val vel = (metronomeVolume * 1.27).toInt().coerceIn(0, 127)
-                            // 使用打击乐通道（GM channel 10 / 索引 9）上的木块音色，
-                            // 避免与乐谱钢琴音域（96/108 等真实音高）冲突、互相切断
-                            val clickPitch = if (currentBeat % 4L == 0L) 76 else 77 // High / Low Woodblock
-                            val clickChannel = 9
-                            scope.launch(Dispatchers.Default) {
-                                synth.noteOn(clickChannel, clickPitch, vel)
-                                delay(60)
-                                synth.noteOff(clickChannel, clickPitch)
+                    var wrap: LongRange? = null
+                    SessionLane.run {
+                        if (runGeneration != generation || !_playing.value) return@run
+                        val now = nowMillis()
+                        var elapsed = (now - lastMs).coerceAtLeast(0).toDouble()
+                        if (elapsed > 100) elapsed = 50.0 // Retain the existing anti-burst lag policy.
+                        lastMs = now
+                        localTick = timing.tickAtMilliseconds(timing.millisecondsAt(localTick) + elapsed * speedMultiplier)
+                        val tickLong = (localTick + 1e-9).toLong()
+                        val divisions = score.divisions.takeIf { it > 0 } ?: 4
+                        val beat = tickLong / divisions
+                        if (beat > lastBeat && tickLong < playbackRegion().end) {
+                            lastBeat = beat
+                            if (metronomeVolume > 0) {
+                                val velocity = (metronomeVolume * 1.27).toInt().coerceIn(0, 127)
+                                scope.launch(Dispatchers.Default) {
+                                    synth.noteOn(9, if (beat % 4L == 0L) 76 else 77, velocity)
+                                    delay(60)
+                                    synth.noteOff(9, if (beat % 4L == 0L) 76 else 77)
+                                }
                             }
                         }
-                    }
-
-                    while (eventIndex < events.size && events[eventIndex].tick <= tickLong) {
-                        applyEvent(events[eventIndex])
-                        eventIndex++
-                    }
-                    
-                    val currentLoop = loopRange
-                    if (currentLoop != null && tickLong >= currentLoop.last) {
-                        // 1. Wait at the end of the loop so user can see the last notes
-                        _tick.value = currentLoop.last
-                        _playingPitches.value = active.keys.toSet()
-                        delay(500)
-
-                        // 2. Snap back to the beginning of the loop
-                        localTick = currentLoop.first.toDouble()
-                        _tick.value = currentLoop.first
-                        eventIndex = 0
-                        active.clear()
-                        silenceAll()
-                        while (eventIndex < events.size && events[eventIndex].tick < currentLoop.first) {
-                            val e = events[eventIndex]
-                            if (e.on) {
-                                active[e.pitch] = (active[e.pitch] ?: 0) + 1
-                            } else {
-                                val c = (active[e.pitch] ?: 0) - 1
-                                if (c <= 0) active.remove(e.pitch) else active[e.pitch] = c
-                            }
-                            eventIndex++
+                        val region = playbackRegion()
+                        val limit = minOf(tickLong, region.end)
+                        while (eventIndex < events.size && events[eventIndex].tick <= limit) {
+                            val event = events[eventIndex++]
+                            if (region.containsNoteAt(event.onset) && (!event.on || event.tick < region.end)) applyEvent(event)
                         }
-                        // 3. Wait at the start of the loop before playing
-                        delay(500)
-                        lastMs = startMark.elapsedNow().inWholeMilliseconds
-                    } else {
-                        _tick.value = tickLong.coerceAtMost(score.totalTicks)
+                        val currentLoop = loopRange
+                        if (currentLoop != null && tickLong >= currentLoop.last) {
+                            _tick.value = currentLoop.last
+                            silenceAll()
+                            _playingPitches.value = emptySet()
+                            wrap = currentLoop
+                        } else {
+                            _tick.value = tickLong.coerceAtMost(score.totalTicks)
+                            _playingPitches.value = active.keys.toSet()
+                        }
                     }
-                    _playingPitches.value = active.keys.toSet()
+                    wrap?.let { range ->
+                        delay(500)
+                        SessionLane.run {
+                            if (runGeneration != generation) return@run
+                            localTick = range.first.toDouble()
+                            _tick.value = range.first
+                            rebuildAt(range.first)
+                            lastBeat = range.first / (score.divisions.takeIf { it > 0 } ?: 4) - 1
+                        }
+                        delay(500)
+                        // Presentation pauses never become elapsed musical time in the next pass.
+                        SessionLane.run { if (runGeneration == generation) lastMs = nowMillis() }
+                    }
                 }
-                if (localTick >= score.totalTicks) {
-                    _tick.value = score.totalTicks
-                    _finished.value = true
-                    _playing.value = false
-                    silenceAll()
+                SessionLane.run {
+                    if (runGeneration == generation && localTick >= score.totalTicks) {
+                        _tick.value = score.totalTicks
+                        _finished.value = true
+                        silenceAll()
+                        _playingPitches.value = emptySet()
+                    }
                 }
             } finally {
-                _playing.value = false
+                SessionLane.run { if (runGeneration == generation) _playing.value = false }
             }
         }
     }
 
-    fun pause() {
+    fun pause(): Unit = SessionLane.run {
+        generation++
         _playing.value = false
         job?.cancel()
         silenceAll()
         _playingPitches.value = emptySet()
     }
 
-    fun stop() {
+    fun stop(): Unit = SessionLane.run {
         pause()
         reset()
     }
 
-    fun reset() {
+    fun reset(): Unit = SessionLane.run {
+        val wasPlaying = _playing.value
+        pause()
         val target = playbackRegion().start
-        _tick.value = target
         localTick = target.toDouble()
-        eventIndex = 0
-        active.clear()
-        // Rebuild notes already sounding at the loop start without triggering audio.
-        while (eventIndex < events.size && events[eventIndex].tick < target) {
-            val event = events[eventIndex]
-            if (event.on) {
-                active[event.pitch] = (active[event.pitch] ?: 0) + 1
-            } else {
-                val count = (active[event.pitch] ?: 0) - 1
-                if (count <= 0) active.remove(event.pitch) else active[event.pitch] = count
-            }
-            eventIndex++
-        }
+        _tick.value = target
+        rebuildAt(target)
         _finished.value = false
-        _playingPitches.value = emptySet()
+        if (wasPlaying) play()
     }
 
     fun toggle() {
@@ -197,31 +181,29 @@ class ScorePlayer(
     }
 
     /** 定点跳转（文档 3.3）。静默重建状态——不触发合成器，避免跳转杂音。 */
-    fun seekTo(tick: Long) {
+    fun seekTo(tick: Long): Unit = SessionLane.run {
         val wasPlaying = _playing.value
-        _playing.value = false
-        job?.cancel()
-        silenceAll()
+        pause()
         val target = playbackRegion().constrain(tick)
         localTick = target.toDouble()
         _tick.value = target
-        eventIndex = 0
-        active.clear()
-        // 静默推进 eventIndex + 重建 active 映射（不调用 synth，不发声）
-        // 严格 < target：目标位置的音符留给 play 循环触发，避免吞掉第一个音
-        while (eventIndex < events.size && events[eventIndex].tick < target) {
-            val e = events[eventIndex]
-            if (e.on) {
-                active[e.pitch] = (active[e.pitch] ?: 0) + 1
-            } else {
-                val c = (active[e.pitch] ?: 0) - 1
-                if (c <= 0) active.remove(e.pitch) else active[e.pitch] = c
-            }
-            eventIndex++
-        }
-        _playingPitches.value = emptySet()
+        rebuildAt(target) // Silent until play; retain exact-target attacks for dispatch.
         _finished.value = target >= score.totalTicks
         if (wasPlaying) play()
+    }
+
+    private fun rebuildAt(target: Long) {
+        eventIndex = 0
+        active.clear()
+        val region = playbackRegion()
+        // Apply exact-target releases before restoring sustains; exact-target attacks stay pending.
+        while (eventIndex < events.size && (events[eventIndex].tick < target ||
+                    (events[eventIndex].tick == target && !events[eventIndex].on))) {
+            val event = events[eventIndex++]
+            if (!region.containsNoteAt(event.onset)) continue
+            val count = (active[event.pitch] ?: 0) + if (event.on) 1 else -1
+            if (count <= 0) active.remove(event.pitch) else active[event.pitch] = count
+        }
     }
 
     /** 微观步进：跳到下一个音符的起始 tick（文档 3.3 盲操微调）。 */
@@ -256,7 +238,8 @@ class ScorePlayer(
             active[e.pitch] = (active[e.pitch] ?: 0) + 1
             synth.noteOn(e.pitch, VELOCITY)
         } else {
-            val c = (active[e.pitch] ?: 0) - 1
+            val count = active[e.pitch] ?: return
+            val c = count - 1
             if (c <= 0) {
                 active.remove(e.pitch)
                 synth.noteOff(e.pitch)
