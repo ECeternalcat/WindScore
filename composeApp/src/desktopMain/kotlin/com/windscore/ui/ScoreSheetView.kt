@@ -145,10 +145,8 @@ actual fun ScoreSheetView(
             renderDone.set(false)
 
             // Check cache
-            val xmlHash = com.windscore.core.calculateMd5(rawXml)
             val htmlText = OsmdHtml.buildHtml(divisions, tr.loadingScore, tr.loadingFailed)
-            val htmlHash = com.windscore.core.calculateMd5(htmlText)
-            val cacheKey = "${xmlHash}_$htmlHash"
+            val cacheKey = sheetSnapshotCacheKey(rawXml, htmlText, serverData.osmdJsBytes, "javafx-23")
             val cacheDir = File(com.windscore.core.getCacheDir(), cacheKey)
 
             val handler = snapshotHandler

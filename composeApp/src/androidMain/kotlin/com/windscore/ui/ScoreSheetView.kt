@@ -19,7 +19,6 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.viewinterop.AndroidView
-import com.windscore.core.calculateMd5
 import com.windscore.core.getCacheDir
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -97,9 +96,7 @@ actual fun ScoreSheetView(
     LaunchedEffect(rawXml) {
         val handler = snapshotHandler
         val htmlText = OsmdHtml.buildHtml(divisions, tr.loadingScore, tr.loadingFailed)
-        val xmlHash = calculateMd5(rawXml)
-        val htmlHash = calculateMd5(htmlText)
-        val cacheKey = "${xmlHash}_$htmlHash"
+        val cacheKey = sheetSnapshotCacheKey(rawXml, htmlText, osmdJsBytes, "android-webview")
         val cacheDir = File(getCacheDir(), cacheKey)
 
         // 1. 缓存命中：直接回传，跳过 WebView 渲染
